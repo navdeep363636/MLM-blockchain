@@ -1,0 +1,1074 @@
+/* ============================================================================
+ * Legal & policy document content — FRD 11.
+ *
+ * These are STRUCTURAL DRAFTS. They define the required sections and clauses so
+ * the product, compliance and legal workstreams can review real prose instead
+ * of an outline. Every document carries the FRD 11 disclaimer as its final
+ * section: a licensed attorney in each operating jurisdiction must review,
+ * adapt and approve the language before publication.
+ *
+ * TO GO LIVE: this file is replaced by the CMS-backed legal document API
+ * (FRD AD-11). The shape below is exactly what that endpoint should return.
+ * ========================================================================== */
+
+import type { LegalDocument } from "@/types";
+
+/** Shared closing section. Required on every document by FRD 11. */
+const draftDisclaimer = (docName: string): { heading: string; body: string[] } => ({
+  heading: "Draft status and legal notice",
+  body: [
+    `This ${docName} is a structural draft. It was written to define the required content, sections and clauses for the development and legal teams, and it is not ready-to-publish legal text.`,
+    "A licensed attorney in each operating jurisdiction must review, adapt and approve the final language before publication. Requirements differ significantly by country and by state, and they differ again depending on whether the platform is classified locally as gaming, gambling, e-commerce or a financial service.",
+    "Nothing in this document is legal, tax or financial advice, and nothing in it creates a relationship of adviser and client between you and Members Trail. If you need advice about how this document applies to your own circumstances, consult a qualified professional in your jurisdiction.",
+    "Questions about this policy, including data-subject requests and compliance enquiries, should go to the compliance team through /contact rather than to general support.",
+  ],
+});
+
+/* ------------------------------- 11.1 Terms ------------------------------- */
+
+const terms: LegalDocument = {
+  slug: "terms",
+  title: "Terms & Conditions",
+  version: "1.0",
+  status: "legal_review",
+  updatedAt: "2026-08-04",
+  effectiveFrom: "2026-09-01",
+  materialChange: true,
+  summary:
+    "You must be 18 or older, use one account, and play from a country we are allowed to serve. Points are a non-transferable balance we issue for gameplay, and MTT is a utility token for using the platform — neither is an investment and neither carries a promise of value. Referring other players is optional, free and capped, and it is never required to play, earn or withdraw. If we materially change these terms you will be asked to accept them again before you can keep using your account.",
+  sections: [
+    {
+      heading: "1. Acceptance of these terms",
+      body: [
+        "These Terms & Conditions form a binding agreement between you and Members Trail. You accept them when you create an account, and you accept them again each time you log in after a materially changed version has been published. If you do not accept them, do not register and do not use the platform.",
+        "To accept these terms you must have the legal capacity to enter a contract in your country of residence. You must be at least 18 years old, or older if the minimum age for paid online gaming where you live is higher. We will close any account we find to belong to a person under the applicable minimum age and return any recoverable balance to the payment source it came from, subject to our verification obligations.",
+        "Some parts of the platform are governed by additional documents: the Privacy Policy, the Risk Disclosure Statement, the AML/KYC Policy, the Referral Program Terms, the Refund & Cancellation Policy, the Responsible Gaming Policy and the Cookie Policy. Those documents are incorporated into these terms by reference. Where a specific document conflicts with these general terms on a point it governs, the specific document controls.",
+      ],
+    },
+    {
+      heading: "2. What Members Trail is",
+      body: [
+        "Members Trail is a skill-based gaming platform. You play games, complete quests and enter tournaments, and the platform issues Points for qualifying activity according to published rules and daily caps. Points can be converted into MTT, a utility token used inside the platform, at the conversion rate published at the time of conversion.",
+        "Around the games sit three optional features: a wallet for holding and withdrawing MTT, a staking module that pays a variable reward from platform revenue, and a referral programme that pays a capped commission when people you introduce spend real money on the platform. All three are optional. You can play, earn Points and convert them without ever staking or referring anyone.",
+        "One rule governs the entire economy and we state it plainly here because it defines what we can and cannot promise: every payout — staking reward, referral commission and prize pool — is funded from real platform revenue held in the Revenue Treasury. No payout is funded by another member's deposit. A direct consequence is that no yield, commission or return can be fixed or guaranteed in advance, and we do not present any of them as such anywhere on the platform.",
+      ],
+    },
+    {
+      heading: "3. Eligibility and geographic restrictions",
+      body: [
+        "The platform is available only in jurisdictions where skill-based gaming with a token rewards layer is lawful and where we have completed a legal review. A restricted-territory list is maintained by the legal team and enforced at registration through a cross-check of your declared country of residence against the geolocation of your connection. Sign-ups from restricted or sanctioned territories are rejected.",
+        "When you register you represent that the country of residence you declare is accurate, that you are not a resident of a restricted territory, and that you are not subject to sanctions administered by any authority whose lists we screen against. Using a VPN, proxy or false residency declaration to reach the platform from a restricted territory is a material breach of these terms and grounds for closure of your account and forfeiture of Points issued while the misrepresentation was in force.",
+        "If a jurisdiction becomes restricted after you have registered, we will tell you, stop issuing new Points for your account, disable paid features and give you a reasonable window to withdraw any withdrawable balance, subject to identity verification and any legal hold that applies.",
+      ],
+    },
+    {
+      heading: "4. Your account",
+      body: [
+        "You may hold one account. Registering or operating more than one account, whether directly or through another person acting for you, is prohibited. This is not administrative fussiness: multi-accounting distorts leaderboards, defeats daily Points caps and is the most common vector for referral fraud, so we treat it as a serious breach.",
+        "Information you give us must be accurate and kept up to date, and it must match the identity documents you later submit for verification. A mismatch between your declared identity and your documents will hold your withdrawals until it is resolved.",
+        "You are responsible for your credentials, for the security of the email address and phone number attached to the account, and for enabling two-factor authentication where we offer it. Activity conducted with your credentials is treated as your activity unless you can show the account was compromised despite reasonable care. Tell us immediately through /contact if you believe your account has been accessed by someone else.",
+      ],
+    },
+    {
+      heading: "5. Points",
+      body: [
+        "Points are an off-chain balance we issue and record on our own ledger. They are not a currency, not a security, not a deposit and not a claim on any asset. They are non-transferable: you cannot send Points to another member, sell them, or assign them to anyone. Points have no cash value and cannot be redeemed for cash; their only uses are the in-platform uses we publish, including conversion to MTT.",
+        "Issuance rates, daily caps per game, quest rewards and the Points-to-MTT conversion rate are configuration, and we may change them prospectively. Changes never reduce a Points balance you have already earned, and a scheduled change to the conversion rate is published with its effective date before it takes effect so you can decide whether to convert before or after.",
+        "Points may expire after a period of account inactivity, and that period is stated in your Points history. We may reverse Points that were issued in error, issued for activity that breached these terms, or issued through a bug or automation. Where a reversal happens we record the reason on your Points history so the adjustment is auditable rather than silent.",
+      ],
+    },
+    {
+      heading: "6. MTT token",
+      body: [
+        "MTT is a utility token whose purpose is participation in the platform: paying for entries and items, staking into revenue-funded pools, and receiving commissions and rewards. MTT is not offered or marketed as an investment, and buying, earning or holding it gives you no ownership interest in Members Trail, no share of profits, no dividend and no voting right over the company.",
+        "We make no promise that MTT will have, keep or gain any market value, and no promise that a market for it will exist. If MTT becomes tradable, its price may fluctuate significantly and may fall to zero. Read the Risk Disclosure Statement before you convert Points to MTT, stake, or hold a balance you would be unwilling to lose.",
+        "If you use a self-custodied wallet, you and only you hold the private keys. We cannot move, freeze, restore or recover assets in a wallet we do not control, and we cannot reverse a transaction you have signed. You are responsible for the accuracy of any address you paste, for the network you send on, and for the gas fees that on-chain actions cost.",
+      ],
+    },
+    {
+      heading: "7. Staking",
+      body: [
+        "Staking locks MTT into a pool for a defined period in exchange for a reward calculated from Treasury inflows for that period. The reward rate is variable and is recalculated from real revenue; it is not an interest rate, it is not fixed, and it is not guaranteed. A period with low platform revenue produces a low reward, and a period with no revenue can produce no reward at all.",
+        "Each pool publishes its lock period, its early-unstake penalty and its minimum stake before you commit. During the lock period your principal is not available to you. Unstaking early, where the pool allows it, applies the published penalty to the reward, the principal or both, exactly as stated on the pool.",
+        "Staking happens in a smart contract. That contract may contain bugs or be exploited, and no audit removes that risk. Our contracts are deployed to testnet first and an independent audit is planned but not yet complete; until it is published, treat staking as an activity carrying a real possibility of total loss of the staked amount.",
+      ],
+    },
+    {
+      heading: "8. Referral programme",
+      body: [
+        "The referral programme is governed by the Referral Program Terms, which control on every point they cover. The headline facts are repeated here because they define what the programme is and is not.",
+        "Joining costs nothing. There is no entry fee, no pack to buy, no minimum spend and no requirement to recruit anyone. Referring is optional and is never a condition of playing, earning Points, converting, staking or withdrawing. Commission is paid on three levels at 8%, 3% and 1% of eligible real-money spend by the people in those levels — never on their deposits, never on their stake principal, and never on their token balances.",
+        "Commission is capped every month, is paid only from the Revenue Treasury, and is released only after Tier 1 identity verification. Presenting the programme as an investment, promising anyone an income, or publishing an earnings figure someone else can expect to make is prohibited and is grounds for removal from the programme.",
+      ],
+    },
+    {
+      heading: "9. Prohibited conduct",
+      body: [
+        "The following are prohibited: operating more than one account; using bots, scripts, emulators or any automation to generate gameplay, Points or referrals; colluding with other players to manipulate a tournament or leaderboard; exploiting a bug instead of reporting it; reverse engineering or interfering with the platform, its contracts or its anti-fraud systems; and using the platform to launder money or move the proceeds of crime.",
+        "Also prohibited, and specific to the referral programme: creating accounts to refer yourself, arranging circular or reciprocal referrals, buying or selling referral links, incentivising sign-ups with payments outside the platform, and spamming. Marketing conduct that makes a guaranteed-income claim, implies an investment return, or presents the programme as a business opportunity with a projected earnings figure is prohibited whether or not the claim is sincere.",
+        "Where we find prohibited conduct we may reverse the Points and commissions it produced, void affected tournament results, suspend or close the account, and clawback commission already paid to the upline that benefited from it. Serious cases involving suspected financial crime are escalated under the AML/KYC Policy and may be reported to the relevant authority.",
+      ],
+    },
+    {
+      heading: "10. Fees",
+      body: [
+        "Fees are disclosed before you confirm the action that incurs them. In-app purchases show their total price including applicable tax at checkout. Tournament entries show the entry cost and the prize-pool structure on the tournament card. Marketplace listings show the platform fee taken from the sale. Withdrawals show the processing fee and, for on-chain withdrawals, an estimate of the network gas cost, which is paid to the network and not to us.",
+        "We may change fees prospectively. A change is published in the fee schedule with an effective date, and it does not apply to a transaction you have already confirmed. Third-party costs — card scheme fees, app store commission, blockchain gas — are set by those third parties and can change without notice from us.",
+        "You are responsible for any tax arising from your use of the platform, including tax on referral commission, staking rewards and disposals of MTT. We do not provide tax advice and we do not withhold tax on your behalf unless a law that applies to us requires it.",
+      ],
+    },
+    {
+      heading: "11. Identity verification, freezes and holds",
+      body: [
+        "Withdrawals and the release of referral commission require identity verification under the AML/KYC Policy. Tier 1 is a government identity document plus a liveness selfie. Tier 2, which adds proof of address and may require evidence of source of funds, is triggered when your cumulative withdrawals pass the published threshold or when monitoring flags your account for review.",
+        "We may freeze a balance, hold a withdrawal or pause commission release while an investigation is open. We will tell you that a hold exists and what we need from you, but we may be legally prevented from telling you the detailed reason where a suspicious activity report has been filed.",
+        "Verification also protects you: it is what lets us prove an account is yours before we send funds to a new destination. New withdrawal addresses are subject to a cooling-off period of 24 to 48 hours before the first withdrawal to them is released.",
+      ],
+    },
+    {
+      heading: "12. Intellectual property",
+      body: [
+        "The platform, the games, the artwork, the Members Trail name and logo, the interface and the underlying software are owned by us or licensed to us. You get a limited, personal, non-exclusive, non-transferable and revocable licence to use them for playing on the platform, and nothing more.",
+        "You may not copy, distribute, modify, publicly display, sell or create derivative works from platform content except where we give you approved marketing assets and you use them within the rules in the Referral Program Terms. You may not use our marks in a way that implies we endorse you, your content or your income claims.",
+        "Content you submit — a display name, an avatar, a support message, a review — remains yours, but you grant us a licence to host, display and use it for operating and moderating the platform. We may remove content that is unlawful, abusive, misleading or in breach of these terms.",
+      ],
+    },
+    {
+      heading: "13. Disclaimers and limitation of liability",
+      body: [
+        "The platform is provided on an as-is and as-available basis. We do not warrant that it will be uninterrupted, error-free or secure against every attack, that games will always be available, that a tournament will always fill, or that an on-chain transaction will confirm in a given time. We disclaim all implied warranties to the maximum extent the law where you live allows.",
+        "We give no warranty and make no representation about earnings. There is no guaranteed staking yield, no guaranteed commission, no guaranteed prize and no guaranteed value for MTT or Points. Most participants in the referral programme earn a small amount or nothing at all, and you should assume that outcome for yourself.",
+        "To the maximum extent permitted by law, our total liability to you for all claims arising out of or relating to the platform is limited to the greater of the amount you paid us in the twelve months before the claim arose or a nominal sum to be fixed by counsel in the final text. We are not liable for indirect, incidental, special, consequential or punitive damages, for lost profits or lost opportunity, for the market value of MTT, or for losses caused by a third-party network, wallet or payment provider. Nothing in these terms excludes liability that cannot lawfully be excluded, including liability for fraud or for death or personal injury caused by negligence.",
+      ],
+    },
+    {
+      heading: "14. Indemnification",
+      body: [
+        "You agree to indemnify and hold harmless Members Trail, its officers, employees and contractors against claims, losses, liabilities and reasonable costs arising from your breach of these terms, your infringement of a third party's rights, your unlawful use of the platform, or income claims and other marketing statements you make about the referral programme.",
+        "We will tell you promptly about any claim we expect you to indemnify, give you a reasonable opportunity to participate in the defence, and not settle a claim in a way that imposes an obligation on you without your consent.",
+      ],
+    },
+    {
+      heading: "15. Suspension and termination",
+      body: [
+        "You may close your account at any time from your settings. Closure does not cancel obligations that survive it: an open investigation continues, a chargeback can still be applied against you, and AML records are retained for the period the law requires even after your account is gone.",
+        "We may suspend or close an account for breach of these terms, suspected fraud or financial crime, a failed or abandoned verification, a legal or regulatory requirement, or conduct that puts other members at risk. Except where a legal restriction or an active investigation prevents it, we will tell you what happened, what evidence we relied on at a level of detail that does not compromise our fraud controls, and how to dispute the decision.",
+        "On closure we will pay out a verified withdrawable balance, less any amount subject to clawback, refund, chargeback or legal hold. Points that have not been converted, unvested rewards and unreleased commissions do not survive closure for cause.",
+      ],
+    },
+    {
+      heading: "16. Dispute resolution and governing law",
+      body: [
+        "Start with us. Almost every dispute is a factual disagreement about a specific transaction, and the support and commission-dispute processes are built to resolve those quickly and with an audit trail. Raise a ticket through /contact and give us a reasonable period — to be fixed in the final text, expected to be 30 days — to investigate before escalating.",
+        "If a dispute cannot be resolved that way, the final text will specify the governing law, the venue, and whether disputes go to binding individual arbitration or to the courts of the governing jurisdiction. Class actions and representative proceedings are expected to be excluded to the extent the law allows.",
+        "These clauses are jurisdiction-sensitive and are among the sections most likely to change on attorney review. Consumer-protection law in some countries makes an arbitration clause or a class-action waiver unenforceable against consumers, and where that is the case the local rule prevails and your statutory rights are unaffected.",
+      ],
+    },
+    {
+      heading: "17. Changes to these terms",
+      body: [
+        "Every version of this document is stored in the platform CMS with a draft, legal-review and published workflow, a version number and a full history, so you can see what changed and when.",
+        "A non-material change — a clarification, a corrected reference, a formatting fix — takes effect on publication and is listed in the version history. A material change, meaning one that affects your rights, your money or your obligations, is notified in advance and requires you to accept the new version at your next login. Until you accept it, access to paid features is paused; your existing balance is not affected by the pause.",
+        "If you do not accept a material change you may close your account and withdraw your verified balance under the normal withdrawal rules. Continuing to use the platform after accepting a version means that version applies to you.",
+      ],
+    },
+    {
+      heading: "18. Contact",
+      body: [
+        "General support, account questions and transaction disputes: raise a ticket at /contact. Compliance matters, data-subject requests and legal notices go to the compliance team through the same form using the compliance category, which routes away from general support.",
+        "The registered company name, address, registration number and any licence details will be inserted here before publication and must match the entity that contracts with members in each jurisdiction.",
+      ],
+    },
+    draftDisclaimer("Terms & Conditions document"),
+  ],
+};
+
+/* ------------------------------ 11.2 Privacy ------------------------------ */
+
+const privacy: LegalDocument = {
+  slug: "privacy",
+  title: "Privacy Policy",
+  version: "1.0",
+  status: "legal_review",
+  updatedAt: "2026-08-04",
+  effectiveFrom: "2026-09-01",
+  materialChange: false,
+  summary:
+    "We collect what the service needs and what the law makes us keep: account details, gameplay and transaction records, identity documents and a liveness selfie for verification, and a device fingerprint used to detect fraud and multi-accounting. Identity documents are encrypted at rest, visible only to the compliance team, and every access is logged. You can ask for a copy of your data, correct it, port it or have it deleted — except where AML law requires us to keep verification records for about five years. We do not sell personal data.",
+  sections: [
+    {
+      heading: "1. Who controls your data",
+      body: [
+        "The Members Trail operating entity is the data controller for the personal data described in this policy. Its registered name, address and company number will be inserted before publication, and must be the entity that contracts with members in your region.",
+        "Where our processing volume or the sensitivity of the data we handle requires it, a Data Protection Officer is appointed and contactable through the compliance route at /contact. Data-subject requests are handled by the compliance team, not general support, so that they are logged, tracked against a statutory deadline and answered by people trained to verify who is asking.",
+        "For members in the EU, EEA or UK, and in other regions with an equivalent regime, we act as controller for account and compliance data and as controller jointly with our verification provider for the identity checks that provider performs on our instructions. The final text will name the provider and the exact allocation of responsibilities.",
+      ],
+    },
+    {
+      heading: "2. What we collect",
+      body: [
+        "Account and profile data: your email address, hashed password, display name, avatar, declared country of residence, date of birth, notification preferences and language. Contact data if you give it to us, including a phone number used for two-factor authentication and account-recovery checks.",
+        "Identity and verification data: the government identity document you upload, the data extracted from it, a liveness selfie and the biometric template our provider derives from it to confirm the selfie matches the document and is a live person. For Tier 2 verification, a proof-of-address document and, where required, evidence of your source of funds. This is the most sensitive category we hold and it is treated accordingly.",
+        "Financial and transaction data: deposits, in-app purchases, tournament entries, marketplace activity, Points issuance and conversion, staking positions and rewards, referral commission line items with the Treasury deposit reference that funded each one, withdrawals, and the wallet addresses you connect or withdraw to. Payment card numbers are handled by our payment processor and are never stored on our systems.",
+        "Device, usage and fraud-prevention data: IP address, approximate location derived from it, browser and device characteristics combined into a device fingerprint, session times, pages viewed, in-game events, and the relationship graph of who referred whom. The fingerprint exists for a specific purpose — detecting multi-accounting, self-referral and referral-loop fraud — and is described here because using it for that is a legitimate interest you are entitled to know about.",
+      ],
+    },
+    {
+      heading: "3. Why we process it, and on what legal basis",
+      body: [
+        "To perform our contract with you: creating and securing your account, running games and tournaments, issuing and converting Points, executing staking actions, calculating and paying commission, and processing deposits and withdrawals. Without this data there is no service to provide.",
+        "To comply with a legal obligation: identity verification, sanctions and politically-exposed-person screening, transaction monitoring, suspicious activity reporting, record retention and tax reporting where it applies. This basis is why some data cannot be deleted on request while the retention period runs.",
+        "For our legitimate interests: preventing fraud, abuse and multi-accounting; enforcing caps and daily limits; protecting the integrity of leaderboards and prize pools; securing the platform; and understanding aggregate product usage. We balance these interests against your rights, and we use the least intrusive method that works — for example, a device fingerprint used to link duplicate accounts rather than continuous location tracking.",
+        "With your consent: marketing emails and push notifications, non-essential analytics and any optional personalisation. Consent is asked for separately, is never bundled into acceptance of the Terms, and can be withdrawn at any time in your notification settings or through the cookie preference centre. Withdrawing it does not affect processing that already happened on a different basis.",
+      ],
+    },
+    {
+      heading: "4. Who we share it with",
+      body: [
+        "Identity verification provider: receives your identity document, selfie and the data needed to run document authentication, liveness and screening checks, and returns a decision and an audit record. Payment processor: receives the data needed to take a payment, run its own fraud checks and process refunds and chargebacks. Cloud infrastructure and database hosting: stores the platform data under a processing agreement. Analytics and error monitoring: receives usage and diagnostic events, minimised and pseudonymised where the tool allows.",
+        "Each processor is engaged under a written data-processing agreement that restricts it to processing on our instructions, requires appropriate security, restricts onward transfers and requires deletion or return of data at the end of the engagement. The final text will name each provider and its role, and that list will be kept current in the CMS rather than frozen in a PDF.",
+        "We also disclose data where the law requires it: to a regulator, a financial intelligence unit, a tax authority, a court order or a lawful law-enforcement request. We disclose the minimum the request compels, and we log each disclosure. In a merger or acquisition, data may transfer to the successor entity, which remains bound by this policy until members are notified of any change.",
+        "We do not sell personal data, we do not share it with data brokers, and we do not use identity or KYC data for advertising. Referral relationships are visible to your upline only as an aggregate and a masked identifier, never as another member's email address, document data or full name.",
+      ],
+    },
+    {
+      heading: "5. International transfers",
+      body: [
+        "Our infrastructure and some of our processors operate outside the country where you live, so your data may be transferred across borders. Where it leaves a jurisdiction that restricts transfers, we rely on an approved mechanism: an adequacy decision where one covers the destination, Standard Contractual Clauses or the UK International Data Transfer Addendum otherwise, backed by a transfer impact assessment.",
+        "Where the assessment identifies a risk in the destination country, we add supplementary measures — encryption in transit and at rest with keys held in the origin region, pseudonymisation before transfer, and contractual commitments to challenge unlawful access requests and to notify us of any we are permitted to be told about.",
+        "You can ask us for a summary of the transfer mechanism that applies to your data and the categories of recipient outside your region. We will provide it in a form that does not expose security detail an attacker could use.",
+      ],
+    },
+    {
+      heading: "6. How long we keep it",
+      body: [
+        "Account and profile data: for the life of your account and then for a limited wind-down period after closure to handle disputes, chargebacks and reversal windows, expected to be twelve months, before deletion or irreversible anonymisation.",
+        "KYC and AML records, including identity documents, verification decisions, screening results, transaction monitoring alerts and suspicious activity reports: retained for approximately five years from the end of the relationship or from the date of the transaction, whichever the applicable regulation requires, and longer where an authority directs it. This retention overrides an erasure request for those specific records.",
+        "Transaction and financial records: retained for the statutory accounting and tax period in the relevant jurisdiction. Gameplay and Points ledger data: retained while it can affect a balance, a dispute or a leaderboard, then aggregated. Support tickets: retained for the period needed to show a complaint was handled, then closed and minimised. Device and analytics data: retained for a short rolling window described in the Cookie Policy, and fraud-signal records for as long as an investigation or an appeal against a fraud decision can be brought.",
+        "When a retention period ends the data is deleted or anonymised so it can no longer be linked to you. Backups roll off on their own cycle, which means deletion is completed rather than instantaneous, and we will tell you the expected completion window when you ask.",
+      ],
+    },
+    {
+      heading: "7. Your rights",
+      body: [
+        "Subject to the regime that applies where you live, you can: get confirmation of whether we process your data and a copy of it; have inaccurate data corrected; have data erased where we no longer have a basis to keep it; get a portable machine-readable export of the data you gave us and the data your activity generated; restrict processing while a dispute about accuracy or basis is resolved; object to processing based on legitimate interests; and withdraw consent for marketing and non-essential analytics at any time.",
+        "Erasure has a real limit and we would rather state it here than surprise you later. Where AML law requires us to keep a verification record, we cannot delete that record on request during the retention period. We will delete or restrict everything that is not caught by that obligation, tell you precisely which categories are being retained and why, and delete those categories when the period ends.",
+        "To exercise a right, use the compliance route at /contact. We will verify that the request comes from you — which for an identity-linked request may mean checking against the verification already on file — and answer within the statutory period, normally one month, extendable where a request is complex. We do not charge for a first request and we do not require you to give a reason.",
+        "You also have the right to complain to your data protection supervisory authority, and to do so without contacting us first. We would prefer you raise it with us so we can fix it, but that is a preference, not a condition.",
+      ],
+    },
+    {
+      heading: "8. How we protect it",
+      body: [
+        "Data at rest is encrypted with AES-256, and identity documents and selfies are stored in a segregated encrypted store separate from the application database. Data in transit is encrypted with current TLS. Passwords are stored only as salted hashes using a memory-hard algorithm, and we never see or store them in plain text.",
+        "Access is role-based and least-privilege. Identity documents and verification decisions are visible only to the Compliance role, and every read is written to an immutable access log with the operator, the record and the reason code. Administrative actions that touch money — adjusting a balance, releasing a commission, freezing an account — require a second approver and are recorded in the audit log.",
+        "Around that we run two-factor authentication for staff, secrets held in a managed key store, vulnerability scanning and dependency monitoring, environment separation with no production data in test environments, backups that are themselves encrypted, and an incident response plan with defined severity levels.",
+        "No system is invulnerable. If a breach is likely to result in a risk to your rights and freedoms we will notify the relevant authority within the statutory window, normally 72 hours, and notify you without undue delay with a description of what happened, what data was involved and what you should do. We describe our controls at this level deliberately: enough for you to judge them, not enough to give an attacker a map.",
+      ],
+    },
+    {
+      heading: "9. Cookies and similar technologies",
+      body: [
+        "We use cookies and local storage for session management, security, remembering your preferences, and — with your consent — analytics and product measurement. Some of the same signals feed the fraud-prevention systems described above.",
+        "The full categorised list, the duration of each group, which are first and which are third party, and how to change your choices are in the Cookie Policy. Your consent choices are recorded with a timestamp so we can show what you agreed to and when.",
+      ],
+    },
+    {
+      heading: "10. Children's privacy",
+      body: [
+        "The platform is not directed at children and we do not knowingly collect data from anyone under 18, or under a higher local minimum age where one applies. Age is declared at registration and confirmed against the date of birth on the identity document at verification, which is the point at which a false declaration is normally caught.",
+        "If we discover that an account belongs to a person under the applicable age we close it immediately, stop processing beyond what we need to document the closure, delete the data we are not required to retain, and return any recoverable payment to the source it came from. We do not pay out winnings, staking rewards or referral commission to an underage account.",
+        "If you believe a child is using the platform, tell us through /contact. Reports of underage use are treated as urgent and are handled by the compliance team.",
+      ],
+    },
+    {
+      heading: "11. Changes to this policy",
+      body: [
+        "This policy is versioned in the CMS with a full history. Clarifications take effect on publication. A change that materially affects how we use your data, who we share it with, or how long we keep it is notified in advance by email and in-product, and where a new purpose relies on consent we ask for that consent separately rather than inferring it from continued use.",
+        "The version number and effective date at the top of this page always identify the text currently in force, and previous versions remain available on request.",
+      ],
+    },
+    {
+      heading: "12. Contact and complaints",
+      body: [
+        "Data-subject requests, privacy questions and complaints: use the compliance category at /contact. If a DPO has been appointed, that route reaches them directly.",
+        "If you are unhappy with our response you can complain to the supervisory authority in your country of residence, or where the operating entity is established. Exercising that right costs you nothing and does not affect your account.",
+      ],
+    },
+    draftDisclaimer("Privacy Policy"),
+  ],
+};
+
+/* --------------------------- 11.3 Risk disclosure -------------------------- */
+
+const riskDisclosure: LegalDocument = {
+  slug: "risk-disclosure",
+  title: "Risk Disclosure Statement",
+  version: "1.0",
+  status: "legal_review",
+  updatedAt: "2026-08-04",
+  effectiveFrom: "2026-09-01",
+  materialChange: true,
+  summary:
+    "Read this one even if you skip the others. You can lose money here. MTT may fall to zero and may never be tradable, staking rewards are variable and can be nothing at all in a low-revenue period, the smart contracts have not yet completed an independent audit, and there is no deposit insurance behind any balance. Referral commission is capped and most participants earn little or nothing — treat it as an occasional bonus, never as income you plan around.",
+  sections: [
+    {
+      heading: "1. Read this before you spend anything",
+      body: [
+        "This statement exists to tell you plainly what can go wrong. It is not a formality and it is not balanced against a sales pitch. If any part of it describes an outcome you could not absorb, do not deposit, do not convert Points to MTT, and do not stake.",
+        "The short version: money you put into this platform can be lost in full. Points you earn may be worth less when you convert them than you expected. MTT you hold may lose all of its value. Rewards you expect may not arrive because the revenue that funds them did not arrive. None of these outcomes are hypothetical edge cases; they are ordinary possibilities of the design.",
+        "You can use Members Trail without exposure to most of what follows. Playing games and earning Points costs nothing. The risks described here attach to spending real money, holding MTT, staking and relying on commission.",
+      ],
+    },
+    {
+      heading: "2. MTT price volatility",
+      body: [
+        "MTT is a utility token. If and when it becomes tradable on any venue, its market price will be set by that market and not by us. It may move sharply in either direction within a single day, it may fall far below the effective rate at which you converted Points, and it may fall to zero and stay there.",
+        "We do not operate a price floor, we do not commit to buying MTT back, we do not maintain a peg, and nothing in the platform's design prevents the price falling. A conversion rate shown in the app is a platform accounting rate for converting Points; it is not a market price, not a valuation, and not a promise about either.",
+        "If a market exists, thin liquidity can make the price move violently on small volume. A price you see quoted is not a price you are guaranteed to get.",
+      ],
+    },
+    {
+      heading: "3. Nothing here is investment advice",
+      body: [
+        "No page, chart, projection, calculator, notification, tooltip, blog post or message from our team is financial, investment, legal or tax advice, and none of it is a recommendation to buy, hold, stake or sell anything. The referral calculator is an arithmetic tool that computes a scenario you typed in; it is not a forecast and it has no predictive value.",
+        "MTT is intended for participation in the platform. It is not an investment product, not a security offering as we understand it in the jurisdictions where we intend to operate, not a deposit and not a fund. Holding it gives you no ownership of the company, no share of profit, no dividend and no governance right.",
+        "If you are trying to decide whether participating makes financial sense for you, take advice from a licensed professional in your own jurisdiction. We are not that professional and we have an obvious interest in your participation.",
+      ],
+    },
+    {
+      heading: "4. Staking rewards are variable, and can be nothing",
+      body: [
+        "Every staking reward is funded from the Revenue Treasury, which is filled by real platform revenue — in-app purchases, tournament entries, marketplace fees and subscriptions. The reward rate you see is a variable rate recalculated from the inflows of the relevant period. It is not an APR you have been promised.",
+        "The direct consequence: if revenue falls, rewards fall. If revenue in a period is very low, the reward for that period can be near zero. There is no reserve obligation, no top-up guarantee and no smoothing mechanism that pays you a rate the business did not earn. Any historical figure shown in the app is history, and history is not a forecast.",
+        "Locking also has a cost. During a lock period your principal is unavailable, so you cannot react to a falling token price by exiting. Where early unstaking is permitted, the published penalty applies and can consume all accrued reward and part of the principal. Read the pool terms before you commit, not after.",
+      ],
+    },
+    {
+      heading: "5. You may earn nothing",
+      body: [
+        "It is entirely possible to play, spend money, refer people and stake, and end up with nothing to show for it. There is no floor under your outcome. Points caps limit what gameplay can produce, tournaments have losers, staking rewards can be negligible, and referral commission depends on other people choosing to spend money, which they may never do.",
+        "We publish no target earnings, no average earnings and no example of what you can expect to make, because any such figure would be misleading. Where we show a number it is either your own historical figure or a platform-wide aggregate, and neither predicts your future.",
+        "Assume, when deciding what to spend, that your recoverable return is zero. If that assumption changes your decision, the decision was being made on an expectation we have never offered.",
+      ],
+    },
+    {
+      heading: "6. Smart contract risk, and the audit is not finished",
+      body: [
+        "Staking, commission claims and token transfers execute in smart contracts on the BNB Smart Chain. Smart contracts are software. They can contain bugs, they can be exploited by attackers, they can be locked by a failed upgrade, and they can lose funds in ways that cannot be reversed because the network has no undo.",
+        "An independent third-party security audit of our contracts is planned but not yet complete, and no audit report has been published. Until one is, you are interacting with unaudited code. Even after an audit is published, an audit is a point-in-time review by fallible humans; it reduces risk and does not remove it. Audited contracts have been drained before.",
+        "Contracts are deployed to testnet before mainnet and administrative functions are held behind a multi-signature wallet, which limits some failure modes and creates others — a multisig with lost or compromised signers is its own risk. Treat any amount held in a contract as an amount you could lose entirely and without recourse.",
+      ],
+    },
+    {
+      heading: "7. Regulatory and jurisdictional risk",
+      body: [
+        "The rules that govern skill-based gaming, token rewards and multi-level referral programmes are unsettled and are changing in most of the markets we care about. A law, a regulation, a regulator's guidance or a court decision could reclassify part of the platform, restrict it, tax it differently, or make it unlawful to offer in your country.",
+        "If that happens we may have to disable features, stop issuing Points, suspend the referral programme, block a jurisdiction, or cease operating there entirely, potentially at short notice. A reclassification of MTT as a regulated instrument in a given country could restrict your ability to hold, transfer or convert it there.",
+        "We will give as much notice as the circumstances and the regulator allow, and will make reasonable efforts to let you withdraw a verified balance. We cannot promise a withdrawal window that a legal order forecloses.",
+      ],
+    },
+    {
+      heading: "8. Liquidity risk",
+      body: [
+        "There may be no active market for MTT at all. We have not committed to listing it on any exchange or decentralised venue, and a listing, if it ever happens, is subject to third-party decisions and securities analysis in the relevant jurisdictions.",
+        "Without a market, MTT is usable inside the platform and not convertible to cash anywhere. With a thin market, you may be unable to sell the size you hold at anything close to the quoted price, and you may be unable to sell at all when you most want to.",
+        "Withdrawal itself depends on things outside our control: network congestion, gas costs that can exceed the value of a small withdrawal, and the availability of the payment or custody providers in the chain. A withdrawal can be delayed by verification, by the new-address cooling-off period, or by a compliance hold.",
+      ],
+    },
+    {
+      heading: "9. Referral income is capped and usually small",
+      body: [
+        "Referral commission is a marketing payment, not an investment return and not income you should plan around. It pays 8%, 3% and 1% across three levels, calculated only on eligible real-money spend by the members in those levels — never on their deposits, never on their stake principal, never on the size of their downline.",
+        "It is capped every month at the lower of an absolute ceiling and a formula tied to your own recent spend, so the amount you can receive is bounded no matter how large your network is. Caps do not roll over: an unused cap expires with the month. Payment also depends on the Treasury having received the revenue in the first place, and can be delayed or reduced if it has not.",
+        "The realistic distribution is heavily skewed. A small number of participants with large, genuine networks earn a meaningful amount; most earn a small amount or nothing at all. If someone tells you this programme is a route to a predictable income, they are breaching our marketing rules and you should not believe them. Referring is optional, free, and never required in order to play, earn or withdraw.",
+      ],
+    },
+    {
+      heading: "10. Wallet and custody risk",
+      body: [
+        "If you connect a self-custodied wallet, you alone hold the keys. We cannot recover a lost seed phrase, reverse a transaction you signed, unwind a transfer to a wrong address, or retrieve tokens sent on the wrong network. Those losses are permanent.",
+        "Phishing is the most common way people lose funds here. We will never ask for your seed phrase or private key, never ask you to sign a transaction sent to you in a message, and never contact you first asking you to move funds to safety. Treat any message that does as an attack.",
+        "If a custodial wallet option is offered, keys are held by a provider under a custody arrangement, which replaces your key-loss risk with counterparty risk in that provider, and adds insolvency and operational risk. Custody is itself a regulated activity in many jurisdictions and the arrangement is subject to separate legal review.",
+      ],
+    },
+    {
+      heading: "11. No deposit insurance and no protection scheme",
+      body: [
+        "Balances on Members Trail are not bank deposits. They are not covered by deposit insurance, by an investor compensation scheme, or by any government guarantee, in any jurisdiction. If the company becomes insolvent, your balance is a claim in that insolvency and may be worth a fraction of its stated value, or nothing.",
+        "The Revenue Treasury is an operational pool funded by platform revenue, not a segregated client-money account and not a reserve fund held for your benefit. Do not treat it as a backstop for the value of your balance.",
+      ],
+    },
+    {
+      heading: "12. No guarantee of continued operation",
+      body: [
+        "We may change, suspend or discontinue any part of the platform: retire a game, close a staking pool, alter Points issuance prospectively, change the conversion rate, adjust or end the referral programme, or shut the service down. Business, technical and regulatory reasons all lead there.",
+        "Where a change affects a balance or an accrued entitlement, we will give notice and, where feasible, a window to convert, unstake or withdraw. We cannot promise that in every scenario, and a scenario driven by a regulator or a security incident may not allow it.",
+        "You acknowledge that you have read this statement, that you understand it, and that you accept these risks as a condition of using the paid and token features of the platform.",
+      ],
+    },
+    draftDisclaimer("Risk Disclosure Statement"),
+  ],
+};
+
+/* ------------------------------ 11.4 AML / KYC ---------------------------- */
+
+const amlKyc: LegalDocument = {
+  slug: "aml-kyc",
+  title: "AML / KYC Policy",
+  version: "1.0",
+  status: "legal_review",
+  updatedAt: "2026-08-04",
+  effectiveFrom: "2026-09-01",
+  materialChange: false,
+  summary:
+    "To withdraw or to receive referral commission you must complete Tier 1 verification: a government ID plus a liveness selfie. Tier 2 adds proof of address and is triggered once your cumulative withdrawals pass the published threshold. A new withdrawal address is held for 24 to 48 hours before its first payout, larger or unusual withdrawals get a manual review, and every withdrawal is tagged with where the money came from. Your documents are encrypted, visible only to Compliance, access-logged, and kept for about five years because AML law requires it.",
+  sections: [
+    {
+      heading: "1. Purpose and regulatory basis",
+      body: [
+        "Members Trail is committed to preventing money laundering, terrorist financing, sanctions evasion and fraud on its platform. This policy sets out the customer due diligence, monitoring, screening, reporting and record-keeping controls that support that commitment, and the obligations it places on you as a member.",
+        "The controls are modelled on the FATF recommendations and the risk-based approach they require, and will be mapped to the specific statutory framework of each launch jurisdiction before that market opens. Where a local rule is stricter than what is described here, the local rule applies to members in that jurisdiction.",
+        "Two design decisions shape everything below. First, the platform pays out real money, so the payout path is where the controls concentrate: verification, address controls, source tagging and manual review all sit around withdrawal and commission release. Second, the referral programme creates a network of financial relationships between members, which is a fraud surface in its own right and is monitored as one.",
+      ],
+    },
+    {
+      heading: "2. Customer due diligence — Tier 1",
+      body: [
+        "Tier 1 is the baseline. It requires a valid government-issued photo identity document — passport, national identity card or driving licence — and a liveness selfie captured in-session. Our verification provider authenticates the document, extracts and matches the data to your declared details, confirms the selfie is a live capture rather than a photograph or a deepfake, and matches the face to the document image.",
+        "Tier 1 must be complete before your first withdrawal and before any referral commission is released to you. Commission continues to accrue and is shown in your payout history as awaiting verification; it is not lost while you are unverified, and it is not payable until you are.",
+        "Tier 1 also confirms your age and your declared country of residence. A date of birth below the applicable minimum age closes the account under the Terms. A country that does not match your declared residence, or that is on the restricted list, escalates to manual review before anything is released.",
+      ],
+    },
+    {
+      heading: "3. Enhanced due diligence — Tier 2",
+      body: [
+        "Tier 2 is triggered when your cumulative lifetime withdrawals cross the published threshold, when a single withdrawal exceeds the large-transaction limit, when monitoring raises an alert on your account, when screening returns a possible match, or when your activity profile does not fit your stated circumstances.",
+        "Tier 2 requires proof of address dated within the last three months — a utility bill, bank statement or government correspondence — and, where the risk assessment calls for it, evidence of source of funds or source of wealth. For a member whose balance came from gameplay and staking, that evidence is largely already on our own ledger; the request is aimed at cases where value entered from outside.",
+        "Withdrawals above the Tier 2 threshold are held until Tier 2 is complete. We tell you exactly which documents are needed and the expected review time, and a rejected document is explained specifically enough that you can fix it rather than guess.",
+      ],
+    },
+    {
+      heading: "4. Withdrawal address controls and cooling-off",
+      body: [
+        "The first time you add a withdrawal destination — a bank account or an on-chain address — it enters a cooling-off period of 24 to 48 hours before a payout to it can be released. The delay is deliberate friction against account takeover: an attacker who gets into an account cannot immediately redirect funds to their own address, and the notification we send you about the new destination arrives while there is still time to stop it.",
+        "During the cooling-off period the destination is visible in your wallet settings as pending, and any withdrawal queued to it stays queued. You can cancel a pending destination at any time, and cancelling it also cancels the queued withdrawal.",
+        "Additional address controls apply: a limit on how many active destinations an account may hold, a re-verification step when a destination is changed shortly after a password or two-factor change, and a block on destinations that appear on our internal deny list or that are linked to another member's account.",
+      ],
+    },
+    {
+      heading: "5. Withdrawal source tagging",
+      body: [
+        "Every withdrawal is tagged with the origin of the value being withdrawn: gameplay (Points converted to MTT), staking (principal returned and rewards accrued), referral commission, or a returned deposit. Where a withdrawal draws on more than one origin, the tag records the proportion from each.",
+        "Source tagging does three jobs. It lets monitoring apply different risk rules to different origins, because a large withdrawal of returned deposits is a different signal from a large withdrawal of referral commission. It makes the deposit-to-withdrawal path visible so that a member cycling money through the platform stands out. And it supports the platform's core representation that payouts are revenue-funded, by tying each commission line to the Treasury deposit reference that funded it.",
+        "The tags are shown to you in your transaction history, not just held internally. If a tag looks wrong, raise it through /contact and we will trace and correct it.",
+      ],
+    },
+    {
+      heading: "6. Ongoing monitoring",
+      body: [
+        "Automated rules run continuously over deposits, purchases, conversions, staking actions, commissions and withdrawals. They cover velocity — unusual frequency or size relative to your own history and to peers; structuring — several transactions just under a threshold; rapid cycling of deposits into withdrawals with little or no gameplay; and mismatches between country, IP geolocation and device.",
+        "Referral-network detection is a distinct set of rules: clusters of accounts sharing a device fingerprint, payment instrument or address; circular referral structures; downlines whose spend is concentrated in a short burst around a cap reset; sign-up bursts from one IP range; and downlines with no genuine gameplay behind their spend.",
+        "An alert opens a case with a risk score, the triggering rule and the supporting evidence. A low-scoring case may resolve automatically with an audit record. A high-scoring case goes to a compliance analyst and can pause withdrawals or commission release while it is open. We do not publish the specific thresholds, because publishing them would tell the people we are looking for exactly where to sit.",
+      ],
+    },
+    {
+      heading: "7. Sanctions and PEP screening",
+      body: [
+        "At verification and periodically afterwards, members are screened against the sanctions and consolidated lists applicable to our operating entity and its payment partners, against politically exposed person databases, and against adverse media where the risk assessment requires it.",
+        "A confirmed sanctions match means we cannot provide the service: the account is blocked, funds are frozen, no payout is made, and the matter is reported where the law requires. A possible match is reviewed by an analyst against the underlying record before any action, because false positives on common names are frequent and freezing the wrong person's balance is its own harm.",
+        "A PEP match does not block an account. It raises the risk rating, requires enhanced due diligence including source of funds, and requires senior compliance approval to continue the relationship, with more frequent periodic review afterwards.",
+      ],
+    },
+    {
+      heading: "8. Manual review thresholds",
+      body: [
+        "Manual review by a compliance analyst is mandatory, regardless of automated scoring, for a withdrawal above the large-transaction threshold, a first withdrawal by a newly verified account above the small-value limit, a commission release to an account whose downline generated an unusual share of the platform's spend that month, any case where screening returned a possible match, and any account with an open fraud case.",
+        "Analysts work from a queue that shows the case evidence, the account's full history, the source tags and the referral graph, and they must record a written rationale to approve or reject. Approvals above a higher second threshold need a second approver, and no analyst can approve a case affecting an account they are connected to.",
+        "Manual review adds time and we would rather be honest about that than pretend it is instant. Expected review windows are published in the withdrawal flow, and you are told when your case is queued, when it is being reviewed and what the outcome is.",
+      ],
+    },
+    {
+      heading: "9. Suspicious activity reporting",
+      body: [
+        "Any staff member who sees something suspicious must escalate it internally to the Compliance Officer, and escalation is a duty rather than a discretion. There is no threshold below which a genuine suspicion is ignored, and no commercial consideration — the size of the member's spend, the size of their downline — is a reason not to escalate.",
+        "The Compliance Officer reviews the case, gathers the transaction and verification record, and decides whether the suspicion is reasonable. Where it is, and where the law of the relevant jurisdiction requires it, a suspicious activity or suspicious transaction report is filed with the competent Financial Intelligence Unit within the statutory deadline, with the supporting evidence preserved.",
+        "Where a report has been filed, tipping off is prohibited. That means we may be legally unable to tell you that a report exists, or to explain the real reason a hold is in place, even when we would otherwise want to be transparent with you. We will still tell you that a hold exists and what, if anything, you can do.",
+        "Filing a report does not by itself mean an account is closed. Some accounts continue under enhanced monitoring on the instruction or with the knowledge of the authority.",
+      ],
+    },
+    {
+      heading: "10. Account freezing and investigation powers",
+      body: [
+        "We may freeze a balance, hold a withdrawal, pause commission release, restrict paid features or suspend an account where we have a reasonable suspicion of money laundering, fraud, sanctions breach or a serious breach of the Terms, where verification has failed or been abandoned, or where a legal order or a regulator requires it.",
+        "A freeze is a preservation measure, not a penalty, and it is time-bounded by internal review deadlines rather than left open indefinitely. Cases are reviewed on a defined cycle and either escalated, extended with a recorded justification, or released.",
+        "You can contest a freeze through /contact and you can ask for a case to be reviewed by someone who was not involved in the original decision. Where the outcome clears you, the hold is released, any reversed Points or commission are restored, and the case record notes the clearance.",
+      ],
+    },
+    {
+      heading: "11. Record keeping and access control",
+      body: [
+        "KYC records — documents, extracted data, verification decisions, screening results — and transaction records are retained for approximately five years from the end of the member relationship or from the date of the transaction, as the applicable regulation requires, and longer where an authority directs. Case files, alerts, analyst rationales and reports are retained on the same basis.",
+        "Access to identity documents and verification records is restricted to the Compliance role. It is not available to support agents, marketing, engineering or general administrators. Every access is written to an immutable log recording who read what, when and under which case reference, and those logs are reviewed for access without a matching case.",
+        "Documents are encrypted at rest with AES-256 in a store segregated from the application database, are never exported to a spreadsheet or a shared drive, and are deleted or irreversibly anonymised when the retention period ends. Backup rotation means deletion completes over a defined window rather than instantly.",
+      ],
+    },
+    {
+      heading: "12. Compliance Officer, staff training and audit",
+      body: [
+        "A named Compliance Officer is designated with responsibility for this policy, for the risk assessment behind it, for reporting decisions and for reporting to the board. The name and contact route are inserted before publication, and the role has the authority to freeze funds and block payouts without commercial override.",
+        "All staff complete AML and fraud-awareness training on joining and at least annually, with role-specific modules for support, finance and compliance. Support agents are trained to recognise and escalate red flags rather than resolve them, and to avoid tipping off.",
+        "The policy, the risk assessment, the monitoring rules and their calibration are reviewed at least annually and after any material change to the product, the payout mechanics or the law, with independent testing of control effectiveness. Reviews and their findings are documented.",
+      ],
+    },
+    draftDisclaimer("AML / KYC Policy"),
+  ],
+};
+
+/* -------------------------- 11.5 Referral programme ------------------------ */
+
+const referralTerms: LegalDocument = {
+  slug: "referral-terms",
+  title: "Referral / Affiliate Program Terms",
+  version: "1.0",
+  status: "legal_review",
+  updatedAt: "2026-08-04",
+  effectiveFrom: "2026-09-01",
+  materialChange: true,
+  summary:
+    "Joining is free and there is no entry fee, pack or minimum spend — ever. You earn 8%, 3% and 1% on three levels, calculated only on eligible real-money spend by those members, never on their deposits, their stake principal or their token balances. Your monthly commission is capped at the lower of Rs 50,000 and five times your own trailing three-month spend plus a Rs 5,000 base, and an unused cap does not roll over. Commission is paid from real platform revenue, released after Tier 1 verification, and can be clawed back if the underlying transaction is refunded or found fraudulent.",
+  sections: [
+    {
+      heading: "1. What the programme is",
+      body: [
+        "The referral programme is a marketing arrangement. If someone joins Members Trail through your link and later spends real money on the platform, we pay you a percentage of that spend as a commission out of our own revenue. That is the whole mechanism.",
+        "There are three levels. Level 1 is the people who joined directly through your link and pays 8%. Level 2 is the people who joined through their links and pays 3%. Level 3 is the next layer down and pays 1%. There is no level 4 and no deeper structure: maximum referral depth is three, and it is enforced in code, not by policy alone.",
+        "The programme is not an investment scheme, not a business opportunity with projected returns, and not a job. It has no ranks to buy, no packages, no matrix, no binary tree, no matching bonus, no residual on your own spend and no payment for recruitment itself. You are paid only when real money is spent on real platform services by real verified members.",
+      ],
+    },
+    {
+      heading: "2. No entry fee — ever",
+      body: [
+        "Joining the programme requires no payment. There is no entry fee, no starter pack, no activation purchase, no subscription, no minimum deposit and no minimum monthly spend required to join, to refer, to remain eligible, or to be paid commission you have properly earned.",
+        "Nobody at Members Trail, and no other member, is permitted to ask you to pay for a position, a rank, a territory, a spillover placement or a training programme. If anyone asks you for money in exchange for referral upside, that is not part of this programme and you should report it through /contact immediately.",
+        "You do not need to refer anyone to use the platform. Playing, earning Points, converting to MTT, staking and withdrawing all work identically for a member who never refers a single person. Referring is optional and stays optional.",
+      ],
+    },
+    {
+      heading: "3. What spend is eligible, and what is excluded",
+      body: [
+        "Commission is calculated only on eligible real-money spend: in-app purchases, tournament entry fees and subscription payments, net of tax, refunds and payment-processor fees. That spend is revenue to the platform, which is what makes paying a commission on it possible.",
+        "The exclusions are as important as the inclusions and are absolute. There is no commission on a deposit — moving your own money onto the platform is not spend. There is no commission on stake principal, on the size of a downline's balance, on their Points balance, on their staking rewards, on their own commission, or on a token transfer. There is no commission on a purchase that is refunded or charged back, and none on a transaction we determine to be fraudulent, self-dealt or generated by automation.",
+        "This distinction is the reason the programme is a marketing arrangement rather than a scheme funded by recruits' money. Because commission is only ever a share of revenue, a downline that deposits and never spends produces no commission at all, and no amount of recruitment converts deposits into your earnings.",
+      ],
+    },
+    {
+      heading: "4. Funding source",
+      body: [
+        "Commissions are paid exclusively from the Revenue Treasury, which is funded by real platform revenue. No commission is ever funded from another member's deposit, from their staking principal, or from newly minted tokens issued to cover a shortfall.",
+        "Each commission line item in your payout history carries the reference of the Treasury deposit that funded it, so the chain from a real revenue event to your payment is auditable by you and not just by us.",
+        "The consequence is that commission depends on revenue actually arriving. If the Treasury has not received the revenue for a period — because a payment is still settling, because a transaction is in a refund window, or because revenue was lower than expected — commission for that period can be delayed, reduced or, in an extreme case, not paid. Commission is capped and revenue-funded, and it is not a guaranteed payment.",
+      ],
+    },
+    {
+      heading: "5. Eligibility and the monthly cap",
+      body: [
+        "To receive a payout you must hold an account in good standing, have completed Tier 1 identity verification, have held the account for at least 7 days, and have completed at least 5 genuine gameplay sessions before your first commission is released. The account-age and gameplay requirements exist to stop accounts created purely to sit at the top of a referral chain.",
+        "Your commission in a calendar month is capped at the lower of two figures: an absolute ceiling of Rs 50,000, and a formula equal to five times your own eligible spend over the trailing three months plus a Rs 5,000 base. Worked example: with Rs 3,000 of your own eligible spend across the last three months, your formula cap is 5 x 3,000 + 5,000 = Rs 20,000 for the month, and Rs 20,000 is lower than the absolute ceiling, so Rs 20,000 is your cap.",
+        "Commission calculated above your cap is not paid, is not carried forward and is not held in a pending balance. An unused cap does not roll over either — the cap resets at the start of each calendar month and the previous month's headroom expires with it. Cap usage is shown as a meter in your referral dashboard so you can see where you stand before the month closes, not after.",
+        "The base component means a member who spends nothing themselves still has a real, if small, cap and is not shut out. The multiplier component means the programme cannot be turned into a pure recruitment income stream detached from participating in the platform.",
+      ],
+    },
+    {
+      heading: "6. Prohibited referral conduct",
+      body: [
+        "Self-referral is prohibited: you may not refer yourself, create a second account to sit in your own downline, or use a family member's or associate's account as a proxy for your own spend. Referral loops and reciprocal or circular structures designed to route spend back to the referrer are prohibited. Buying, selling, renting or auctioning referral links or downline positions is prohibited.",
+        "Also prohibited: spam of any kind, including unsolicited bulk email, messaging-app blasts and comment spam; paid search or social advertising that bids on Members Trail brand terms without written approval; impersonating Members Trail, its staff or its channels; incentivising sign-ups with cash or other payments outside the platform; cookie stuffing, forced clicks and any technical manipulation of attribution; and using bots or scripts to create accounts or generate gameplay in a downline.",
+        "Detection is automated and continuous. Shared device fingerprints, shared payment instruments, shared addresses, circular structures, sign-up bursts and downlines with spend but no genuine gameplay all raise cases under the AML/KYC Policy. Confirmed breaches void the affected commissions, may remove you from the programme permanently, and in serious cases close the account.",
+      ],
+    },
+    {
+      heading: "7. Marketing conduct and income claims",
+      body: [
+        "You may not make a guaranteed-income claim. You may not state or imply that a person who joins will earn a particular amount, that earnings are assured, passive, risk-free or predictable, or that the programme replaces employment. You may not publish your own earnings as an example of what a recruit can expect, because a personal result is not a representative one.",
+        "You may not present the programme or MTT as an investment, a return, a yield, a fund or anything with an expected rate. You may not promise a token price. You may not use the words guaranteed, risk-free, assured or passive income in connection with the programme.",
+        "When you promote the programme publicly you must use the approved assets and language from the marketing assets page, disclose clearly that you receive a commission, and not remove or alter the disclaimers that come with those assets. Anything you write yourself must remain accurate and must not imply an outcome the programme does not offer.",
+        "Where you spend money to promote the programme, that is your commercial decision and your risk. We do not reimburse advertising costs, and spending on promotion does not increase your cap or create any entitlement to commission.",
+      ],
+    },
+    {
+      heading: "8. Calculation, statements and disputes",
+      body: [
+        "Commission is calculated per qualifying transaction, at the rate for the level the spending member sits at relative to you, on the net eligible amount. Each line item in your Commission Payout History shows the transaction type, the level, the rate applied, the gross and net amounts, the Treasury deposit reference that funded it, the cap headroom at the time, and its status.",
+        "Line items move through accruing, pending verification, cleared, released and, where relevant, reversed. Cleared commission is released after the refund and chargeback window on the underlying transaction has passed and your verification is complete.",
+        "If a line item looks wrong — a missing referral, a wrong level, an unexpected reversal, an incorrect cap calculation — raise a dispute from that line item in the payout history. Disputes are worked from the ledger and the audit log, you get a written outcome with the figures we relied on, and you can ask for a second review by someone not involved in the first decision. Raise disputes within 90 days of the line item appearing, so the underlying records are still within their working retention window.",
+      ],
+    },
+    {
+      heading: "9. Clawback",
+      body: [
+        "We may reverse a commission where the underlying transaction is refunded, charged back or reversed by the payment provider; where the transaction, the account or the referral relationship is found to be fraudulent; where the spend was generated by automation, collusion or a prohibited structure; or where the commission was paid in error, including a calculation or attribution error on our side.",
+        "A clawback is applied first against unreleased commission. Where the commission has already been released, the amount becomes a negative adjustment recovered from subsequent commissions, and in a case of fraud it may be recovered from a withdrawable balance. Clawbacks apply up the chain: a reversed transaction removes the level 1, level 2 and level 3 commissions it generated, for every upline that benefited.",
+        "Every clawback appears as a reversal line in your payout history with the reason and the reference of the original line item, and is disputable through the same process. We do not silently adjust a balance.",
+      ],
+    },
+    {
+      heading: "10. Changes to the programme",
+      body: [
+        "We may change the rates, the caps, the eligible transaction types, the depth, the eligibility requirements or the detection rules, and we may suspend or discontinue the programme. Changes apply prospectively from a published effective date and are notified in advance in-product and by email.",
+        "Changes do not apply retroactively to commission you have already properly earned and that has been released after verification. Commission still accruing at the time a change takes effect is settled under the rules in force when the underlying transaction occurred.",
+        "If the programme is discontinued, we will publish a wind-down date, keep the payout history accessible, and settle properly earned commission that has cleared its refund window and passed verification.",
+      ],
+    },
+    {
+      heading: "11. Tax and your own status",
+      body: [
+        "Commission may be taxable income where you live, and you are responsible for declaring and paying any tax on it, and for any registration, invoicing or reporting obligation your local rules impose. We do not provide tax advice.",
+        "Where a law that applies to us requires it, we may withhold tax, request a tax identification number or self-certification, or report payments to a tax authority. A commission payout can be held until the information we are legally required to collect has been provided.",
+        "You participate as an independent party. Nothing in these terms creates employment, agency, partnership or a joint venture, and you may not hold yourself out as an employee, agent or spokesperson of Members Trail or make commitments on our behalf.",
+      ],
+    },
+    draftDisclaimer("Referral / Affiliate Program Terms document"),
+  ],
+};
+
+/* ------------------------------- 11.6 Refunds ----------------------------- */
+
+const refunds: LegalDocument = {
+  slug: "refunds",
+  title: "Refund & Cancellation Policy",
+  version: "1.0",
+  status: "draft",
+  updatedAt: "2026-08-04",
+  effectiveFrom: "2026-09-01",
+  materialChange: false,
+  summary:
+    "Digital items are refundable while they are unused, and not once they have been consumed in play — a spent boost cannot be returned. If we cancel a tournament, entries are refunded in full; if you withdraw voluntarily after it starts, they are not. Technical errors like double charges are always put right. Token conversions and on-chain transactions are irreversible. Filing a chargeback instead of contacting us suspends the account and claws back the commission your purchase generated for your upline.",
+  sections: [
+    {
+      heading: "1. Scope and the principle behind it",
+      body: [
+        "This policy covers in-app purchases, tournament entries, marketplace purchases, subscriptions, failed transactions and token conversions. It sits under your statutory consumer rights, which it cannot reduce: where the law where you live gives you a stronger right than this policy, the law applies.",
+        "The principle is simple. If we took your money and did not deliver what you paid for, you get it back. If you received and used what you paid for, you generally do not. Between those two cases sits a small band of judgement, and in that band we would rather resolve a genuine complaint than win an argument.",
+        "All refunds are returned to the original payment method. We do not refund to a different card, a different bank account or a crypto address, because doing so is a well-known laundering route and our AML obligations do not permit it.",
+      ],
+    },
+    {
+      heading: "2. In-app purchases and digital goods",
+      body: [
+        "Digital items — Points packs, boosts, cosmetics, entry tickets, consumables — are delivered to your account immediately on payment. An item that is unused and still in your inventory can be refunded within 14 days of purchase on request. An item that has been consumed in play cannot be refunded, because what you bought has been provided and cannot be returned.",
+        "Where a statutory cooling-off right applies to digital content in your jurisdiction, it applies here. In several regimes that right is lost once you begin using the content and you have acknowledged that at checkout; where the right survives, we honour it regardless of what this policy says.",
+        "Purchases made through a mobile app store are subject to that store's refund process as well as ours. Where the store issues the refund, the corresponding item is removed from your account and any commission the purchase generated is clawed back from the upline.",
+        "A pattern of buy-use-refund requests is treated as abuse. We may decline further discretionary refunds on an account with such a pattern and, where it looks deliberate, escalate it under the AML/KYC Policy.",
+      ],
+    },
+    {
+      heading: "3. Tournament entries and prize pools",
+      body: [
+        "If we cancel a tournament before it starts, every entry fee is refunded in full to the original payment method or credited back as the same asset it was paid with, and no platform fee is retained. If we cancel a tournament after it has started — for a technical failure, a suspected integrity problem or a force majeure event — entries are refunded in full and no prizes are paid, unless the tournament rules provide for a partial-standings settlement, in which case the published rules govern.",
+        "If you withdraw voluntarily from a tournament you have entered, the entry fee is not refunded once entries have closed or play has begun. Before entries close, a voluntary withdrawal is refunded less any published administration fee. The cut-off is stated on each tournament card before you enter.",
+        "If a tournament is voided because of confirmed cheating, collusion or bot use, the implicated entrants forfeit their entries and any winnings, and the honest entrants are refunded in full. Prize pools funded by the platform are not paid out on a voided tournament, and prize pools funded by entries are returned to the honest entrants pro rata.",
+        "A prize already credited can be reversed if it is later found to result from cheating, an exploit or a scoring error. Reversals appear in your transaction history with the reason and are disputable through support.",
+      ],
+    },
+    {
+      heading: "4. Failed and erroneous transactions",
+      body: [
+        "A double charge, a payment taken with nothing delivered, an item not credited, a Points pack not applied, or a duplicate subscription charge is a platform error and is corrected in full — normally by refunding the erroneous charge, or by delivering what you paid for if you would rather have that.",
+        "Report it through /contact with the transaction reference. We acknowledge within one business day, and errors that are visible in our own ledger are typically resolved within 3 to 5 business days. Cases that need the payment provider to confirm can take up to 10 business days, and we will tell you if yours is one of them.",
+        "Where our error caused you a knock-on loss — you missed a tournament because the entry ticket did not arrive — we will make it good with a credit or a re-entry in a comparable event. That remedy is discretionary and does not extend our liability beyond what the Terms allow.",
+      ],
+    },
+    {
+      heading: "5. Token conversions and on-chain transactions",
+      body: [
+        "Converting Points to MTT is executed at the rate shown at the moment you confirm, and it is not reversible. There is no refund of converted MTT back to Points, and no re-conversion at a historical rate if the rate moves afterwards. The confirmation screen shows the rate, the fee and the amount you will receive before you commit, and you must accept it to proceed.",
+        "On-chain actions — a withdrawal to an external address, a stake, an unstake, a commission claim — settle on the blockchain and cannot be reversed by us once broadcast. A transaction sent to a wrong address you supplied, or on the wrong network, is not recoverable and is not refundable. Check the address and the network before you sign.",
+        "Gas fees are paid to the network, not to us, and are not refundable even where a transaction fails on-chain. If a platform bug caused a failed transaction, we will cover the wasted gas as a credit once we have verified the failure from the transaction hash.",
+        "Where a withdrawal is rejected by compliance before broadcast, the amount returns to your platform balance in full and the processing fee is not charged.",
+      ],
+    },
+    {
+      heading: "6. Subscriptions",
+      body: [
+        "Subscriptions renew automatically until you cancel. You can cancel at any time from your settings, and cancellation stops the next renewal; it does not end the period you have already paid for, and your benefits continue to the end of that period.",
+        "We do not refund a partial period, and we do not refund a renewal you forgot to cancel where the benefits of that period were available to you — except where consumer law in your jurisdiction requires otherwise, or where you cancel within a statutory cooling-off window and have not used the period's benefits.",
+        "If we materially reduce the benefits of a subscription tier mid-period, you may cancel and receive a pro-rata refund of the unused part. Price increases apply only from the next renewal after notice, never mid-period.",
+      ],
+    },
+    {
+      heading: "7. Chargebacks",
+      body: [
+        "If you believe a charge is wrong, contact us first. A chargeback is a dispute filed with your bank or card issuer against us; it costs us a scheme fee, it takes weeks, and it produces a worse outcome for you than a support ticket that we can usually settle in days.",
+        "When a chargeback is filed we suspend the account pending resolution, freeze withdrawals and pause commission release. Items and Points delivered by the disputed purchase are removed. If the chargeback is upheld, the account may stay closed and any balance derived from the disputed purchase is forfeited.",
+        "Commission is clawed back too. A chargeback removes the level 1, level 2 and level 3 commissions that the purchase generated, from every upline that received them. Where that commission has already been paid out, the clawback is recovered from those uplines' future commission or, in a fraud case, from their withdrawable balance. Uplines see the reversal and its reason in their payout history and can dispute it, but the reversal itself follows automatically from the chargeback.",
+        "A pattern of chargebacks, or a chargeback filed on a purchase whose benefit was consumed, is treated as payment fraud and is escalated under the AML/KYC Policy. It may be reported to the payment provider and to the relevant authority.",
+      ],
+    },
+    {
+      heading: "8. Non-refundable items, stated plainly",
+      body: [
+        "So there is no ambiguity, the following are not refundable: Points already spent or converted; boosts, entries and consumables already used; MTT already converted from Points; on-chain gas fees; staking early-unstake penalties correctly applied under the pool terms; entry fees for tournaments you voluntarily left after entries closed; and subscription periods whose benefits were available to you.",
+        "The following are always refundable: charges taken in error, duplicate charges, purchases where nothing was delivered, entries in tournaments we cancelled, and unused items within the 14-day window.",
+      ],
+    },
+    {
+      heading: "9. How to request a refund",
+      body: [
+        "Open a ticket at /contact with the refund category, the transaction reference from your transaction history, the date, the amount and a short description of what went wrong. Screenshots help for anything visual.",
+        "We acknowledge within one business day. A straightforward case is decided within 3 to 5 business days. A case needing the payment provider or a compliance review can take up to 10 business days, and we will tell you at the point we know. Once approved, the money leaves us immediately; how long it takes to appear depends on your bank or card issuer, typically 3 to 10 business days.",
+        "If we decline, you get a written reason referencing the clause it rests on, and you can ask for a review by someone who was not involved in the first decision. Your statutory rights and your right to complain to a consumer protection body or a payment ombudsman are unaffected by our decision.",
+      ],
+    },
+    draftDisclaimer("Refund & Cancellation Policy"),
+  ],
+};
+
+/* -------------------------- 11.7 Responsible gaming ----------------------- */
+
+const responsibleGaming: LegalDocument = {
+  slug: "responsible-gaming",
+  title: "Responsible Gaming Policy",
+  version: "1.0",
+  status: "legal_review",
+  updatedAt: "2026-08-04",
+  effectiveFrom: "2026-09-01",
+  materialChange: false,
+  summary:
+    "You can set your own deposit, spend and session limits, and a tightening takes effect immediately. Cooling-off pauses paid features for a short period you choose. Self-exclusion is stronger: it takes effect at once and support cannot lift it during the period you set, no matter who asks — including you. Reality checks tell you how long you have been playing and what you have spent. The platform is 18+ and an account found to belong to a minor is closed.",
+  sections: [
+    {
+      heading: "1. Our commitment",
+      body: [
+        "Members Trail is entertainment. For most people it stays that way, and for some it does not, and a platform that takes money for play has an obligation to build for the second case rather than hope it away.",
+        "Our approach has four parts: give you real tools to bound your own play and spending; make the tools easy to find and immediate to apply; watch for behavioural indicators of harm and intervene rather than optimise them; and never design a mechanic whose purpose is to make it harder to stop. Loss-chasing prompts, urgency timers on spending decisions and the promotion of paid features to a member who has just set a limit are all off the table.",
+        "We also do not target responsible-gaming tooling as an obstacle to be minimised. Setting a limit takes fewer steps than making a purchase, and it should stay that way.",
+      ],
+    },
+    {
+      heading: "2. Limits you can set yourself",
+      body: [
+        "Deposit limits: a maximum you can add to your account per day, per week or per month. Spend limits: a maximum on in-app purchases, tournament entries and marketplace purchases over the same periods, which catches spending funded from an existing balance rather than a new deposit. Session limits: a maximum length of a single play session, after which the session ends.",
+        "A tightening — a lower limit, a shorter session — applies immediately. A loosening does not: raising or removing a limit takes effect only after a cooling-off delay of 24 hours, and you are asked to confirm again when the delay ends. That asymmetry is deliberate, because the moment you want to raise a limit is exactly the moment the limit is doing its job.",
+        "Limits are enforced server-side, apply across every device and every entry point, and cannot be bypassed by using a different client. If you hit a limit, the platform tells you which limit it was and when it resets, rather than failing silently.",
+        "Free play is not restricted by spend limits. You can keep playing games and earning Points with every paid feature closed off, which is the point: the tools bound your spending, not your access.",
+      ],
+    },
+    {
+      heading: "3. Reality checks and your own numbers",
+      body: [
+        "Reality checks are periodic in-play notices — at an interval you choose, commonly 30 or 60 minutes — that state how long the session has run, what you have spent in it, and the net result. Acknowledging one requires a deliberate action rather than a stray tap, and you can end the session from the notice.",
+        "Your account has a permanent activity summary: deposits, purchases, entries, time played and net position over the last 7, 30 and 90 days, and over the last year. It is not buried, it is not selectively framed, and it shows losses with the same prominence as wins.",
+        "Notifications that promote paid features can be turned off independently of transactional and security notifications, so silencing marketing never means silencing a security alert.",
+      ],
+    },
+    {
+      heading: "4. Cooling-off",
+      body: [
+        "Cooling-off is a short, self-chosen break. You pick a period — 24 hours, 7 days or 30 days — and paid features are disabled for it: no deposits, no purchases, no tournament entries, no staking actions.",
+        "Cooling-off starts as soon as you confirm it and cannot be cancelled early. During the period you can still access your account, see your balances, withdraw a verified balance, and play free games unless you chose the option that pauses gameplay too.",
+        "Marketing communication stops during a cooling-off period and does not resume automatically at the end. When the period expires the account returns to normal and any limits you had set remain in force; cooling-off does not reset them.",
+      ],
+    },
+    {
+      heading: "5. Self-exclusion",
+      body: [
+        "Self-exclusion is the strongest tool and it is designed to be hard to undo. You choose a period — 6 months, 1 year, 5 years or permanent — and it takes effect immediately on confirmation. Paid features close, marketing stops permanently for that account, and the account is flagged so that a new account created with matching identity, payment or device details is blocked as well.",
+        "During the exclusion period support cannot lift it. Not for a good reason, not for a policy exception, not for a member who calls and says they have changed their mind, and not for anyone claiming to act for you. This is the whole value of the mechanism: the version of you who set it is protecting you from the version of you who wants it lifted, and a support agent who can be talked round destroys that protection. Agents are trained to say no and are not given the ability to override it.",
+        "You keep the right to withdraw a verified balance during exclusion, subject to the normal AML checks, and to access your records and exercise your data rights. What you cannot do is deposit, spend or play paid features.",
+        "At the end of a fixed period the exclusion does not lift automatically. You must ask for reinstatement, wait out a further cooling-off delay, and confirm again, and we may keep limits in place or decline reinstatement where we hold indicators of harm. A permanent exclusion is not reversible.",
+      ],
+    },
+    {
+      heading: "6. Age verification and underage protection",
+      body: [
+        "The platform is for adults: 18 or older, or older where local law sets a higher minimum for paid online gaming. Age is declared at registration and checked against the date of birth on the identity document at verification, which is required before any withdrawal or commission release.",
+        "An account found to belong to a person under the applicable age is closed immediately. No winnings, staking rewards or referral commission are paid, recoverable payments are returned to the source they came from, and the data is deleted except what we must keep to document the closure.",
+        "If you share a device with someone under 18, use the device-level parental controls your operating system provides, keep payment credentials out of saved autofill, and do not leave a session logged in. If you believe a minor is using the platform — including your own child — report it through /contact and it will be handled as urgent by the compliance team.",
+      ],
+    },
+    {
+      heading: "7. Signs that play has stopped being play",
+      body: [
+        "Some patterns are worth recognising in yourself: spending more than you planned, or more than you can comfortably afford; playing longer than you intended and repeatedly; increasing your spend to recover a loss; borrowing money, selling things or using money set aside for something else in order to play; hiding how much you play or spend from people close to you; feeling irritable or anxious when you cannot play; playing to escape stress, boredom or low mood rather than for enjoyment; and neglecting work, study, sleep or relationships because of it.",
+        "One of these on a bad week is not a diagnosis. Several of them, persistently, is a reason to use the tools in this policy today rather than to plan on using them later.",
+        "The same applies to the referral programme. Spending money on advertising to build a downline, or spending on the platform in order to raise your commission cap, is a spending decision like any other, and the same warning signs apply. Referral commission is capped and most participants earn little or nothing, so treating downline building as a way out of a loss is a route into a bigger one.",
+      ],
+    },
+    {
+      heading: "8. Support resources",
+      body: [
+        "Support that helps is support that is local, and the right organisation depends on where you live. Rather than printing a phone number here that may be wrong, out of date or in the wrong country, we maintain a current list of resources for each market we operate in and surface it in-product: in the responsible-gaming section of your account settings, in the limits and self-exclusion flows, and in the confirmation of a cooling-off or exclusion.",
+        "The categories of resource on that list are: national or regional problem-gambling and gaming-disorder helplines, which are typically free and confidential and often available around the clock; independent counselling and treatment services, including services that specialise in behavioural addiction; peer support and mutual-aid groups, in person and online, including groups for affected family members; free debt advice and financial counselling charities, which matter because financial pressure is often the most urgent part of the harm; and general mental health services, since problem play frequently travels with anxiety, depression or another underlying condition.",
+        "We also point to blocking software that can restrict access to gaming and gambling sites across a device or a household network, and to bank-level tools that many banks now offer to block gambling-category payments.",
+        "If you are in immediate distress or crisis, contact your local emergency services or a crisis line in your country. Our support team can send you the current resource list for your region on request, but we are not a clinical service and we will not pretend to be one.",
+      ],
+    },
+    {
+      heading: "9. How we intervene",
+      body: [
+        "Monitoring looks for behavioural markers of harm rather than for spend alone: a sharp escalation in deposit frequency or size relative to a member's own baseline, repeated failed payment attempts, sessions running through the night, spending immediately after a large loss, cancelled withdrawals followed by immediate spending, and repeated raising of self-set limits.",
+        "A first-tier response is automated and low-friction: a reality check, a prompt to review limits, and a temporary stop on promotional messaging. A stronger signal escalates to a trained member of the team who may impose a temporary limit, place a hold on paid features pending contact, or in a serious case close paid access.",
+        "We do not use these signals for marketing and we do not target offers at members who show them. A member showing harm markers is removed from promotional targeting rather than moved up it.",
+        "Interventions and their outcomes are recorded so that a later decision — a reinstatement request, for example — is made with the full history rather than from scratch.",
+      ],
+    },
+    {
+      heading: "10. Staff training and accountability",
+      body: [
+        "Every member-facing employee completes responsible-gaming training on joining and at least annually, covering the indicators of harm, how to respond to a member who discloses a problem, the limits of their own role, and the rule that a self-exclusion is not negotiable.",
+        "A named senior owner is accountable for this policy, and responsible-gaming metrics — tool uptake, exclusion volumes, intervention outcomes — are reported internally alongside commercial metrics rather than instead of them. Product changes that touch spending, session length or promotional messaging are reviewed against this policy before release.",
+        "The policy, the tools and the intervention thresholds are reviewed at least annually and after any material product change, and against the standards of each market's regulator.",
+      ],
+    },
+    draftDisclaimer("Responsible Gaming Policy"),
+  ],
+};
+
+/* -------------------------------- 11.8 Cookies ---------------------------- */
+
+/** Row model for the cookie categories table rendered inside the Cookie Policy. */
+export interface CookieGroup {
+  category: "Strictly necessary" | "Functional" | "Analytics" | "Fraud prevention";
+  name: string;
+  purpose: string;
+  duration: string;
+  party: "First party" | "Third party";
+  consentRequired: boolean;
+}
+
+export const cookieGroups: CookieGroup[] = [
+  {
+    category: "Strictly necessary",
+    name: "mt_session",
+    purpose: "Keeps you logged in and ties requests to your authenticated session.",
+    duration: "Session, or 30 days if you choose to stay signed in",
+    party: "First party",
+    consentRequired: false,
+  },
+  {
+    category: "Strictly necessary",
+    name: "mt_csrf",
+    purpose: "Cross-site request forgery token that stops a third-party page acting on your account.",
+    duration: "Session",
+    party: "First party",
+    consentRequired: false,
+  },
+  {
+    category: "Strictly necessary",
+    name: "mt_consent",
+    purpose: "Stores your cookie choices and the timestamp, so we can prove what you agreed to and not ask again.",
+    duration: "12 months",
+    party: "First party",
+    consentRequired: false,
+  },
+  {
+    category: "Strictly necessary",
+    name: "__cf_bm / edge protection",
+    purpose: "Bot management and rate limiting at the edge, protecting sign-in and payment endpoints.",
+    duration: "Up to 30 minutes",
+    party: "Third party",
+    consentRequired: false,
+  },
+  {
+    category: "Functional",
+    name: "mt_theme",
+    purpose: "Remembers your dark or light theme choice so the interface does not flash on load.",
+    duration: "12 months",
+    party: "First party",
+    consentRequired: false,
+  },
+  {
+    category: "Functional",
+    name: "mt_locale",
+    purpose: "Remembers your language and number formatting preference.",
+    duration: "12 months",
+    party: "First party",
+    consentRequired: false,
+  },
+  {
+    category: "Functional",
+    name: "mt_ref",
+    purpose: "Records the referral link you arrived through so the right member is credited at sign-up.",
+    duration: "30 days",
+    party: "First party",
+    consentRequired: false,
+  },
+  {
+    category: "Functional",
+    name: "mt_wallet_hint",
+    purpose: "Remembers which wallet provider you last connected with, to skip the picker.",
+    duration: "6 months (local storage)",
+    party: "First party",
+    consentRequired: false,
+  },
+  {
+    category: "Analytics",
+    name: "mt_analytics_id",
+    purpose: "Pseudonymous identifier used to count unique visitors and measure feature usage in aggregate.",
+    duration: "13 months",
+    party: "First party",
+    consentRequired: true,
+  },
+  {
+    category: "Analytics",
+    name: "Product analytics provider",
+    purpose: "Funnel, retention and feature-adoption measurement. IP is truncated and no KYC data is sent.",
+    duration: "Up to 13 months",
+    party: "Third party",
+    consentRequired: true,
+  },
+  {
+    category: "Analytics",
+    name: "Error and performance monitoring",
+    purpose: "Captures client-side errors and page performance so we can find and fix faults.",
+    duration: "Up to 90 days",
+    party: "Third party",
+    consentRequired: true,
+  },
+  {
+    category: "Fraud prevention",
+    name: "mt_device_id",
+    purpose: "Device identifier used to detect multi-accounting, self-referral and referral-loop fraud.",
+    duration: "12 months",
+    party: "First party",
+    consentRequired: false,
+  },
+  {
+    category: "Fraud prevention",
+    name: "Device fingerprint signals",
+    purpose: "Browser and device characteristics combined into a fingerprint that links duplicate accounts and flags account takeover.",
+    duration: "Derived per request; the resulting signal is retained for 12 months",
+    party: "Third party",
+    consentRequired: false,
+  },
+  {
+    category: "Fraud prevention",
+    name: "Payment provider risk cookie",
+    purpose: "Set by the payment processor during checkout to score the transaction for card fraud.",
+    duration: "Set by the provider, typically up to 12 months",
+    party: "Third party",
+    consentRequired: false,
+  },
+];
+
+const cookies: LegalDocument = {
+  slug: "cookies",
+  title: "Cookie Policy",
+  version: "1.0",
+  status: "draft",
+  updatedAt: "2026-08-04",
+  effectiveFrom: "2026-09-01",
+  materialChange: false,
+  summary:
+    "We use four kinds of cookie: the ones the site cannot work without, the ones that remember your preferences, the ones that measure how the product is used, and the ones that detect fraud and multi-accounting. Analytics is the only category that waits for your consent — you can refuse it and everything still works. Fraud-prevention cookies run without consent because we rely on them to protect accounts and enforce the referral rules, and we would rather say so than hide them in a necessary bucket.",
+  sections: [
+    {
+      heading: "1. What cookies are and why we use them",
+      body: [
+        "A cookie is a small file a site stores in your browser and reads on later requests. We also use closely related technologies — local storage, session storage and pixels — and everything in this policy applies to those too, because the distinction matters to engineers and not to your privacy.",
+        "We use them for four things: keeping you securely logged in and protecting requests; remembering choices such as theme, language and which referral link you arrived through; measuring how the product is used in aggregate; and detecting fraud, in particular the duplicate accounts and referral loops that the programme rules prohibit.",
+        "We do not use advertising or cross-site tracking cookies, we do not run retargeting pixels, and we do not sell or share cookie data with data brokers or ad networks. If that changes, this policy will be updated and consent will be asked for before any such cookie is set.",
+      ],
+    },
+    {
+      heading: "2. The four categories",
+      body: [
+        "Strictly necessary. Session, security, CSRF protection, edge bot management and the record of your own cookie choices. Without these the platform cannot authenticate you or protect your account, so they are set on every visit and cannot be switched off. Refusing them means not using the platform.",
+        "Functional. Preferences that make the interface behave the way you left it: theme, language, last wallet used, and the referral attribution cookie that credits the right member when you sign up. Turning these off does not break anything; it just makes the product forget you.",
+        "Analytics. Aggregate measurement of how features are used, plus error and performance monitoring. This category is optional and is only set after you consent. Refusing it costs you nothing functionally — the effect is on our ability to see which parts of the product are working.",
+        "Fraud prevention. A device identifier and fingerprint signals used to link duplicate accounts, detect account takeover and enforce the referral programme's self-referral and loop rules, plus a risk cookie set by the payment processor at checkout. These are set without consent because we rely on them to protect members' funds and to meet our AML obligations. We list them as their own category rather than folding them into strictly necessary, because you are entitled to know they exist and what they do.",
+      ],
+    },
+    {
+      heading: "3. Cookie categories table",
+      body: [
+        "The table below lists each cookie or cookie group, its purpose, how long it lasts, whether it is set by us or by a third party, and whether it waits for your consent. Names of third-party groups are described by function here; the final text will name each provider once the vendor contracts are signed.",
+        "Durations are maximums. A session cookie is deleted when you close the browser, and a cookie whose purpose has ended — an expired referral attribution, for instance — is cleared before its stated maximum.",
+      ],
+    },
+    {
+      heading: "4. Managing your preferences",
+      body: [
+        "On your first visit a consent banner asks for your choice. Accepting all sets every category. Rejecting non-essential sets only the strictly necessary, functional and fraud-prevention categories. Choosing manage lets you decide category by category. The banner does not use a pre-ticked box for analytics, and rejecting is one click, not a hunt through a submenu.",
+        "You can change your mind at any time from the cookie preference centre in your account settings or from the link in the site footer. A change applies immediately: withdrawing analytics consent stops further collection and clears the analytics cookies we control on your next request. It does not retroactively delete data already collected, though you can ask for that separately through the data rights process in the Privacy Policy.",
+        "Your choice, and the timestamp of it, is recorded in the consent cookie and on our side, so we can show what you agreed to and when. Consent is asked for again after 12 months, or sooner if we add a category or change a purpose materially.",
+      ],
+    },
+    {
+      heading: "5. Browser and device controls",
+      body: [
+        "Every major browser lets you view and delete cookies, block third-party cookies, block all cookies for a site, and clear storage on exit. Those controls sit above ours: if you block cookies at the browser level, our preference centre cannot override that.",
+        "Blocking strictly necessary cookies will break sign-in, and blocking storage entirely will prevent the platform from keeping you authenticated between requests. Clearing cookies will also clear your consent record, which is why the banner reappears afterwards, and will clear the referral attribution cookie, which is why a referral link should be used in the same browser you sign up in.",
+        "We honour Global Privacy Control where your browser sends it, treating it as a refusal of the optional analytics category. We do not currently treat the older Do Not Track header as a valid signal, because it has no agreed meaning; if that changes we will say so here.",
+      ],
+    },
+    {
+      heading: "6. Third-party cookies",
+      body: [
+        "Third parties that may set cookies through the platform are our edge and bot-protection provider, our product analytics provider, our error and performance monitoring provider, our payment processor at checkout, and our identity verification provider during a verification session.",
+        "Each is engaged under a data-processing agreement that limits it to processing on our instructions and prohibits using platform data for its own advertising. We do not embed social media, advertising or video-hosting scripts that set tracking cookies on our pages.",
+        "These providers have their own privacy notices, and the final text of this policy will link to each. Where a provider sets a cookie in a category that requires consent, it is not loaded at all until you consent — the script is withheld, not merely told to behave.",
+      ],
+    },
+    {
+      heading: "7. Relationship to the Privacy Policy",
+      body: [
+        "This policy explains the storage mechanism. The Privacy Policy explains what we do with the data it produces: the legal basis for each purpose, how long we keep it, who it is shared with, whether it leaves your region, and the rights you can exercise over it.",
+        "Two points connect the two documents directly. First, the fraud-prevention category feeds the device fingerprint described in the Privacy Policy, relied on as a legitimate interest for detecting multi-accounting and referral fraud. Second, analytics data is pseudonymous and is never joined to your identity or KYC records, which are held in a segregated encrypted store restricted to the compliance team.",
+      ],
+    },
+    {
+      heading: "8. Updates to this policy",
+      body: [
+        "We update this policy when we add, remove or change a cookie or a provider. The version number and effective date at the top of the page identify the text in force, and the version history is kept in the CMS.",
+        "A new category, a new purpose or a new third party that requires consent triggers a fresh consent request rather than a silent update. Adding a strictly necessary cookie, or removing one, is published here without a new request.",
+      ],
+    },
+    draftDisclaimer("Cookie Policy"),
+  ],
+};
+
+/* --------------------------------- Exports -------------------------------- */
+
+export const legalDocuments: Record<string, LegalDocument> = {
+  terms,
+  privacy,
+  "risk-disclosure": riskDisclosure,
+  "aml-kyc": amlKyc,
+  "referral-terms": referralTerms,
+  refunds,
+  "responsible-gaming": responsibleGaming,
+  cookies,
+};
+
+/** Reading order for prev/next navigation. Mirrors `legalDocs` in @/lib/nav. */
+export const legalIndex: { slug: string; title: string; href: string }[] = [
+  "terms",
+  "privacy",
+  "risk-disclosure",
+  "aml-kyc",
+  "referral-terms",
+  "refunds",
+  "responsible-gaming",
+  "cookies",
+].map((slug) => ({
+  slug,
+  title: legalDocuments[slug].title,
+  href: `/legal/${slug}`,
+}));
+
+export function getLegalDocument(slug: string): LegalDocument {
+  const doc = legalDocuments[slug];
+  if (!doc) throw new Error(`Unknown legal document: ${slug}`);
+  return doc;
+}
+
+/** Neighbours in reading order — used by the prev/next footer on each document. */
+export function legalNeighbours(slug: string) {
+  const i = legalIndex.findIndex((d) => d.slug === slug);
+  return {
+    prev: i > 0 ? legalIndex[i - 1] : undefined,
+    next: i >= 0 && i < legalIndex.length - 1 ? legalIndex[i + 1] : undefined,
+  };
+}
