@@ -1,0 +1,31 @@
+{
+  "name": "members-trail-contracts",
+  "version": "1.0.0",
+  "description": "MTT (Members Trail Token) smart contracts for BNB Smart Chain \u2014 revenue-funded staking and referral distribution",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "test:gas": "REPORT_GAS=true hardhat test",
+    "e2e": "hardhat run scripts/e2e-local.js",
+    "deploy:testnet": "hardhat run scripts/deploy.js --network bscTestnet",
+    "deploy:mainnet": "hardhat run scripts/deploy.js --network bscMainnet",
+    "roles:testnet": "hardhat run scripts/setup-roles.js --network bscTestnet",
+    "pools:testnet": "hardhat run scripts/setup-pools.js --network bscTestnet",
+    "check:testnet": "hardhat run scripts/post-deploy-check.js --network bscTestnet",
+    "check:mainnet": "hardhat run scripts/post-deploy-check.js --network bscMainnet",
+    "clean": "hardhat clean"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts": "^5.6.1",
+    "dotenv": "^17.4.2",
+    "hardhat": "^2.29.1"
+  },
+  "dependencies": {
+    "solc": "^0.8.24"
+  }
+}
