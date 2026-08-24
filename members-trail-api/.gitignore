@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+# The generated development env, delivered under this name because a file called
+# .env cannot be written remotely. It holds real secrets — never commit it.
+env.local
+*.log
+*.tsbuildinfo
+.DS_Store
+uploads/

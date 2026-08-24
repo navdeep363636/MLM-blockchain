@@ -12,3 +12,4 @@ deployments/hardhat.json
 deployments/localhost.json
 *.log
 .DS_Store
+TESTNET-WALLETS.json
