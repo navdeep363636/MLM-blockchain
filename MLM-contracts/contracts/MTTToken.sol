@@ -35,7 +35,17 @@ contract MTTToken is ERC20, ERC20Burnable, ERC20Pausable, AccessControl {
     uint256 public constant ALLOC_MARKETING_BPS = 1000; // 10%
     uint256 public constant ALLOC_ADVISORS_BPS = 500; // 5%
 
-    event AllocationMinted(string indexed bucket, address indexed to, uint256 amount);
+    /**
+     * @dev `bucket` is deliberately NOT indexed.
+     *
+     * For dynamic types, `indexed` stores keccak256(value) in a topic rather than
+     * the value itself — so an indexed string can be matched against a known
+     * candidate but can never be READ back. An off-chain indexer reconstructing
+     * the allocation table for the public tokenomics page would have recovered a
+     * 32-byte hash where it needed the word "REWARDS_POOL". Non-indexed puts the
+     * string in the data section, where it decodes.
+     */
+    event AllocationMinted(string bucket, address indexed to, uint256 amount);
 
     /**
      * @param admin           Address to receive DEFAULT_ADMIN_ROLE, PAUSER_ROLE, BURNER_ROLE.

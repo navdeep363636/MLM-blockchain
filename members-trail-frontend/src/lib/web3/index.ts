@@ -2,7 +2,6 @@
  * The wagmi config is deliberately NOT re-exported — import it directly from
  * "@/lib/web3/wagmi" inside a client component. */
 export * from "./chains";
-export { mttTokenAbi } from "./abis/mttToken";
-export { mttStakingAbi } from "./abis/mttStaking";
-export { mttReferralDistributorAbi } from "./abis/mttReferralDistributor";
-export { mttVestingAbi } from "./abis/mttVesting";
+/* The ABI barrel is GENERATED — `npm run abi` in MLM-contracts rewrites
+ * ./abis/index.ts, so adding a contract needs no edit here. */
+export * from "./abis";

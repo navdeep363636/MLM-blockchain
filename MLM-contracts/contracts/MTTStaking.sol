@@ -51,6 +51,17 @@ contract MTTStaking is AccessControl, ReentrancyGuard {
     mapping(uint256 => Pool) public pools;
     mapping(uint256 => mapping(address => UserInfo)) public userInfo;
 
+    /**
+     * @notice Staked principal across every pool.
+     *
+     * Exists so solvency is verifiable by anyone, on-chain, in two calls:
+     * `mtt.balanceOf(staking)` minus this is the reward float. Without it a
+     * reconciler has to sum `pools[i].totalStaked` over an unbounded loop, and
+     * the number that actually matters — "is every staker's principal still
+     * here" — is the one the platform's own treasury dashboard reports.
+     */
+    uint256 public totalStakedAllPools;
+
     address public penaltyReceiver; // where forfeited rewards go (e.g., back to Treasury)
 
     event PoolCreated(uint256 indexed poolId, uint64 lockDuration, uint64 rewardsDuration, uint16 earlyUnstakePenaltyBps);
@@ -171,6 +182,7 @@ contract MTTStaking is AccessControl, ReentrancyGuard {
         u.amount += amount;
         u.lockEnd = uint64(block.timestamp) + pool.lockDuration; // resets lock on top-up, by design
         pool.totalStaked += amount;
+        totalStakedAllPools += amount;
 
         mtt.safeTransferFrom(msg.sender, address(this), amount);
         emit Staked(poolId, msg.sender, amount, u.lockEnd);
@@ -187,6 +199,87 @@ contract MTTStaking is AccessControl, ReentrancyGuard {
         mtt.safeTransfer(msg.sender, amount);
         emit RewardClaimed(poolId, msg.sender, amount);
     }
+
+    // ---------- Views ----------
+
+    /**
+     * @notice One pool, as a named struct.
+     *
+     * The auto-generated `pools` getter returns a positional 11-tuple. Every
+     * off-chain caller then indexes it by number, so inserting a field silently
+     * reassigns meaning in the backend and the frontend at once. A struct return
+     * is decoded by name.
+     */
+    function getPool(uint256 poolId) external view returns (Pool memory) {
+        return pools[poolId];
+    }
+
+    /// @notice Every pool, for the catalogue screens. `poolCount` is operator-set and small.
+    function getPools() external view returns (Pool[] memory list) {
+        uint256 n = poolCount;
+        list = new Pool[](n);
+        for (uint256 i = 0; i < n; i++) {
+            list[i] = pools[i];
+        }
+    }
+
+    struct Position {
+        uint256 amount;
+        uint64 lockEnd;
+        uint256 pendingRewards;
+        bool locked;
+    }
+
+    /**
+     * @notice A member's position in one pool, including live pending rewards.
+     *
+     * Replaces `userInfo(poolId,user)` + `earned(poolId,user)` — two round trips
+     * that could also disagree, because they are read at different block heights
+     * when the frontend fires them in parallel.
+     */
+    function getPosition(uint256 poolId, address account) public view returns (Position memory) {
+        UserInfo storage u = userInfo[poolId][account];
+        return Position({
+            amount: u.amount,
+            lockEnd: u.lockEnd,
+            pendingRewards: earned(poolId, account),
+            locked: block.timestamp < u.lockEnd
+        });
+    }
+
+    /// @notice Every position for one member. The staking dashboard in one call.
+    function getPositions(address account) external view returns (Position[] memory list) {
+        uint256 n = poolCount;
+        list = new Position[](n);
+        for (uint256 i = 0; i < n; i++) {
+            list[i] = getPosition(i, account);
+        }
+    }
+
+    /**
+     * @notice MTT held by this contract that is NOT staker principal.
+     *
+     * This is the reward float: funded-but-not-yet-streamed rewards, plus any
+     * rewards that streamed while a pool had no stakers. The second part is
+     * inherent to the streaming model — `rewardPerToken` cannot accrue against a
+     * zero denominator, so that slice is skipped rather than redistributed, and
+     * it stays here. It is deliberately NOT recoverable by any role: a function
+     * that could pull "excess" out of this contract is one accounting mistake
+     * away from taking staker principal with it. Treasury reconciles the number;
+     * nobody withdraws it.
+     */
+    function rewardFloat() external view returns (uint256) {
+        uint256 balance = mtt.balanceOf(address(this));
+        uint256 principal = totalStakedAllPools;
+        return balance > principal ? balance - principal : 0;
+    }
+
+    /// @notice True while every staker could withdraw principal in full.
+    function isSolvent() external view returns (bool) {
+        return mtt.balanceOf(address(this)) >= totalStakedAllPools;
+    }
+
+    // ---------- User actions (continued) ----------
 
     /**
      * @notice Withdraw staked principal. Principal is ALWAYS returned in full.
@@ -211,6 +304,7 @@ contract MTTStaking is AccessControl, ReentrancyGuard {
 
         u.amount -= amount;
         pools[poolId].totalStaked -= amount;
+        totalStakedAllPools -= amount;
 
         if (forfeited > 0) {
             mtt.safeTransfer(penaltyReceiver, forfeited);

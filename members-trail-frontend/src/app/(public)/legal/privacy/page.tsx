@@ -1,6 +1,5 @@
 /* L-02 · Privacy Policy — FRD 11.2 */
-import { LegalDoc } from "../_components/legal-doc";
-import { legalDocuments } from "@/lib/mock/legal";
+import { LegalDocFromApi } from "../_components/fetch-doc";
 
 export const metadata = {
   title: "Privacy Policy",
@@ -9,5 +8,5 @@ export const metadata = {
 };
 
 export default function PrivacyPage() {
-  return <LegalDoc doc={legalDocuments.privacy} />;
+  return <LegalDocFromApi slug="privacy" />;
 }

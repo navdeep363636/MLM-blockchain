@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { publicFooterNav, publicNav } from "@/lib/nav";
 import { Button } from "@/components/ui";
 import { WalletConnectButton } from "@/components/web3";
-import { ScrollProgress } from "@/components/fx";
+import { GlassPanel, MeshHaze, ScrollProgress } from "@/components/fx";
 import { Logo } from "./logo";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -30,90 +30,133 @@ export function PublicHeader() {
   return (
     <>
       <ScrollProgress />
-      <header
-        className={cn(
-          "sticky top-0 z-[70] transition-all duration-300",
-          scrolled ? "glass border-b border-border-subtle" : "border-b border-transparent",
-        )}
-      >
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-          <Logo />
+      {/*
+        The header has two states and morphs between them on scroll:
 
-          <nav className="hidden items-center gap-1 lg:flex" aria-label="Main">
-            {publicNav.map((l) => {
-              const active = pathname === l.href;
-              return (
-                <Link
-                  key={l.href}
-                  href={l.href}
-                  className={cn(
-                    "relative rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                    active ? "text-text-primary" : "text-text-muted hover:text-text-primary",
-                  )}
-                >
-                  {l.label}
-                  {active && (
-                    <motion.span
-                      layoutId="public-nav-dot"
-                      className="absolute inset-x-3 -bottom-0.5 h-0.5 rounded-full bg-[var(--accent)]"
-                    />
-                  )}
-                </Link>
-              );
-            })}
-          </nav>
+          at rest   full width, transparent, sitting on the hero's atmosphere
+          scrolled  an inset floating glass pill with a rim light and a shadow
 
-          <div className="flex items-center gap-2">
-            <ThemeToggle className="hidden sm:grid" />
-            <div className="hidden sm:block">
-              <WalletConnectButton compact />
-            </div>
-            <Button href="/login" variant="ghost" size="sm" className="hidden md:inline-flex">Log in</Button>
-            <Button href="/signup" size="sm" className="hidden md:inline-flex">Sign up free</Button>
-            <button
-              onClick={() => setOpen((o) => !o)}
-              aria-label={open ? "Close menu" : "Open menu"}
-              aria-expanded={open}
-              className="grid size-10 place-items-center rounded-xl text-text-secondary transition-colors hover:bg-surface-2 lg:hidden"
-            >
-              {open ? <X className="size-5" /> : <Menu className="size-5" />}
-            </button>
-          </div>
-        </div>
+        The morph is a transition on max-width, border-radius, padding and
+        backdrop — not a swap between two rendered headers — so the nav items
+        never remount and the active-tab indicator does not jump. The sticky
+        wrapper keeps its own height constant either way, which is what stops
+        the page content shifting the moment you start scrolling.
+      */}
+      {/* The top padding is CONSTANT. A sticky element still reserves its box
+          in normal flow at the top of the document, so animating the header's
+          own height shifts every pixel of the page down as you begin to
+          scroll. The morph is therefore confined to the inner pill. */}
+      <header className="sticky top-0 z-[70] pt-3">
+        <div
+          className={cn(
+            "mx-auto transition-[max-width,border-radius,background-color,box-shadow,border-color,padding] duration-500 ease-[var(--ease-tide)]",
+            scrolled
+              ? "max-w-6xl rounded-2xl border border-border-subtle glass-2 px-1"
+              : "max-w-7xl rounded-none border border-transparent px-0",
+          )}
+        >
+          <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+            <Logo />
 
-        <AnimatePresence>
-          {open && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-              className="overflow-hidden border-t border-border-subtle bg-surface-1 lg:hidden"
-            >
-              <nav className="mx-auto max-w-7xl space-y-1 px-4 py-4 sm:px-6" aria-label="Mobile">
-                {publicNav.map((l) => (
+            <nav className="hidden items-center gap-0.5 lg:flex" aria-label="Main">
+              {publicNav.map((l) => {
+                const active = pathname === l.href;
+                return (
                   <Link
                     key={l.href}
                     href={l.href}
                     className={cn(
-                      "block rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                      pathname === l.href
-                        ? "bg-accent-soft text-[var(--accent-hover)]"
-                        : "text-text-secondary hover:bg-surface-2",
+                      "group relative rounded-xl px-3.5 py-2 text-sm font-medium transition-colors duration-[var(--dur-quick)]",
+                      active ? "text-text-primary" : "text-text-muted hover:text-text-primary",
                     )}
                   >
-                    {l.label}
+                    {/* Hover plate, drawn behind the label. A background on the
+                        link itself would animate its own text colour with it. */}
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0 scale-90 rounded-xl bg-surface-2 opacity-0 transition-[opacity,transform] duration-[var(--dur-quick)] ease-[var(--ease-tide)] group-hover:scale-100 group-hover:opacity-100"
+                    />
+                    <span className="relative">{l.label}</span>
+                    {active && (
+                      <>
+                        <motion.span
+                          layoutId="public-nav-dot"
+                          className="absolute inset-x-3.5 -bottom-0.5 h-0.5 rounded-full bg-[var(--accent)] shadow-[0_0_10px_1px_var(--accent-ring)]"
+                          transition={{ duration: 0.38, ease: [0.32, 0.72, 0, 1] }}
+                        />
+                        <motion.span
+                          layoutId="public-nav-glow"
+                          aria-hidden
+                          className="pointer-events-none absolute inset-x-1 bottom-0 h-7 rounded-t-xl bg-[linear-gradient(to_top,var(--accent-soft),transparent)]"
+                          transition={{ duration: 0.38, ease: [0.32, 0.72, 0, 1] }}
+                        />
+                      </>
+                    )}
                   </Link>
-                ))}
-                <div className="flex flex-col gap-2 pt-3">
-                  <WalletConnectButton />
-                  <Button href="/login" variant="outline" fullWidth>Log in</Button>
-                  <Button href="/signup" fullWidth>Sign up free</Button>
-                </div>
-              </nav>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                );
+              })}
+            </nav>
+
+            <div className="flex items-center gap-2">
+              <ThemeToggle className="hidden sm:grid" />
+              <div className="hidden sm:block">
+                <WalletConnectButton compact />
+              </div>
+              <Button href="/login" variant="ghost" size="sm" className="hidden md:inline-flex">Log in</Button>
+              <Button href="/signup" size="sm" className="hidden md:inline-flex">Sign up free</Button>
+              <button
+                onClick={() => setOpen((o) => !o)}
+                aria-label={open ? "Close menu" : "Open menu"}
+                aria-expanded={open}
+                className="grid size-10 place-items-center rounded-xl text-text-secondary transition-colors hover:bg-surface-2 lg:hidden"
+              >
+                {open ? <X className="size-5" /> : <Menu className="size-5" />}
+              </button>
+            </div>
+          </div>
+
+          <AnimatePresence>
+            {open && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.36, ease: [0.32, 0.72, 0, 1] }}
+                className="overflow-hidden border-t border-border-subtle lg:hidden"
+              >
+                <GlassPanel tier={2} radius="card" edge={false} className="mx-2 mb-2 mt-2">
+                  <nav className="space-y-1 p-3" aria-label="Mobile">
+                    {publicNav.map((l, i) => (
+                      <motion.div
+                        key={l.href}
+                        initial={{ opacity: 0, x: -12 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.04 * i, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                      >
+                        <Link
+                          href={l.href}
+                          className={cn(
+                            "block rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+                            pathname === l.href
+                              ? "bg-accent-soft text-[var(--accent-hover)] ring-1 ring-inset ring-[var(--accent-ring)]"
+                              : "text-text-secondary hover:bg-surface-2",
+                          )}
+                        >
+                          {l.label}
+                        </Link>
+                      </motion.div>
+                    ))}
+                    <div className="flex flex-col gap-2 pt-3">
+                      <WalletConnectButton />
+                      <Button href="/login" variant="outline" fullWidth>Log in</Button>
+                      <Button href="/signup" fullWidth>Sign up free</Button>
+                    </div>
+                  </nav>
+                </GlassPanel>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </header>
     </>
   );
@@ -129,8 +172,16 @@ function ClientYear() {
 
 export function PublicFooter() {
   return (
-    <footer className="relative mt-24 border-t border-border-subtle bg-surface-inset">
-      <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
+    <footer className="relative isolate mt-24 overflow-hidden border-t border-border-subtle bg-surface-inset">
+      {/* The footer is the bottom of the scene, so the haze here is inverted:
+          faint, low, and behind everything — the light going out rather than a
+          second hero. */}
+      <MeshHaze opacity={0.3} />
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,var(--accent-ring),transparent)]"
+      />
+      <div className="relative mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
         <div className="grid gap-10 lg:grid-cols-[1.4fr_repeat(4,1fr)]">
           <div className="max-w-xs">
             <Logo />
@@ -157,10 +208,10 @@ export function PublicFooter() {
                   <li key={it.href}>
                     <Link
                       href={it.href}
-                      className="group inline-flex items-center gap-1 text-sm text-text-muted transition-colors hover:text-[var(--accent-hover)]"
+                      className="group inline-flex items-center gap-1 text-sm text-text-muted transition-[color,transform] duration-[var(--dur-quick)] ease-[var(--ease-tide)] hover:translate-x-0.5 hover:text-[var(--accent-hover)]"
                     >
                       {it.label}
-                      <ArrowUpRight className="size-3 opacity-0 transition-opacity group-hover:opacity-100" />
+                      <ArrowUpRight className="size-3 -translate-x-1 opacity-0 transition-[opacity,transform] duration-[var(--dur-quick)] group-hover:translate-x-0 group-hover:opacity-100" />
                     </Link>
                   </li>
                 ))}

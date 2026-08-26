@@ -150,3 +150,36 @@ export class AdminConversionQuery extends DateRangeQuery {
   @IsOptional() @IsString() @MaxLength(64)
   userId?: string;
 }
+
+
+/* ============================================================================
+ * What the operator screen needs to show a ceiling honestly.
+ *
+ * Per-member ceilings alone do not answer the question an operator actually has,
+ * which is "are we close to the platform's own limit today". Both are here, with
+ * usage, so the screen does not have to derive a global figure from a per-member
+ * one — which it cannot.
+ * ========================================================================== */
+
+export class ConversionCapsOverview {
+  @ApiProperty({ description: "Per-member ceiling for one UTC day, in Points" })
+  perUserDailyPoints!: number;
+
+  @ApiProperty({ description: "Per-member ceiling for one UTC month, in Points" })
+  perUserMonthlyPoints!: number;
+
+  @ApiProperty({
+    description:
+      "Platform-wide ceiling for one UTC day, in Points. Null when none is " +
+      "configured — an unset global limit is not a limit of zero, and rendering " +
+      "it as one would show every operator a permanently breached gauge.",
+    nullable: true,
+  })
+  globalDailyPoints!: number | null;
+
+  @ApiProperty({ description: "Points converted platform-wide since 00:00 UTC" })
+  globalDailyUsedPoints!: string;
+
+  @ApiProperty({ description: "Conversions counted in that usage figure" })
+  globalDailyConversions!: number;
+}

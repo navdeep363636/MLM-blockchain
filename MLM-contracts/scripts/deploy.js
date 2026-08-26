@@ -43,7 +43,15 @@ async function main() {
     treasuryOps:      process.env.TREASURY_OPS_MULTISIG     || deployer.address,
     backendOracle:    process.env.BACKEND_ORACLE_ADDRESS    || deployer.address,
     complianceSigner: process.env.COMPLIANCE_SIGNER_ADDRESS || deployer.address,
+    /* The backend relayer that settles member withdrawals. Gets PAYER_ROLE on
+     * MTTPayout and nothing else — see MTTPayout.sol for why that matters. */
+    payoutRelayer:    process.env.PAYOUT_RELAYER_ADDRESS    || process.env.BACKEND_ORACLE_ADDRESS || deployer.address,
   };
+
+  /* Ceiling on what the payout relayer may move per 24h window. Deliberately a
+   * required decision rather than a default: it is the bound on how much a
+   * compromised hot key can cost, and nobody should discover it by accident. */
+  const PAYOUT_DAILY_LIMIT = ethers.parseEther(process.env.PAYOUT_DAILY_LIMIT_MTT || "50000");
 
   const isMainnet = network.config.chainId === 56;
   const usingDeployerForAdmin = ADDRESSES.admin === deployer.address;
@@ -59,7 +67,31 @@ async function main() {
   }
 
   const deployed = {};
-  const now = Math.floor(Date.now() / 1000);
+
+  /*
+   * Vesting start.
+   *
+   * This used to be `Date.now()`, which anchors a 12-month team cliff to the
+   * wall-clock moment the deploy script happened to run — on the deployer's
+   * machine, in whatever timezone, possibly minutes before or after the block
+   * that actually mines the contract. A cliff that nobody can state precisely is
+   * a cliff that gets argued about.
+   *
+   * VESTING_START_UNIX makes it an explicit, reviewable decision. Falling back to
+   * the LATEST BLOCK timestamp rather than the local clock at least keeps it on
+   * chain time.
+   */
+  const latestBlock = await ethers.provider.getBlock("latest");
+  const now = process.env.VESTING_START_UNIX
+    ? Number(process.env.VESTING_START_UNIX)
+    : latestBlock.timestamp;
+  if (!process.env.VESTING_START_UNIX) {
+    console.log(`NOTE: VESTING_START_UNIX unset — anchoring vesting to block time ${now}`);
+    console.log(`      (${new Date(now * 1000).toISOString()}). Set it explicitly for mainnet.\n`);
+  }
+  if (!Number.isFinite(now) || now <= 0) {
+    throw new Error(`VESTING_START_UNIX is not a valid unix timestamp: ${process.env.VESTING_START_UNIX}`);
+  }
 
   const Vesting = await ethers.getContractFactory("MTTVesting");
 
@@ -69,7 +101,7 @@ async function main() {
   // same script run, and post-deploy-check.js asserts the deployer ends at zero.
 
   // 1) Token — team/advisor allocations mint to the deployer, forwarded below
-  console.log("[1/4] Deploying MTTToken...");
+  console.log("[1/5] Deploying MTTToken...");
   const MTT = await ethers.getContractFactory("MTTToken");
   const token = await MTT.deploy(
     ADDRESSES.admin,
@@ -85,7 +117,7 @@ async function main() {
   console.log("      MTTToken:", deployed.MTTToken);
 
   // 2) Vesting contracts, now that we have the token address
-  console.log("[2/4] Deploying vesting contracts...");
+  console.log("[2/5] Deploying vesting contracts...");
   const teamVest = await Vesting.deploy(
     ADDRESSES.teamBeneficiary, deployed.MTTToken, now, 12 * MONTH, 36 * MONTH
   );
@@ -109,7 +141,7 @@ async function main() {
   await (await token.transfer(deployed.AdvisorsVesting, advAmount)).wait();
 
   // 3) Staking
-  console.log("[3/4] Deploying MTTStaking...");
+  console.log("[3/5] Deploying MTTStaking...");
   const Staking = await ethers.getContractFactory("MTTStaking");
   const staking = await Staking.deploy(
     deployed.MTTToken, ADDRESSES.admin, ADDRESSES.treasuryReserve
@@ -119,12 +151,27 @@ async function main() {
   console.log("      MTTStaking:", deployed.MTTStaking);
 
   // 4) Referral distributor
-  console.log("[4/4] Deploying MTTReferralDistributor...");
+  console.log("[4/5] Deploying MTTReferralDistributor...");
   const Dist = await ethers.getContractFactory("MTTReferralDistributor");
   const dist = await Dist.deploy(deployed.MTTToken, ADDRESSES.admin);
   await dist.waitForDeployment();
   deployed.MTTReferralDistributor = await dist.getAddress();
   console.log("      MTTReferralDistributor:", deployed.MTTReferralDistributor);
+
+  // 5) Payout rail — the withdrawal settlement contract
+  console.log("[5/5] Deploying MTTPayout...");
+  const Payout = await ethers.getContractFactory("MTTPayout");
+  const payout = await Payout.deploy(
+    deployed.MTTToken,
+    ADDRESSES.admin,
+    ADDRESSES.payoutRelayer,
+    PAYOUT_DAILY_LIMIT
+  );
+  await payout.waitForDeployment();
+  deployed.MTTPayout = await payout.getAddress();
+  console.log("      MTTPayout:", deployed.MTTPayout);
+  console.log("      payer    :", ADDRESSES.payoutRelayer);
+  console.log("      dailyLimit:", ethers.formatEther(PAYOUT_DAILY_LIMIT), "MTT per 24h window");
 
   // Save the deployment record
   const outDir = path.join(__dirname, "..", "deployments");
@@ -150,9 +197,14 @@ async function main() {
   console.log("  2. dist.grantRole(TREASURY_ROLE, <treasury ops multisig>)");
   console.log("  3. dist.grantRole(ORACLE_ROLE, <backend relayer address>)");
   console.log("  4. dist.grantRole(COMPLIANCE_ROLE, <compliance signer>)");
-  console.log("  5. Revoke any roles still held by the deployer EOA");
-  console.log("  6. Create staking pools via scripts/setup-pools.js");
-  console.log("  7. Verify all contracts on BscScan (npx hardhat verify ...)");
+  console.log("  5. payout.grantRole(TREASURY_ROLE, <treasury ops multisig>)");
+  console.log("  6. payout.grantRole(GUARDIAN_ROLE, <guardian multisig>)");
+  console.log("  7. Fund the payout float: treasury approves, then payout.fund(amount)");
+  console.log("  8. Revoke any roles still held by the deployer EOA");
+  console.log("  9. Create staking pools via scripts/setup-pools.js");
+  console.log(" 10. Verify all contracts on BscScan (npx hardhat verify ...)");
+  console.log("\n  scripts/setup-roles.js does 1-6 for you, or prints the exact");
+  console.log("  calldata to paste into a Gnosis Safe when admin is a multisig.");
   console.log("\nRun scripts/post-deploy-check.js to validate the wiring.");
 }
 

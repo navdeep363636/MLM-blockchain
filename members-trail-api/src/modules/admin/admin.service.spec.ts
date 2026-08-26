@@ -2,7 +2,8 @@ import { BadRequestException, ConflictException, ForbiddenException } from "@nes
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { Test } from "@nestjs/testing";
 import {
-  ApprovalRequest, AuditLog, Commission, FraudAlert, RolePermission, Ticket, User, Withdrawal,
+  ApprovalRequest, AuditLog, Commission, FraudAlert, KycSubmission, PointsLedgerEntry,
+  RolePermission, Ticket, User, Withdrawal,
 } from "@/database/entities";
 import { EventBusService } from "@/events";
 import { AuditService } from "@/modules/audit/audit.service";
@@ -77,13 +78,18 @@ describe("AdminService", () => {
   let alerts: ReturnType<typeof repo>;
   let tickets: ReturnType<typeof repo>;
   let commissions: ReturnType<typeof repo>;
+  let kycSubmissions: ReturnType<typeof repo>;
+  let pointsLedger: ReturnType<typeof repo>;
   let commission: { fundingAvailable: jest.Mock };
   let notifications: { notify: jest.Mock };
   let bus: { publish: jest.Mock };
   /* The dashboard counters come from v_admin_kpis now; the view is asserted
    * against a real database in the e2e suite. Here it is a fixture, so these
    * tests stay about what the service DOES with the numbers. */
-  let routines: { adminKpis: jest.Mock; expireStaleApprovals: jest.Mock };
+  let routines: {
+    adminKpis: jest.Mock; mttLiability: jest.Mock; payoutRatio: jest.Mock;
+    treasuryPeriod: jest.Mock; expireStaleApprovals: jest.Mock;
+  };
   let audit: { record: jest.Mock; recordOrThrow: jest.Mock };
 
   beforeEach(async () => {
@@ -105,11 +111,33 @@ describe("AdminService", () => {
     bus = { publish: jest.fn() };
     audit = { record: jest.fn(), recordOrThrow: jest.fn() };
 
+    /* The dashboard's extra reads. `count` and the query builder are stubbed to
+     * zero because these assertions are about governance, not about the tiles —
+     * but they have to be present or the service cannot be constructed. */
+    kycSubmissions = repo();
+    pointsLedger = repo();
+    pointsLedger.createQueryBuilder.mockReturnValue(qb({ rawOne: { total: "0" } }));
+
     routines = {
       adminKpis: jest.fn(async () => ({
         members: 0, activeMembers30d: 0, kycVerified: 0, frozenAccounts: 0,
         withdrawalsInReview: 0, openFraudAlerts: 0, pendingApprovals: 0,
         breachedTickets: 0, queuedCommissionMtt: "0",
+      })),
+      mttLiability: jest.fn(async () => ({
+        accounts: 0, availableMtt: "0", stakedMtt: "0", pendingRewardsMtt: "0",
+        lockedForWithdrawalMtt: "0", commissionAvailableMtt: "0", commissionPendingMtt: "0",
+        totalLiabilityMtt: "0", totalPoints: "0",
+      })),
+      treasuryPeriod: jest.fn(async () => ({
+        periodKey: "2026-08", reconciledInflow: "0", unreconciledInflow: "0", grossRevenue: "0",
+        commissionPoolOut: "0", stakingPoolOut: "0", reserveOut: "0",
+        inflowCount: 0, outflowCount: 0,
+      })),
+      payoutRatio: jest.fn(async () => ({
+        periodKey: "2026-08", reconciledNetRevenue: "0", releasedCommission: "0",
+        confirmedOutflow: "0", reconciledTreasuryInflow: "0",
+        commissionRatioBps: null, outflowRatioBps: null,
       })),
       expireStaleApprovals: jest.fn(async () => 0),
     };
@@ -125,6 +153,8 @@ describe("AdminService", () => {
         { provide: getRepositoryToken(FraudAlert), useValue: alerts },
         { provide: getRepositoryToken(Ticket), useValue: tickets },
         { provide: getRepositoryToken(Commission), useValue: commissions },
+        { provide: getRepositoryToken(KycSubmission), useValue: kycSubmissions },
+        { provide: getRepositoryToken(PointsLedgerEntry), useValue: pointsLedger },
         { provide: CommissionService, useValue: commission },
         { provide: DbRoutinesService, useValue: routines },
         { provide: NotificationsService, useValue: notifications },
@@ -139,6 +169,10 @@ describe("AdminService", () => {
     tickets.createQueryBuilder.mockImplementation(() => qb({ count: 0 }));
     users.createQueryBuilder.mockImplementation(() => qb({ count: 0 }));
     commissions.createQueryBuilder.mockImplementation(() => qb({ rawOne: { sum: "0" } }));
+    /* The dashboard's in-flight withdrawal totals. */
+    withdrawals.createQueryBuilder.mockImplementation(
+      () => qb({ rawOne: { count: "0", amount: "0" } }),
+    );
   });
 
   /* ==================================================================== *

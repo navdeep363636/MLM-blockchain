@@ -42,6 +42,15 @@ export interface DispatchResult {
   remaining: number;
 }
 
+/**
+ * `reason` is a Solidity `string`, but a decoded arg arrives as `unknown` — and
+ * `String(unknown)` on an object yields "[object Object]" in the one place an
+ * auditor will go looking for the actual reason. Narrow, don't coerce.
+ */
+function asReason(value: unknown): string {
+  return typeof value === "string" && value.trim().length > 0 ? value : "(none given)";
+}
+
 @Injectable()
 export class EventDispatcherService {
   private readonly log = new Logger(EventDispatcherService.name);
@@ -137,6 +146,21 @@ export class EventDispatcherService {
     if (event.contractName === Contracts.ReferralDistributor) {
       return this.applyReferral(event, args);
     }
+    if (event.contractName === Contracts.Payout) {
+      return this.applyPayout(event, args);
+    }
+    if (
+      event.contractName === Contracts.TeamVesting ||
+      event.contractName === Contracts.AdvisorsVesting
+    ) {
+      /* Vesting releases are indexed so the public tokenomics page can show the
+       * real unlock history from chain data. No member balance moves. */
+      this.log.log(
+        `${event.contractName}: released ${fromWei(asAmount(args.amount) ?? "0")} MTT ` +
+        `at block ${event.blockNumber}`,
+      );
+      return "skipped";
+    }
     return "skipped";
   }
 
@@ -144,9 +168,17 @@ export class EventDispatcherService {
     event: ChainEvent,
     args: Record<string, unknown>,
   ): Promise<"applied" | "skipped"> {
-    /* PoolCreated and pool funding are not per-member, so they are handled
-     * before any address resolution. */
-    if (event.eventName === "RewardPoolFunded") {
+    /*
+     * EVENT NAMES BELOW ARE THE CONTRACT'S, not the ones this file used to guess.
+     *
+     * It previously matched "RewardPoolFunded" and "RewardsClaimed", neither of
+     * which MTTStaking emits — it emits `PoolFunded` and `RewardClaimed`. Those
+     * two branches were unreachable, and because the indexer's ABI was also
+     * wrong, no staking event reached this method at all.
+     */
+
+    /* Pool-level events resolve no member address. */
+    if (event.eventName === "PoolFunded") {
       await this.staking.mirrorPoolFunding({
         poolId: asIndex(args.poolId) ?? 0,
         amountMtt: fromWei(asAmount(args.amount) ?? "0"),
@@ -161,7 +193,17 @@ export class EventDispatcherService {
        * are an administrative decision, and a half-populated pool row shown to
        * members is worse than none. The event is recorded for the audit trail. */
       this.log.log(
-        `pool ${String(args.poolId)} created on chain — mirror it explicitly via the admin route`,
+        `pool ${String(args.poolId)} created on chain ` +
+        `(lock ${String(args.lockDuration)}s, stream ${String(args.rewardsDuration)}s, ` +
+        `penalty ${String(args.earlyUnstakePenaltyBps)}bps) — mirror it via the admin route`,
+      );
+      return "skipped";
+    }
+
+    if (event.eventName === "PenaltyReceiverUpdated") {
+      this.log.warn(
+        `staking penalty receiver changed on chain to ${String(args.newReceiver)} — ` +
+        "confirm this matches the configured treasury address",
       );
       return "skipped";
     }
@@ -183,19 +225,32 @@ export class EventDispatcherService {
     }
 
     if (event.eventName === "Unstaked") {
+      /*
+       * `forfeitedRewards`, not `penalty` — and rewards paid is ZERO, not a field.
+       *
+       * MTTStaking.unstake returns principal in full and, if the lock has not
+       * expired, forfeits a percentage of the caller's ACCRUED BUT UNCLAIMED
+       * rewards to the penalty receiver. It never pays rewards out. Whatever
+       * survives the forfeit stays accrued until the member calls claimRewards,
+       * which arrives here later as `RewardClaimed`.
+       *
+       * The old code read `args.rewards` and `args.penalty`, neither of which
+       * exists on this event, so both resolved to "0": the penalty was silently
+       * dropped from the ledger metadata.
+       */
       await this.staking.mirrorUnstake({
         userId,
         poolId: asIndex(args.poolId) ?? 0,
         principalMtt: fromWei(asAmount(args.amount) ?? "0"),
-        rewardsPaidMtt: fromWei(asAmount(args.rewards) ?? "0"),
-        penaltyMtt: fromWei(asAmount(args.penalty) ?? "0"),
+        rewardsPaidMtt: "0",
+        penaltyMtt: fromWei(asAmount(args.forfeitedRewards) ?? "0"),
         blockNumber: event.blockNumber,
         txHash: event.txHash,
       });
       return "applied";
     }
 
-    if (event.eventName === "RewardsClaimed") {
+    if (event.eventName === "RewardClaimed") {
       await this.staking.mirrorRewardClaim({
         userId,
         poolId: asIndex(args.poolId) ?? 0,
@@ -213,22 +268,106 @@ export class EventDispatcherService {
     event: ChainEvent,
     args: Record<string, unknown>,
   ): Promise<"applied" | "skipped"> {
-    if (event.eventName === "CommissionPoolDeposited") {
+    /* `CommissionPoolFunded`, not `CommissionPoolDeposited` — the old name this
+     * branch tested for is not emitted by the contract, so queued commission was
+     * never released by a funding event. */
+    if (event.eventName === "CommissionPoolFunded") {
       /* The pool has been funded on chain, so queued commission may now be
        * releasable. The solvency check inside releaseQueued decides how much —
        * this event is the trigger, not the authority. */
       const result = await this.commission.releaseQueued();
       this.log.log(
-        `commission pool funded (${fromWei(asAmount(args.amount) ?? "0")} MTT): ` +
+        `commission pool funded (${fromWei(asAmount(args.amount) ?? "0")} MTT, ` +
+        `pool total ${fromWei(asAmount(args.newTotalDeposited) ?? "0")} MTT): ` +
         `released ${result.released}, ${result.remaining} still queued`,
       );
       return "applied";
+    }
+
+    if (event.eventName === "CommissionClawedBack") {
+      /* Compliance reversed a commission on chain. The backend initiated it, so
+       * there is nothing to apply — but the reason is only in the event, and it
+       * belongs in the log where an auditor will look for it. */
+      this.log.warn(
+        `commission clawed back on chain: ${fromWei(asAmount(args.amount) ?? "0")} MTT ` +
+        `from ${String(args.recipient)} — reason: ${asReason(args.reason)}`,
+      );
+      return "skipped";
+    }
+
+    if (event.eventName === "KycStatusUpdated") {
+      const userId = await this.resolveUser(args.user);
+      this.log.log(
+        `on-chain KYC flag for ${String(args.user)} set to ${String(args.approved)}` +
+        (userId ? ` (member ${userId})` : " (no matching member)"),
+      );
+      /* The backend is the authority on KYC tier; this event confirms the chain
+       * caught up with it. Applying it back would let a chain state set a
+       * compliance decision. */
+      return "skipped";
     }
 
     if (event.eventName === "CommissionRecorded" || event.eventName === "CommissionClaimed") {
       /* The backend is the accounting authority for commission; the chain record
        * is a public receipt of it. Applying it again here would double-count, so
        * the event is indexed for reconciliation and nothing more. */
+      return "skipped";
+    }
+
+    return "skipped";
+  }
+
+  /**
+   * MTTPayout events — the withdrawal settlement rail.
+   *
+   * A `PayoutSent` is the on-chain proof that a withdrawal was paid. The
+   * withdrawal was already marked paid by the outbound-transaction confirmation
+   * path, so this handler does not move the record forward; it exists so the
+   * settlement is INDEXED, and so a payout whose reference matches no known
+   * withdrawal is surfaced loudly rather than sitting unnoticed on the explorer.
+   */
+  private async applyPayout(
+    event: ChainEvent,
+    args: Record<string, unknown>,
+  ): Promise<"applied" | "skipped"> {
+    if (event.eventName === "PayoutSent") {
+      this.log.log(
+        `payout settled on chain: ${fromWei(asAmount(args.amount) ?? "0")} MTT to ` +
+        `${String(args.to)} (ref ${String(args.withdrawalRef)})`,
+      );
+      return "skipped";
+    }
+
+    if (event.eventName === "Paused") {
+      /* The payout rail stopping is an incident, not a routine event. */
+      await this.bus.publish(Events.FraudAlertRaised, {
+        kind: "payout_rail_paused",
+        severity: "high",
+        txHash: event.txHash,
+        blockNumber: event.blockNumber,
+      });
+      this.log.error("MTTPayout PAUSED on chain — member withdrawals cannot settle");
+      return "applied";
+    }
+
+    if (event.eventName === "Unpaused") {
+      this.log.warn("MTTPayout unpaused on chain — withdrawals can settle again");
+      return "skipped";
+    }
+
+    if (event.eventName === "DailyLimitUpdated") {
+      this.log.warn(
+        `MTTPayout daily ceiling changed on chain: ` +
+        `${fromWei(asAmount(args.previous) ?? "0")} → ${fromWei(asAmount(args.next) ?? "0")} MTT`,
+      );
+      return "skipped";
+    }
+
+    if (event.eventName === "Funded" || event.eventName === "Swept") {
+      this.log.log(
+        `payout float ${event.eventName === "Funded" ? "funded" : "swept"}: ` +
+        `${fromWei(asAmount(args.amount) ?? "0")} MTT`,
+      );
       return "skipped";
     }
 

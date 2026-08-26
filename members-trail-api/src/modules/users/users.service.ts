@@ -704,6 +704,7 @@ export class UsersService {
 
   private toMe(user: User): MeResponse {
     return {
+      id: user.id,
       ref: user.ref,
       email: user.email,
       emailVerified: Boolean(user.emailVerifiedAt),
@@ -720,6 +721,17 @@ export class UsersService {
       role: user.role,
       referralCode: user.referralCode,
       referralDepth: user.referralDepth,
+      wasReferred: user.referredById !== null && user.referredById !== undefined,
+      dateOfBirth: user.dateOfBirth ?? null,
+      twoFactorEnabled: user.twoFaEnabledAt !== null && user.twoFaEnabledAt !== undefined,
+      walletAddress: user.walletAddress ?? null,
+      walletType: user.walletType ?? null,
+      lastActiveAt: user.lastActiveAt ?? null,
+      isStaff: user.isStaff,
+      /* Deliberately absent: riskScore and riskFlags. A member must not be able
+       * to read their own fraud score — it tells them exactly which behaviour
+       * tripped a rule, which is a map for evading it. Those fields exist on the
+       * admin view of a member and nowhere a member can reach. */
       lastLoginAt: user.lastLoginAt ?? null,
       createdAt: user.createdAt,
       acceptedLegalVersions: user.acceptedLegalVersions ?? {},

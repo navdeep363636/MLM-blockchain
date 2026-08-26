@@ -1,5 +1,5 @@
 export { Button, IconButton, type ButtonProps } from "./button";
-export { Card, CardHeader, CardBody, CardFooter, SectionTitle } from "./card";
+export { Card, CardHeader, CardBody, CardFooter, SectionTitle, InsetPanel, type CardMaterial } from "./card";
 export {
   Field, Input, PasswordInput, Textarea, Select, SearchInput,
   Checkbox, Switch, Slider, SegmentedControl,
@@ -11,7 +11,7 @@ export { Modal, Drawer, ConfirmDialog, type ModalProps } from "./modal";
 export { ToastProvider, useToast, type Toast } from "./toast";
 export { Tooltip, InfoHint } from "./tooltip";
 export { DataTable, type Column } from "./table";
-export { Skeleton, SkeletonCard, EmptyState } from "./skeleton";
+export { Skeleton, SkeletonSurface, SkeletonCard, EmptyState } from "./skeleton";
 export { ProgressBar, CapMeter, RingProgress, Steps } from "./progress";
 export { Tabs, PillTabs, Accordion, type TabItem } from "./tabs";
 export { Dropdown, type MenuItem } from "./dropdown";

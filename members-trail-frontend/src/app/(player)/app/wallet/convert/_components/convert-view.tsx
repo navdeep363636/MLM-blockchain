@@ -7,22 +7,50 @@ import {
 } from "lucide-react";
 import {
   Badge, Button, Callout, CapMeter, Checkbox, DataTable, DetailRow, InfoHint,
-  KycBadge, Modal, Slider, StatTile, type Column,
+  KycBadge, Modal, Slider, StatTile, useToast, type Column,
 } from "@/components/ui";
 import { useBalances, useCurrentUser, usePointsHistory } from "@/lib/hooks/use-data";
-import { conversionCaps, conversionRates } from "@/lib/mock/admin";
+import { useConversionRate, usePublicConfig } from "@/lib/hooks/use-data";
+import { humanMessage } from "@/lib/api/errors";
+import { useConvertPoints } from "@/lib/hooks/use-mutations";
 import { MTT_SYMBOL } from "@/lib/web3";
 import { clamp, formatCurrency, formatDate, formatNumber, formatToken } from "@/lib/utils";
 import type { PointsEntry } from "@/types";
 import { RelativeTime } from "../../../_components/time";
 
 export function ConvertView() {
+  const toast = useToast();
   const { data: balances } = useBalances();
   const { data: user } = useCurrentUser();
   const { data: points } = usePointsHistory();
 
-  const activeRate = conversionRates.find((r) => r.status === "active") ?? conversionRates[1];
-  const scheduled = conversionRates.find((r) => r.status === "pending_approval" || r.status === "scheduled");
+  /* The rate and the caps come from the server. The active rate matters twice
+   * over here: it decides what the member is quoted, AND it is sent back with the
+   * confirmation so the server can refuse if a scheduled change landed in
+   * between — otherwise a rate change mid-flow silently gives them a different
+   * amount than the one they agreed to. */
+  const { data: rateInfo } = useConversionRate();
+  const { data: policy } = usePublicConfig();
+  const convertPoints = useConvertPoints();
+
+  const activeRate = {
+    pointsPerMtt: rateInfo.pointsPerMtt,
+    effectiveFrom: rateInfo.effectiveFrom,
+    status: "active" as const,
+  };
+  const scheduled =
+    rateInfo.nextPointsPerMtt !== null && rateInfo.nextEffectiveFrom !== null
+      ? {
+          pointsPerMtt: rateInfo.nextPointsPerMtt,
+          effectiveFrom: rateInfo.nextEffectiveFrom,
+          status: "scheduled" as const,
+        }
+      : undefined;
+
+  const caps = {
+    perUserDaily: Number(policy.conversion.perUserDailyPoints),
+    perUserMonthly: Number(policy.conversion.perUserMonthlyPoints),
+  };
 
   /* Daily cap already used today — derived from the ledger's conversion entries. */
   const usedToday = useMemo(() => {
@@ -33,7 +61,7 @@ export function ConvertView() {
       .reduce((s, p) => s + Math.abs(p.amount), 0);
   }, [points]);
 
-  const capRemaining = Math.max(0, conversionCaps.perUserDaily - usedToday);
+  const capRemaining = Math.max(0, caps.perUserDaily - usedToday);
   const maxConvertible = Math.min(balances.points, capRemaining);
 
   const [amount, setAmount] = useState(() => Math.min(10_000, Math.max(0, maxConvertible)));
@@ -92,11 +120,22 @@ export function ConvertView() {
 
   const convert = async () => {
     setBusy(true);
-    await new Promise((r) => setTimeout(r, 1100));
-    setBusy(false);
-    setDoneAmount(amount);
-    setConfirmOpen(false);
-    setAck(false);
+    try {
+      await convertPoints.mutateAsync({
+        points: amount,
+        /* Sent so the server can refuse if the rate moved between the quote and
+         * this confirmation. Without it a scheduled change landing mid-flow gives
+         * the member a different amount than the one they just agreed to. */
+        expectedPointsPerMtt: activeRate.pointsPerMtt,
+      });
+      setDoneAmount(amount);
+      setConfirmOpen(false);
+      setAck(false);
+    } catch (err) {
+      toast.error("Conversion failed", humanMessage(err));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -192,7 +231,7 @@ export function ConvertView() {
           <div className="mt-5 rounded-xl border border-border-subtle bg-surface-inset p-4">
             <CapMeter
               used={usedToday + amount}
-              cap={conversionCaps.perUserDaily}
+              cap={caps.perUserDaily}
               label={
                 <span className="inline-flex items-center gap-1">
                   Daily conversion cap
@@ -206,7 +245,7 @@ export function ConvertView() {
             />
             <p className="tnum mt-2 text-xs text-text-muted">
               {formatNumber(capRemaining)} Points of today&apos;s allowance remaining ·
-              monthly cap {formatNumber(conversionCaps.perUserMonthly)}
+              monthly cap {formatNumber(caps.perUserMonthly)}
             </p>
           </div>
 
@@ -269,14 +308,13 @@ export function ConvertView() {
                   <span className="tnum font-medium text-text-primary">
                     {formatNumber(scheduled.pointsPerMtt)} Points = 1 {MTT_SYMBOL}
                   </span>
-                  {scheduled.status === "pending_approval" ? " (awaiting second approval)" : ""}.
-                  Converting before then uses the current rate.
+                  . Converting before then uses the current rate.
                 </p>
               </Callout>
             )}
 
             <ul className="mt-4 divide-y divide-border-subtle border-t border-border-subtle">
-              {conversionRates.map((r) => (
+              {[activeRate, ...(scheduled ? [scheduled] : [])].map((r) => (
                 <li key={r.effectiveFrom} className="flex items-center justify-between gap-3 py-2.5 text-sm">
                   <span className="tnum text-text-secondary">
                     {formatNumber(r.pointsPerMtt)} : 1
@@ -285,10 +323,8 @@ export function ConvertView() {
                     <span className="tnum text-xs text-text-muted">{formatDate(r.effectiveFrom)}</span>
                     {r.status === "active" ? (
                       <Badge tone="good" dot>Active</Badge>
-                    ) : r.status === "pending_approval" ? (
-                      <Badge tone="warning" dot>Pending</Badge>
                     ) : (
-                      <Badge tone="neutral">Past</Badge>
+                      <Badge tone="warning" dot>Scheduled</Badge>
                     )}
                   </span>
                 </li>

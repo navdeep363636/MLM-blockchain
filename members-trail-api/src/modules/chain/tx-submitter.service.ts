@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException, ConflictException, Injectable, Logger, NotFoundException,
+  ServiceUnavailableException,
+} from "@nestjs/common";
+import { encodeFunctionData } from "viem";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
 import { OutboundTransaction, type OutboundTxKind, type OutboundTxStatus } from "@/database/entities";
@@ -7,7 +11,8 @@ import { RedisService } from "@/common/redis/redis.service";
 import { Ref, dec } from "@/common/utils";
 import { RpcService } from "./rpc.service";
 import {
-  MAX_REPRICE_ATTEMPTS, MIN_TX_CONFIRMATIONS, RELAYER_ABI, REPRICE_BUMP_BPS, STUCK_TX_MS,
+  CONTRACT_SPECS, MAX_REPRICE_ATTEMPTS, MIN_TX_CONFIRMATIONS, REPRICE_BUMP_BPS, STUCK_TX_MS,
+  assertCallable, specFor, specForCallable, type ContractName, type ContractSpec,
 } from "./chain.constants";
 
 /* ============================================================================
@@ -47,10 +52,19 @@ const NONCE_HOLDING: OutboundTxStatus[] = ["signing", "submitted", "confirmed"];
 
 export interface EnqueueTxInput {
   kind: OutboundTxKind;
+  /**
+   * Which contract to call.
+   *
+   * Now required. The submitter used to encode EVERY call with one shared
+   * `RELAYER_ABI` covering four different contracts, which meant it could not
+   * tell `pause()` on the token from `pause()` on the payout rail, and a
+   * function absent from that hand-written list simply failed at signing time.
+   */
+  contract: ContractName;
   functionName: string;
   args: unknown[];
-  /** Contract to call. Defaults to the contract that owns the function. */
-  toAddress: string;
+  /** Defaults to the configured address for `contract`. */
+  toAddress?: string;
   /** MUST be derived from the domain — never random. */
   idempotencyKey: string;
   relatedType?: string | null;
@@ -95,6 +109,35 @@ export class TxSubmitterService {
       return existing;
     }
 
+    /*
+     * Validate BEFORE a row exists, let alone a nonce.
+     *
+     * `assertCallable` refuses anything outside the reviewed allowlist, and
+     * `encodeFunctionData` proves the arguments actually encode against the real
+     * ABI — so a wrong argument order is a synchronous error here rather than a
+     * revert three steps later that has already consumed a nonce every queued
+     * transaction behind it has to wait on.
+     */
+    assertCallable(input.contract, input.functionName);
+    const spec = specFor(input.contract);
+    try {
+      encodeFunctionData({
+        abi: spec.abi,
+        functionName: input.functionName,
+        args: input.args,
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      throw new BadRequestException({
+        code: "TX_ENCODE_FAILED",
+        message:
+          `${input.contract}.${input.functionName} does not encode with the given ` +
+          `arguments: ${message}`,
+      });
+    }
+
+    const toAddress = input.toAddress ?? this.rpc.address(spec.configKey);
+
     const row = await this.txs.save(
       this.txs.create({
         ref: Ref.transaction().replace("TX-", "OTX-"),
@@ -102,7 +145,7 @@ export class TxSubmitterService {
         /* Recorded now so the audit trail shows which key was expected to sign,
          * even if the signer is rotated later. */
         fromAddress: this.rpc.canSign ? this.rpc.signer : "0x0000000000000000000000000000000000000000",
-        toAddress: input.toAddress,
+        toAddress,
         functionName: input.functionName,
         args: input.args,
         status: "queued",
@@ -175,11 +218,12 @@ export class TxSubmitterService {
     await this.txs.save(row);
 
     const gasPrice = await this.rpc.gasPrice();
+    const spec = this.resolveSpec(row);
 
     try {
       const hash = await this.rpc.send({
         to: row.toAddress as `0x${string}`,
-        abi: RELAYER_ABI,
+        abi: spec.abi,
         functionName: row.functionName,
         args: row.args,
         nonce,
@@ -212,6 +256,42 @@ export class TxSubmitterService {
       this.log.error(`submit ${row.ref} failed (attempt ${row.attempts}): ${message}`);
       throw e;
     }
+  }
+
+  /**
+   * Which contract a stored row is calling.
+   *
+   * Resolved by ADDRESS first, because that is unambiguous. The fallback by
+   * function name exists only for a row whose contract address was rotated after
+   * it was queued, and it refuses when the name is ambiguous rather than
+   * guessing — `pause` exists on both the token and the payout rail, and sending
+   * a privileged call to the wrong contract is not a mistake worth risking to
+   * save an operator one requeue.
+   */
+  private resolveSpec(row: OutboundTransaction): ContractSpec {
+    const target = row.toAddress.toLowerCase();
+
+    for (const spec of CONTRACT_SPECS) {
+      if (!this.rpc.hasAddress(spec.configKey)) continue;
+      if (this.rpc.address(spec.configKey).toLowerCase() === target) return spec;
+    }
+
+    const byName = specForCallable(row.functionName);
+    if (byName) {
+      this.log.warn(
+        `${row.ref}: ${row.toAddress} matches no configured contract; resolved ` +
+        `${row.functionName} to ${byName.name} by name. Check the address configuration.`,
+      );
+      return byName;
+    }
+
+    throw new ServiceUnavailableException({
+      code: "UNRESOLVABLE_CONTRACT",
+      message:
+        `Cannot determine which contract ${row.ref} targets: ${row.toAddress} matches no ` +
+        `configured address and "${row.functionName}" is declared on more than one contract. ` +
+        `Fix the contract addresses in configuration and requeue.`,
+    });
   }
 
   /** The highest nonce this address has assigned locally, or -1 if none. */
@@ -328,10 +408,12 @@ export class TxSubmitterService {
     row.attempts += 1;
     await this.txs.save(row);
 
+    const spec = this.resolveSpec(row);
+
     try {
       const hash = await this.rpc.send({
         to: row.toAddress as `0x${string}`,
-        abi: RELAYER_ABI,
+        abi: spec.abi,
         functionName: row.functionName,
         args: row.args,
         /* THE SAME NONCE. */

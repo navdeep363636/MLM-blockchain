@@ -36,7 +36,9 @@ export function GameMarquee() {
         {STACK.map((s) => (
           <span
             key={s}
-            className="whitespace-nowrap rounded-full bg-surface-2 px-4 py-1.5 text-xs font-medium text-text-muted ring-1 ring-inset ring-border-subtle"
+            className="whitespace-nowrap rounded-full bg-surface-2 px-4 py-1.5 text-xs font-medium text-text-muted ring-1 ring-inset ring-border-subtle
+                       [box-shadow:inset_0_1px_0_0_var(--rim-light)]
+                       transition-colors duration-[var(--dur-quick)] hover:text-text-secondary hover:ring-border-strong"
           >
             {s}
           </span>

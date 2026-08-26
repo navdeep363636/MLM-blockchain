@@ -14,7 +14,7 @@ import {
   Switch, Textarea, useToast, type Column,
 } from "@/components/ui";
 import { useAuditLog } from "@/lib/hooks/use-data";
-import { legalDocuments } from "@/lib/mock/legal";
+import { useAdminLegalDocuments } from "@/lib/hooks/use-data";
 import { csvDownload, formatDate, formatNumber, timeAgo } from "@/lib/utils";
 import type { LegalDocument } from "@/types";
 import { LedgerTable } from "../../_components/ledger-table";
@@ -38,7 +38,7 @@ function serialise(doc: LegalDocument) {
 /* ------------------------------ header actions --------------------------- */
 
 export function CmsActions() {
-  const docs = Object.values(legalDocuments);
+  const { data: docs } = useAdminLegalDocuments();
   return (
     <Button
       variant="outline"
@@ -171,7 +171,7 @@ export function CmsView() {
   const { data: audit } = useAuditLog();
   const toast = useToast();
 
-  const docs = useMemo(() => Object.values(legalDocuments), []);
+  const { data: docs } = useAdminLegalDocuments();
   const [slug, setSlug] = useState(docs[0]?.slug ?? "terms");
   const [query, setQuery] = useState("");
   const doc = docs.find((d) => d.slug === slug) ?? docs[0];

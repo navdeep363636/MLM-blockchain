@@ -4,10 +4,23 @@ import { forwardRef, useId, useState } from "react";
 import { Check, ChevronDown, Eye, EyeOff, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/* ============================================================================
+ * Inputs are the one family in the system that reads as PRESSED IN rather than
+ * raised: the shadow is on the inside, the top edge is dark instead of lit.
+ * That is the whole convention — anything you can put something into looks
+ * carved out, anything that acts on the world looks raised. It means a form is
+ * legible as a form before a single label is read.
+ * ========================================================================== */
 const fieldBase =
-  "w-full rounded-xl border border-border-default bg-surface-3 px-3.5 text-sm text-text-primary " +
-  "placeholder:text-text-muted transition-[border-color,box-shadow] duration-200 " +
-  "focus:border-[var(--accent)] focus:outline-none focus:ring-4 focus:ring-[var(--accent-soft)] " +
+  "w-full rounded-xl border border-border-default bg-surface-inset px-3.5 text-sm text-text-primary " +
+  "[box-shadow:inset_0_1px_3px_-1px_rgb(0_0_0_/_0.4),inset_0_0_0_1px_rgb(0_0_0_/_0.06)] " +
+  "placeholder:text-text-muted " +
+  "transition-[border-color,box-shadow,background-color] duration-[var(--dur-quick)] ease-[var(--ease-tide)] " +
+  "hover:border-border-strong " +
+  /* On focus the field fills with light and lifts to flush — the caret's
+     arrival is confirmed by the surface, not only by the ring. */
+  "focus:border-[var(--accent)] focus:bg-surface-3 focus:outline-none " +
+  "focus:[box-shadow:0_0_0_4px_var(--accent-soft),inset_0_1px_0_0_var(--rim-light)] " +
   "disabled:cursor-not-allowed disabled:opacity-50";
 
 export function Field({
@@ -68,7 +81,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
             fieldBase, "h-11",
             icon && "pl-10",
             suffix && "pr-20",
-            error && "border-critical-500 focus:border-critical-500 focus:ring-critical-500/15",
+            error && "border-critical-500 focus:border-critical-500 focus:[box-shadow:0_0_0_4px_color-mix(in_oklab,var(--color-critical-500)_18%,transparent)]",
             className,
           )}
           {...props}
@@ -195,7 +208,7 @@ export function Checkbox({
           "mt-0.5 grid size-[18px] shrink-0 place-items-center rounded-[5px] border transition-all duration-200",
           checked
             ? "border-[var(--accent)] bg-[var(--accent)] text-white"
-            : "border-border-strong bg-surface-3 hover:border-[var(--accent)]",
+            : "border-border-strong bg-surface-inset [box-shadow:inset_0_1px_2px_-1px_rgb(0_0_0_/_0.4)] hover:border-[var(--accent)]",
           disabled && "cursor-not-allowed opacity-50",
         )}
       >
@@ -237,13 +250,16 @@ export function Switch({
         onClick={() => onCheckedChange(!checked)}
         className={cn(
           "relative h-6 w-11 shrink-0 rounded-full transition-colors duration-300",
-          checked ? "bg-[var(--accent)]" : "bg-surface-3 ring-1 ring-border-strong",
+          checked
+            ? "bg-[linear-gradient(180deg,var(--accent-hover),var(--accent))] [box-shadow:inset_0_1px_0_0_rgb(255_255_255_/_0.28),0_0_14px_-2px_var(--accent-ring)]"
+            : "bg-surface-inset ring-1 ring-border-strong [box-shadow:inset_0_1px_3px_-1px_rgb(0_0_0_/_0.45)]",
           disabled && "cursor-not-allowed opacity-50",
         )}
       >
         <span
           className={cn(
-            "absolute top-0.5 size-5 rounded-full bg-white shadow-sm transition-transform duration-300 ease-[var(--ease-spring)]",
+            "absolute top-0.5 size-5 rounded-full bg-white transition-transform duration-300 ease-[var(--ease-spring)]",
+            "[box-shadow:0_1px_2px_rgb(0_0_0_/_0.45),inset_0_-1px_1px_rgb(0_0_0_/_0.12)]",
             checked ? "translate-x-[1.375rem]" : "translate-x-0.5",
           )}
         />
@@ -312,7 +328,8 @@ export function SegmentedControl<T extends string>({
     <div
       role="tablist"
       className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-xl border border-border-subtle bg-surface-inset p-1",
+        "inline-flex shrink-0 items-center gap-1 rounded-2xl border border-border-subtle bg-surface-inset p-1",
+        "[box-shadow:inset_0_1px_3px_-1px_rgb(0_0_0_/_0.4)]",
         className,
       )}
     >
@@ -328,7 +345,8 @@ export function SegmentedControl<T extends string>({
               "relative inline-flex items-center gap-1.5 rounded-lg font-medium transition-all duration-200",
               size === "sm" ? "px-2.5 py-1 text-xs" : "px-3.5 py-1.5 text-sm",
               active
-                ? "bg-[var(--accent)] text-white shadow-[0_4px_14px_-6px_var(--accent-ring)]"
+                ? "bg-[linear-gradient(180deg,var(--accent-hover),var(--accent))] text-white " +
+                  "[box-shadow:inset_0_1px_0_0_rgb(255_255_255_/_0.3),0_6px_16px_-8px_color-mix(in_oklab,var(--accent)_75%,transparent)]"
                 : "text-text-muted hover:bg-surface-2 hover:text-text-primary",
             )}
           >

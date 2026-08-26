@@ -43,6 +43,9 @@ export const CacheKeys = {
 
   /* public stats */
   publicStats: () => `public:stats`,
+
+  /* dashboard analytics — a monthly series, not a live figure */
+  analytics: (name: string, months: number) => `analytics:${name}:${months}`,
 } as const;
 
 /** TTLs in seconds. Named so a reviewer can see intent, not just a number. */
@@ -50,6 +53,8 @@ export const Ttl = {
   /** Financial figures: effectively live. */
   balances: 3,
   publicStats: 300,
+  /** Long enough that a stand-up costs one query; short enough that a reconciliation shows up. */
+  analytics: 60,
   platformConfig: 60,
   conversionRate: 30,
   chainRead: 15,

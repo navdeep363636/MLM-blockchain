@@ -10,6 +10,8 @@ import {
   StatusPill, useToast, type Column,
 } from "@/components/ui";
 import { useBalances, useTransactions } from "@/lib/hooks/use-data";
+import { useCreateDeposit } from "@/lib/hooks/use-mutations";
+import { humanMessage } from "@/lib/api/errors";
 import { MTT_SYMBOL } from "@/lib/web3";
 import { copyToClipboard, formatCurrency, formatDate, formatToken } from "@/lib/utils";
 import type { Transaction } from "@/types";
@@ -31,6 +33,7 @@ export function DepositView() {
   const { data: balances } = useBalances();
   const { data: txs } = useTransactions();
   const toast = useToast();
+  const createDeposit = useCreateDeposit();
 
   const [method, setMethod] = useState<Method>("card");
   const [amount, setAmount] = useState(1_000);
@@ -76,10 +79,22 @@ export function DepositView() {
 
   const start = async () => {
     setBusy(true);
-    await new Promise((r) => setTimeout(r, 1000));
-    setBusy(false);
-    setConfirmOpen(false);
-    setPending(true);
+    try {
+      /* Creates a payment INTENT. The deposit is not credited here and must not
+       * appear as though it were — the provider's webhook is what settles it, and
+       * the screen says "pending" until that arrives. */
+      await createDeposit.mutateAsync({
+        method,
+        amountFiat: String(amount),
+        currency: "INR",
+      });
+      setConfirmOpen(false);
+      setPending(true);
+    } catch (err) {
+      toast.error("Couldn't start that deposit", humanMessage(err));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (

@@ -32,6 +32,10 @@ export const contracts = {
   referralDistributor: addr(process.env.NEXT_PUBLIC_REFERRAL_DISTRIBUTOR_ADDRESS),
   teamVesting: addr(process.env.NEXT_PUBLIC_TEAM_VESTING_ADDRESS),
   advisorsVesting: addr(process.env.NEXT_PUBLIC_ADVISORS_VESTING_ADDRESS),
+  /* MTTPayout — the withdrawal settlement rail. Read-only from the browser: a
+   * member never calls it, but the explorer link and the settlement lookup on
+   * their withdrawal history both point here. */
+  payout: addr(process.env.NEXT_PUBLIC_PAYOUT_ADDRESS),
 } as const;
 
 export const isDeployed = (a: Address) => a !== ZERO_ADDRESS;

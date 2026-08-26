@@ -9,7 +9,7 @@ import { Badge, Button, Callout, DetailRow } from "@/components/ui";
 import { CtaBand, PageHero, Section, SectionHead } from "../_components/shell";
 import { FactCard, FeatureCard, IconTile } from "../_components/feature-card";
 import { AllocationChart, RateHistory } from "./_components/allocation";
-import { conversionRates } from "@/lib/mock/admin";
+import { RateHistoryPanel } from "./_components/rate-history-panel";
 import { CHAIN_ID, IS_TESTNET, contracts, isDeployed, addressUrl, tokenUrl } from "@/lib/web3";
 import { shortenAddress } from "@/lib/utils";
 
@@ -48,6 +48,9 @@ export default function TokenomicsPage() {
         title={<>A fixed supply, <span className="text-gradient-brand">no mint function</span>, and rewards that come from revenue.</>}
         lede="MTT is a utility token for gameplay and rewards on BNB Smart Chain. It is not sold as an investment and no return is promised. Everything below is verifiable on-chain."
         orbs
+        /* The helix is reserved for pages where the token itself is the
+           subject. This is that page. */
+        helix
         actions={
           <>
             <Button href="/how-it-works" size="lg">How earning works</Button>
@@ -194,7 +197,7 @@ export default function TokenomicsPage() {
           description="The rate that turns Points into MTT is the single most important economic lever on the platform, so its full history is public and every change needs two approvers."
         />
         <div className="mt-8">
-          <RateHistory rows={conversionRates} />
+          <RateHistoryPanel />
         </div>
       </Section>
 

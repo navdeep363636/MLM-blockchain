@@ -16,6 +16,15 @@ import type { RevenueStream } from "@/database/entities";
 export const ConfigKeys = {
   pointsCaps: "points.caps",
   conversionCaps: "conversion.caps",
+  /**
+   * Platform-wide daily conversion ceiling.
+   *
+   * Separate from the per-member caps because it answers a different question and
+   * is set by a different judgement: the per-member cap is anti-abuse, this one is
+   * treasury protection. Unset by default — an absent global limit means "no
+   * platform-wide brake", not "zero".
+   */
+  conversionGlobalCaps: "conversion.global-caps",
   withdrawalPolicy: "withdrawal.policy",
   treasuryAllocation: "treasury.allocation",
   marketplacePolicy: "marketplace.policy",

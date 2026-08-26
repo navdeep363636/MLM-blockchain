@@ -3,7 +3,7 @@
 /* AD-13 · Role & permission management — RBAC matrix, 2FA enforcement, and the
  * rule that Super Admin fund actions need a hardware key, not a password. */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle, CheckCircle2, Download, Eye, KeyRound, Lock, Pencil, Plus,
   ShieldAlert, ShieldCheck, UserCog, Users, XCircle,
@@ -13,7 +13,8 @@ import {
   Select, Switch, useToast, type Column,
 } from "@/components/ui";
 import { useStaff } from "@/lib/hooks/use-data";
-import { MODULES, rolePermissions } from "@/lib/mock/admin";
+import { useRolePermissions } from "@/lib/hooks/use-data";
+import { useSetRolePermissions } from "@/lib/hooks/use-mutations";
 import { csvDownload, formatNumber, timeAgo } from "@/lib/utils";
 import type { RolePermission, StaffMember, StaffRole } from "@/types";
 import { FourEyesModal, ROLE_LABEL } from "../../_components/four-eyes-modal";
@@ -34,8 +35,14 @@ const FUND_MODULES = ["Revenue treasury", "Staking pools", "Conversion rate", "R
 
 type Matrix = Record<StaffRole, RolePermission[]>;
 
+/** An empty matrix for every role, before the server's answer arrives. */
+function emptyMatrix(): Matrix {
+  return ROLES.reduce((acc, r) => ({ ...acc, [r]: [] }), {} as Matrix);
+}
+
 export function RolesActions() {
   const { data: staff } = useStaff();
+  const { data: rbac } = useRolePermissions();
   return (
     <Button
       variant="outline"
@@ -58,7 +65,7 @@ export function RolesActions() {
             approve: "",
           })),
           ...ROLES.flatMap((r) =>
-            rolePermissions[r].map((p) => ({
+            (rbac.byRole[r] ?? []).map((p) => ({
               record: "permission",
               id: r,
               name: ROLE_LABEL[r],
@@ -83,12 +90,29 @@ export function RolesActions() {
 
 export function RolesView() {
   const { data: staff, isLoading } = useStaff();
+  const { data: rbac, isLoading: rbacLoading } = useRolePermissions();
+  const setPermissions = useSetRolePermissions();
   const toast = useToast();
 
   const [role, setRole] = useState<StaffRole>("compliance");
-  const [matrix, setMatrix] = useState<Matrix>(() =>
-    ROLES.reduce((acc, r) => ({ ...acc, [r]: rolePermissions[r].map((p) => ({ ...p })) }), {} as Matrix),
-  );
+  /* The matrix starts empty and is seeded from the server once it arrives. The
+   * previous version initialised from a bundled constant, which meant the editor
+   * opened showing permissions that may not have matched the ones in force — and
+   * every save then wrote that stale picture back. */
+  const [matrix, setMatrix] = useState<Matrix>(() => emptyMatrix());
+  const [serverMatrix, setServerMatrix] = useState<Matrix>(() => emptyMatrix());
+  const [seeded, setSeeded] = useState(false);
+
+  useEffect(() => {
+    if (seeded || rbacLoading) return;
+    const next = ROLES.reduce(
+      (acc, r) => ({ ...acc, [r]: (rbac.byRole[r] ?? []).map((p) => ({ ...p })) }),
+      {} as Matrix,
+    );
+    setMatrix(next);
+    setServerMatrix(next);
+    setSeeded(true);
+  }, [rbac, rbacLoading, seeded]);
   const [publish, setPublish] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newRoleName, setNewRoleName] = useState("");
@@ -100,17 +124,19 @@ export function RolesView() {
     support: true, compliance: true, finance_admin: true, super_admin: true,
   });
 
-  const rows = matrix[role];
+  const rows = matrix[role] ?? [];
+  /* Compared against what the SERVER last returned, not against a constant, so
+   * "unsaved changes" means what it says. */
   const dirty = useMemo(
     () =>
       ROLES.some((r) =>
-        matrix[r].some((p, i) =>
-          p.read !== rolePermissions[r][i].read ||
-          p.write !== rolePermissions[r][i].write ||
-          p.approve !== rolePermissions[r][i].approve,
-        ),
+        (matrix[r] ?? []).some((p, i) => {
+          const was = serverMatrix[r]?.[i];
+          if (!was) return true;
+          return p.read !== was.read || p.write !== was.write || p.approve !== was.approve;
+        }),
       ),
-    [matrix],
+    [matrix, serverMatrix],
   );
 
   const noTwoFactor = staff.filter((s) => !s.twoFactorEnabled);
@@ -319,18 +345,18 @@ export function RolesView() {
           <div className="grid gap-3 sm:grid-cols-3">
             <MiniStat
               label="Readable modules"
-              value={`${rows.filter((p) => p.read).length} / ${MODULES.length}`}
+              value={`${rows.filter((p) => p.read).length} / ${rbac.modules.length}`}
               sub="visibility"
             />
             <MiniStat
               label="Writable modules"
-              value={`${rows.filter((p) => p.write).length} / ${MODULES.length}`}
+              value={`${rows.filter((p) => p.write).length} / ${rbac.modules.length}`}
               sub="can change state"
-              tone={rows.filter((p) => p.write).length > MODULES.length * 0.7 ? "warning" : "default"}
+              tone={rows.filter((p) => p.write).length > rbac.modules.length * 0.7 ? "warning" : "default"}
             />
             <MiniStat
               label="Approve rights"
-              value={`${rows.filter((p) => p.approve).length} / ${MODULES.length}`}
+              value={`${rows.filter((p) => p.approve).length} / ${rbac.modules.length}`}
               sub="second pair of eyes"
             />
           </div>
@@ -458,9 +484,15 @@ export function RolesView() {
           <p className="text-sm text-text-secondary">Changed rights in this submission:</p>
           <div className="max-h-64 space-y-2 overflow-y-auto">
             {ROLES.flatMap((r) =>
-              matrix[r]
-                .map((p, i) => ({ r, p, base: rolePermissions[r][i] }))
-                .filter(({ p, base }) => p.read !== base.read || p.write !== base.write || p.approve !== base.approve)
+              (matrix[r] ?? [])
+                .map((p, i) => ({ r, p, base: serverMatrix[r]?.[i] }))
+                .filter(
+                  (x): x is { r: StaffRole; p: RolePermission; base: RolePermission } =>
+                    x.base !== undefined &&
+                    (x.p.read !== x.base.read ||
+                      x.p.write !== x.base.write ||
+                      x.p.approve !== x.base.approve),
+                )
                 .map(({ r, p, base }) => (
                   <div key={`${r}-${p.module}`} className="rounded-xl border border-border-subtle bg-surface-inset px-4 py-2.5">
                     <p className="text-sm font-medium text-text-primary">

@@ -43,7 +43,7 @@ export class WalletAdminController {
   }
 
   @Patch("withdrawals/:id/approve")
-  @RequirePermissions("withdrawal:approve")
+  @RequirePermissions("withdrawals:approve")
   @ApiOperation({
     summary: "Approve a withdrawal and release it to the payout queue",
     description:
@@ -60,7 +60,7 @@ export class WalletAdminController {
   }
 
   @Patch("withdrawals/:id/reject")
-  @RequirePermissions("withdrawal:approve")
+  @RequirePermissions("withdrawals:approve")
   @ApiOperation({ summary: "Reject a withdrawal and return the held funds to the member" })
   @ApiOkResponse({ type: WithdrawalResponse })
   reject(
@@ -73,7 +73,7 @@ export class WalletAdminController {
   }
 
   @Patch("withdrawals/policy")
-  @RequirePermissions("withdrawal:policy:write")
+  @RequirePermissions("withdrawals:write")
   @ApiOperation({
     summary: "Update tier limits, the review threshold and the cooling-off window",
     description: "Versioned in platform_config. Tier 0 stays at zero — that is a rule, not a policy number.",
@@ -93,7 +93,7 @@ export class WalletAdminController {
   }
 
   @Get("members/:userId/balance")
-  @RequirePermissions("member:balance:read")
+  @RequirePermissions("members:read")
   @ApiOperation({
     summary: "One member's live balance, for support and dispute handling",
     description: "Read-only. Balance corrections are made through the audited adjustment flow, never here.",

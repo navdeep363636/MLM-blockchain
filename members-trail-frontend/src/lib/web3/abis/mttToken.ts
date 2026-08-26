@@ -1,6 +1,12 @@
-// Auto-extracted from MLM-contracts/artifacts/contracts/MTTToken.sol/MTTToken.json
-// Solidity 0.8.24, optimizer runs=200, evmVersion=paris.
-// Regenerate after any contract change — do not hand-edit.
+// GENERATED FILE — do not hand-edit.
+//
+// Source : MLM-contracts/artifacts/contracts/MTTToken.sol/MTTToken.json
+// Build  : Solidity 0.8.24, optimizer runs=200, evmVersion=paris.
+// Command: npm run abi   (in MLM-contracts)
+//
+// Hand-editing an ABI is how the previous chain layer ended up matching no
+// events at all: a wrong event signature is a wrong topic0, and getLogs then
+// returns an empty array rather than an error.
 export const mttTokenAbi = [
   {
     "inputs": [
@@ -164,7 +170,7 @@ export const mttTokenAbi = [
     "anonymous": false,
     "inputs": [
       {
-        "indexed": true,
+        "indexed": false,
         "internalType": "string",
         "name": "bucket",
         "type": "string"

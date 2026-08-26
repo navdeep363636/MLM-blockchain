@@ -257,4 +257,74 @@ export const ROLE_PERMISSIONS: {
   { role: "super_admin", module: "legal", canRead: true, canWrite: true, canApprove: true },
   { role: "super_admin", module: "config", canRead: true, canWrite: true, canApprove: true },
   { role: "super_admin", module: "reports", canRead: true, canWrite: true, canApprove: true },
+
+  /* ------------------------------------------------------------------------ *
+   * The dual-control queue.
+   *
+   * Every role that can be asked to be the second pair of eyes needs to be able
+   * to DECIDE a request — otherwise a four-eyes flow has a proposer and no
+   * approver, and the change simply never happens. Finance is deliberately
+   * included: it approves other people's requests, and the four-eyes check
+   * itself is what stops it approving its own.
+   * ------------------------------------------------------------------------ */
+  { role: "compliance", module: "approvals", canRead: true, canWrite: true, canApprove: true },
+  { role: "finance_admin", module: "approvals", canRead: true, canWrite: true, canApprove: true },
+  { role: "super_admin", module: "approvals", canRead: true, canWrite: true, canApprove: true },
+  /* Support can see the queue so it can tell a member their case is with a
+   * reviewer, and cannot decide anything in it. */
+  { role: "support", module: "approvals", canRead: true, canWrite: false, canApprove: false },
+
+  /* ------------------------------------------------------------------------ *
+   * Content and catalogue.
+   *
+   * These are the screens that change what members see and what they can buy.
+   * They move money indirectly — a mispriced store item or an over-generous
+   * points rule is an economic change — so writing them sits with Super Admin,
+   * while Finance and Compliance can read what is live.
+   * ------------------------------------------------------------------------ */
+  { role: "super_admin", module: "cms", canRead: true, canWrite: true, canApprove: true },
+  { role: "super_admin", module: "games", canRead: true, canWrite: true, canApprove: true },
+  { role: "super_admin", module: "quests", canRead: true, canWrite: true, canApprove: true },
+  { role: "super_admin", module: "store", canRead: true, canWrite: true, canApprove: true },
+  { role: "super_admin", module: "tournaments", canRead: true, canWrite: true, canApprove: true },
+  { role: "super_admin", module: "staking", canRead: true, canWrite: true, canApprove: true },
+  { role: "super_admin", module: "notifications", canRead: true, canWrite: true, canApprove: true },
+
+  /* Finance owns the economics of the catalogue: pool parameters and prize
+   * settlement are treasury decisions wearing a game's clothes. */
+  { role: "finance_admin", module: "staking", canRead: true, canWrite: true, canApprove: false },
+  { role: "finance_admin", module: "tournaments", canRead: true, canWrite: false, canApprove: true },
+  { role: "finance_admin", module: "games", canRead: true, canWrite: false, canApprove: false },
+  { role: "finance_admin", module: "quests", canRead: true, canWrite: false, canApprove: false },
+  { role: "finance_admin", module: "store", canRead: true, canWrite: false, canApprove: false },
+
+  /* Compliance reads the catalogue because a promotion is a marketing claim. */
+  { role: "compliance", module: "cms", canRead: true, canWrite: true, canApprove: false },
+  { role: "compliance", module: "games", canRead: true, canWrite: false, canApprove: false },
+  { role: "compliance", module: "quests", canRead: true, canWrite: false, canApprove: false },
+  { role: "compliance", module: "store", canRead: true, canWrite: false, canApprove: false },
+  { role: "compliance", module: "tournaments", canRead: true, canWrite: false, canApprove: false },
+  { role: "compliance", module: "staking", canRead: true, canWrite: false, canApprove: false },
+  { role: "compliance", module: "notifications", canRead: true, canWrite: true, canApprove: false },
+
+  { role: "support", module: "games", canRead: true, canWrite: false, canApprove: false },
+  { role: "support", module: "quests", canRead: true, canWrite: false, canApprove: false },
+  { role: "support", module: "store", canRead: true, canWrite: false, canApprove: false },
+  { role: "support", module: "tournaments", canRead: true, canWrite: false, canApprove: false },
+
+  /* ------------------------------------------------------------------------ *
+   * Chain operations.
+   *
+   * Requeueing a stuck transaction or rewinding an indexer cursor is not a
+   * business decision, but it is an irreversible one against a live chain. It
+   * belongs to exactly one role.
+   * ------------------------------------------------------------------------ */
+  { role: "super_admin", module: "chain", canRead: true, canWrite: true, canApprove: true },
+  { role: "finance_admin", module: "chain", canRead: true, canWrite: false, canApprove: false },
+  { role: "compliance", module: "chain", canRead: true, canWrite: false, canApprove: false },
+
+  /* Super Admin also needs the two modules the other roles own day to day, or
+   * it cannot cover for them. */
+  { role: "super_admin", module: "kyc", canRead: true, canWrite: true, canApprove: true },
+  { role: "super_admin", module: "support", canRead: true, canWrite: true, canApprove: true },
 ];

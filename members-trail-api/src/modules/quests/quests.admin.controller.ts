@@ -19,7 +19,7 @@ export class QuestsAdminController {
   constructor(private readonly quests: QuestsService) {}
 
   @Put()
-  @RequirePermissions("quest:write")
+  @RequirePermissions("quests:write")
   @ApiOperation({
     summary: "Create or update a quest",
     description:
@@ -36,7 +36,7 @@ export class QuestsAdminController {
   }
 
   @Patch(":id/activate")
-  @RequirePermissions("quest:write")
+  @RequirePermissions("quests:write")
   @ApiOperation({ summary: "Activate a quest" })
   activate(
     @Param("id", ParseUUIDPipe) id: string,
@@ -47,7 +47,7 @@ export class QuestsAdminController {
   }
 
   @Patch(":id/deactivate")
-  @RequirePermissions("quest:write")
+  @RequirePermissions("quests:write")
   @ApiOperation({
     summary: "Deactivate a quest",
     description: "Existing instances stay claimable until their period closes — the deal was already offered.",
@@ -61,7 +61,7 @@ export class QuestsAdminController {
   }
 
   @Get("expire-stale")
-  @RequirePermissions("quest:write")
+  @RequirePermissions("quests:write")
   @ApiOperation({ summary: "Count of unclaimed instances whose period has closed" })
   expireStale(): Promise<number> {
     return this.quests.expireStale();

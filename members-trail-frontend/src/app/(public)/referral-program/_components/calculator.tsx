@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Calculator, Info, TriangleAlert } from "lucide-react";
 import { Badge, Callout, CapMeter, InfoHint, SegmentedControl, Slider } from "@/components/ui";
 import { formatToken } from "@/lib/utils";
-import { commissionConfig } from "@/lib/mock/admin";
+import { usePublicReferralPlan } from "@/lib/hooks/use-data";
 
 const TRIGGERS = [
   { value: "iap", label: "In-app purchase" },
@@ -22,13 +22,17 @@ export function CommissionCalculator() {
   const [ownSpend, setOwnSpend] = useState(1_200);
   const [alreadyEarned, setAlreadyEarned] = useState(1_800);
 
-  const rates = commissionConfig.levels;
+  /* The live plan, not a bundled copy: Finance proposes these rates and
+   * Compliance approves them, and a calculator quoting a superseded version is
+   * quoting a promise the platform is not making. */
+  const { data: plan } = usePublicReferralPlan();
+  const rates = plan.levels;
 
   const monthlyCap = useMemo(
     () =>
       Math.min(
-        commissionConfig.monthlyCapAbsolute,
-        commissionConfig.monthlyCapMultiplier * ownSpend + commissionConfig.monthlyCapBase,
+        plan.monthlyCapAbsolute,
+        plan.monthlyCapMultiplier * ownSpend + plan.monthlyCapBase,
       ),
     [ownSpend],
   );
@@ -115,9 +119,9 @@ export function CommissionCalculator() {
               <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-text-muted">
                 Your monthly cap
                 <InfoHint>
-                  min( absolute cap ₹{formatToken(commissionConfig.monthlyCapAbsolute, 0)},
-                  {" "}{commissionConfig.monthlyCapMultiplier} × your own average monthly spend
-                  + ₹{formatToken(commissionConfig.monthlyCapBase, 0)} base allowance )
+                  min( absolute cap ₹{formatToken(plan.monthlyCapAbsolute, 0)},
+                  {" "}{plan.monthlyCapMultiplier} × your own average monthly spend
+                  + ₹{formatToken(plan.monthlyCapBase, 0)} base allowance )
                 </InfoHint>
               </p>
               <p className="tnum text-sm font-semibold text-text-primary">₹{formatToken(monthlyCap, 0)}</p>

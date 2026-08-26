@@ -69,11 +69,13 @@ export function DataTable<T>({
 
   return (
     <div className={cn("w-full", className)}>
-      <div className="overflow-x-auto">
+      {/* The scroll container is also the depth boundary: a wide table scrolls
+          inside its own frame rather than pushing the page sideways. */}
+      <div className="overflow-x-auto rounded-[var(--radius-card)]">
         <table className="w-full min-w-full border-collapse text-sm">
           {caption && <caption className="sr-only">{caption}</caption>}
           <thead>
-            <tr className="border-b border-border-default">
+            <tr className="border-b border-border-default bg-[linear-gradient(180deg,color-mix(in_oklab,var(--surface-2)_55%,transparent),transparent)]">
               {columns.map((c) => {
                 const sortable = !!c.sortValue;
                 const active = sort?.key === c.key;
@@ -129,15 +131,28 @@ export function DataTable<T>({
                     key={keyOf(row, i)}
                     onClick={onRowClick ? () => onRowClick(row) : undefined}
                     className={cn(
-                      "border-b border-border-subtle transition-colors last:border-0",
-                      onRowClick && "cursor-pointer hover:bg-surface-2",
+                      "group/row relative border-b border-border-subtle last:border-0",
+                      "transition-colors duration-[var(--dur-quick)] ease-[var(--ease-tide)]",
+                      /* A tilt on a table row is motion sickness. The row hover
+                         treatment is therefore flat: a warm wash, a lit left
+                         edge, and the first cell nudging in by 2px — enough to
+                         track your place across a wide table without the page
+                         moving under you. */
+                      onRowClick
+                        ? "cursor-pointer hover:bg-[color-mix(in_oklab,var(--accent)_5%,var(--surface-2))]"
+                        : "hover:bg-surface-2/60",
                     )}
                   >
-                    {columns.map((c) => (
+                    {columns.map((c, ci) => (
                       <td
                         key={c.key}
                         className={cn(
-                          pad, "text-text-secondary align-middle",
+                          pad, "relative text-text-secondary align-middle",
+                          ci === 0 &&
+                            "before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:origin-center before:scale-y-0 " +
+                            "before:rounded-full before:bg-[var(--accent)] before:transition-transform before:duration-300 " +
+                            "before:ease-[var(--ease-tide)] group-hover/row:before:scale-y-100 " +
+                            "transition-[padding] duration-[var(--dur-quick)] group-hover/row:pl-[calc(var(--spacing)*4+2px)]",
                           c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "text-left",
                           c.hideBelow && hideMap[c.hideBelow],
                           c.className,
@@ -154,8 +169,12 @@ export function DataTable<T>({
 
       {!loading && visible.length === 0 && (
         <div className="flex flex-col items-center justify-center gap-2 px-6 py-14 text-center">
-          <span className="grid size-11 place-items-center rounded-full bg-surface-2 text-text-muted">
-            <Inbox className="size-5" />
+          <span
+            className="grid size-14 place-items-center rounded-full bg-surface-2 text-text-muted
+                       ring-1 ring-inset ring-border-subtle
+                       [box-shadow:inset_0_1px_0_0_var(--rim-light),var(--shadow-e2)]"
+          >
+            <Inbox className="size-6" />
           </span>
           <p className="text-sm font-medium text-text-primary">{empty?.title ?? "Nothing here yet"}</p>
           {empty?.description && <p className="max-w-sm text-sm text-text-muted">{empty.description}</p>}

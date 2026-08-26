@@ -9,7 +9,9 @@ import {
   Badge, Button, Callout, CapMeter, Checkbox, DataTable, DetailRow, InfoHint, Input,
   KycBadge, Modal, SegmentedControl, Select, StatusPill, useToast, type Column,
 } from "@/components/ui";
-import { useBalances, useCurrentUser, useTransactions } from "@/lib/hooks/use-data";
+import { useBalances, useCurrentUser, useTransactions, useWithdrawalLimits } from "@/lib/hooks/use-data";
+import { useRequestWithdrawal } from "@/lib/hooks/use-mutations";
+import { humanMessage, isApiError } from "@/lib/api/errors";
 import { useMttBalance } from "@/lib/hooks/use-web3";
 import { MTT_SYMBOL, txUrl } from "@/lib/web3";
 import { clamp, formatCurrency, formatDate, formatToken, shortenHash } from "@/lib/utils";
@@ -21,7 +23,16 @@ type Kind = "mtt" | "fiat";
 /** Tier limits, in MTT. Tier 2 unlocks the higher band (FRD W-04 / AML policy). */
 const TIER_LIMITS = { tier1: 25_000, tier2: 500_000 } as const;
 const AUTO_APPROVE_THRESHOLD = 5_000;
-const COOLING_OFF_HOURS = 48;
+/**
+ * Fallback only.
+ *
+ * The real cooling-off period is set per-environment and served on
+ * `/wallet/withdrawals/limits`. This constant is what the copy falls back to
+ * before that response arrives — a screen that told a member "48 hours" while the
+ * server enforced 24 would be wrong in the direction that makes them think their
+ * money is stuck.
+ */
+const COOLING_OFF_FALLBACK_HOURS = 48;
 
 const SOURCE_OPTIONS = [
   { value: "gameplay", label: "Gameplay earnings" },
@@ -35,6 +46,12 @@ export function WithdrawView() {
   const { data: txs } = useTransactions();
   const { balance: onChain } = useMttBalance();
   const toast = useToast();
+  const requestWithdrawal = useRequestWithdrawal();
+  /* Limits, minimums and the cooling-off period come from the server: they vary
+   * by KYC tier and by environment, and a bundled copy would tell a Tier 2 member
+   * about a Tier 1 ceiling. */
+  const { data: limits } = useWithdrawalLimits();
+  const coolingOffHours = Number(limits.coolingOffHours ?? COOLING_OFF_FALLBACK_HOURS);
 
   const available = onChain ?? balances.mttAvailable;
   const tier = user.kycTier === "tier2" ? "tier2" : "tier1";
@@ -142,10 +159,28 @@ export function WithdrawView() {
 
   const submit = async () => {
     setBusy(true);
-    await new Promise((r) => setTimeout(r, 1100));
-    setBusy(false);
-    setConfirmOpen(false);
-    setSubmitted(true);
+    try {
+      await requestWithdrawal.mutateAsync({
+        /* The amount as a STRING, from the input, not re-serialised from a float.
+         * `String(amount)` on a slider value is exact; the moment this becomes
+         * arithmetic on a Number the figure the member confirmed and the figure
+         * that settles can differ in the eighteenth decimal place. */
+        amountMtt: String(amount),
+        destination: kind === "fiat" ? undefined : destination.trim(),
+        sourceTag: source as "gameplay" | "staking" | "referral",
+      });
+      setConfirmOpen(false);
+      setSubmitted(true);
+    } catch (err) {
+      toast.error(
+        isApiError(err) && err.code === "KYC_REQUIRED"
+          ? "Verification required"
+          : "Withdrawal not submitted",
+        humanMessage(err),
+      );
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -256,7 +291,7 @@ export function WithdrawView() {
                 />
                 <span className="text-sm text-text-secondary">
                   <span className="font-medium text-text-primary">This is an address I&apos;ve used before</span> —
-                  uncheck if it&apos;s new, and the {COOLING_OFF_HOURS}-hour cooling-off period will apply.
+                  uncheck if it&apos;s new, and the {coolingOffHours}-hour cooling-off period will apply.
                 </span>
               </label>
             </div>
@@ -280,9 +315,9 @@ export function WithdrawView() {
           />
 
           {!whitelisted && kind === "mtt" && (
-            <Callout tone="warning" title={`${COOLING_OFF_HOURS}-hour cooling-off period`} icon={<Clock />} className="mt-4">
+            <Callout tone="warning" title={`${coolingOffHours}-hour cooling-off period`} icon={<Clock />} className="mt-4">
               <p className="mt-1">
-                New or changed destination addresses are held for {COOLING_OFF_HOURS} hours before the
+                New or changed destination addresses are held for {coolingOffHours} hours before the
                 first withdrawal is released. It&apos;s an anti-fraud control: if someone compromises
                 your account and swaps the payout address, that window is what lets you and our
                 compliance team catch it.
@@ -428,7 +463,7 @@ export function WithdrawView() {
             {needsReview
               ? "Routed to compliance review. You'll be notified when a decision is made — usually within one business day."
               : !whitelisted
-                ? `Held for the ${COOLING_OFF_HOURS}-hour new-address cooling-off period, then processed automatically.`
+                ? `Held for the ${coolingOffHours}-hour new-address cooling-off period, then processed automatically.`
                 : "Below the review threshold, so it processes automatically. You'll get the transaction hash on completion."}
           </p>
           <Badge tone={needsReview ? "serious" : "warning"} className="mt-4" dot>

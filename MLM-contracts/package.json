@@ -14,7 +14,14 @@
     "pools:testnet": "hardhat run scripts/setup-pools.js --network bscTestnet",
     "check:testnet": "hardhat run scripts/post-deploy-check.js --network bscTestnet",
     "check:mainnet": "hardhat run scripts/post-deploy-check.js --network bscMainnet",
-    "clean": "hardhat clean"
+    "clean": "hardhat clean",
+    "payout:testnet": "hardhat run scripts/setup-payout.js --network bscTestnet",
+    "abi": "node scripts/export-abi.js",
+    "node": "hardhat node",
+    "deploy:local": "hardhat run scripts/deploy.js --network localhost",
+    "roles:local": "hardhat run scripts/setup-roles.js --network localhost",
+    "pools:local": "hardhat run scripts/setup-pools.js --network localhost",
+    "check:local": "hardhat run scripts/post-deploy-check.js --network localhost"
   },
   "keywords": [],
   "author": "",
@@ -26,6 +33,6 @@
     "hardhat": "^2.29.1"
   },
   "dependencies": {
-    "solc": "^0.8.24"
+    "solc": "0.8.24"
   }
 }

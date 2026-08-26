@@ -12,10 +12,25 @@ import { Badge, Button, Callout } from "@/components/ui";
 import { AuroraBackground, GridBackdrop, NoiseOverlay, ScrollProgress } from "@/components/fx";
 import { Container } from "../../_components/shell";
 import { legalDocs } from "@/lib/nav";
-import { legalNeighbours } from "@/lib/mock/legal";
 import { cn, formatDate } from "@/lib/utils";
 import type { LegalDocument } from "@/types";
 import { PrintButton } from "./print-button";
+
+/**
+ * Previous and next document, in the order the nav publishes them.
+ *
+ * Derived from `legalDocs` — the same list the legal index page and the footer
+ * render — rather than from a parallel array. Two orderings of the same eight
+ * documents is one ordering too many, and the one nobody looks at is the one that
+ * ends up wrong.
+ */
+function neighbours(slug: string) {
+  const i = legalDocs.findIndex((d) => d.href === `/legal/${slug}`);
+  return {
+    prev: i > 0 ? legalDocs[i - 1] : undefined,
+    next: i >= 0 && i < legalDocs.length - 1 ? legalDocs[i + 1] : undefined,
+  };
+}
 
 /** Stable anchor id for a section heading: drops the leading clause number. */
 export function sectionId(heading: string) {
@@ -43,7 +58,7 @@ export function LegalDoc({
   doc: LegalDocument;
   extras?: Record<string, React.ReactNode>;
 }) {
-  const { prev, next } = legalNeighbours(doc.slug);
+  const { prev, next } = neighbours(doc.slug);
   const meta = legalDocs.find((d) => d.href === `/legal/${doc.slug}`);
   const status = STATUS[doc.status];
 
@@ -262,7 +277,7 @@ export function LegalDoc({
                       Previous
                     </span>
                     <span className="text-sm font-medium text-text-primary group-hover:text-[var(--accent-hover)]">
-                      {prev.title}
+                      {prev.label}
                     </span>
                   </Link>
                 ) : (
@@ -278,7 +293,7 @@ export function LegalDoc({
                       <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden />
                     </span>
                     <span className="text-sm font-medium text-text-primary group-hover:text-[var(--accent-hover)]">
-                      {next.title}
+                      {next.label}
                     </span>
                   </Link>
                 )}

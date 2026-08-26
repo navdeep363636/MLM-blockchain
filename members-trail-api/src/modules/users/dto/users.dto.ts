@@ -18,6 +18,8 @@ export const CONFIGURABLE_NOTIFICATION_KINDS = [
 export type ConfigurableNotificationKind = (typeof CONFIGURABLE_NOTIFICATION_KINDS)[number];
 
 export class MeResponse {
+  @ApiProperty({ description: "Stable identifier. The member's own id — safe to give them." })
+  id!: string;
   @ApiProperty() ref!: string;
   @ApiProperty() email!: string;
   @ApiProperty() emailVerified!: boolean;
@@ -34,6 +36,23 @@ export class MeResponse {
   @ApiProperty() role!: string;
   @ApiProperty() referralCode!: string;
   @ApiProperty() referralDepth!: number;
+  @ApiProperty({ description: "Whether this account was referred. Not by whom — that is another member's data." })
+  wasReferred!: boolean;
+  @ApiPropertyOptional({ nullable: true, description: "Date of birth, ISO date" })
+  dateOfBirth!: string | null;
+  @ApiProperty({ description: "Whether a second factor is enrolled" })
+  twoFactorEnabled!: boolean;
+  @ApiPropertyOptional({ nullable: true }) walletAddress!: string | null;
+  @ApiPropertyOptional({ nullable: true, enum: ["external", "custodial"] })
+  walletType!: string | null;
+  @ApiPropertyOptional({ nullable: true }) lastActiveAt!: Date | null;
+  @ApiProperty({
+    description:
+      "Whether this account is a staff account. The client uses it to decide " +
+      "whether to route to the back-office; the server still authorises every " +
+      "admin call on its own, so a tampered value gains nothing.",
+  })
+  isStaff!: boolean;
   @ApiPropertyOptional() lastLoginAt?: Date | null;
   @ApiProperty() createdAt!: Date;
   @ApiProperty({ description: "Legal document versions this account has accepted" })

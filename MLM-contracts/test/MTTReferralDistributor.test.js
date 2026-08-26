@@ -183,13 +183,13 @@ describe("MTTReferralDistributor", function () {
 
     it("only COMPLIANCE_ROLE can claw back", async function () {
       await expect(
-        dist.connect(alice).clawback(alice.address, 1, EVT1)
+        dist.connect(alice).clawback(alice.address, 1, EVT1, "unauthorised")
       ).to.be.reverted;
     });
 
     it("reverses an unclaimed commission and frees pool capacity", async function () {
       const recordedBefore = await dist.totalRecorded();
-      await dist.connect(compliance).clawback(alice.address, ethers.parseEther("100"), EVT1);
+      await dist.connect(compliance).clawback(alice.address, ethers.parseEther("100"), EVT1, "purchase refunded");
       expect(await dist.commissionBalance(alice.address)).to.equal(0n);
       expect(await dist.totalRecorded()).to.equal(recordedBefore - ethers.parseEther("100"));
       expect(await dist.availablePoolBalance()).to.equal(ethers.parseEther("1000"));
@@ -197,7 +197,7 @@ describe("MTTReferralDistributor", function () {
 
     it("cannot claw back more than the user's outstanding balance", async function () {
       await expect(
-        dist.connect(compliance).clawback(alice.address, ethers.parseEther("101"), EVT1)
+        dist.connect(compliance).clawback(alice.address, ethers.parseEther("101"), EVT1, "purchase refunded")
       ).to.be.revertedWith("exceeds balance");
     });
 
@@ -205,7 +205,7 @@ describe("MTTReferralDistributor", function () {
       await dist.connect(compliance).setKycApproved(alice.address, true);
       await dist.connect(alice).claimCommission();
       await expect(
-        dist.connect(compliance).clawback(alice.address, ethers.parseEther("100"), EVT1)
+        dist.connect(compliance).clawback(alice.address, ethers.parseEther("100"), EVT1, "purchase refunded")
       ).to.be.revertedWith("exceeds balance");
     });
   });

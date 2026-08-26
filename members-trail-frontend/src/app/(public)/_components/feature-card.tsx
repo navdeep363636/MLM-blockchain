@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
-import { SpotlightCard, TiltCard } from "@/components/fx";
+import { HoloCard, SpotlightCard } from "@/components/fx";
 import { cn } from "@/lib/utils";
 
 export function IconTile({
@@ -17,6 +17,7 @@ export function IconTile({
     <span
       className={cn(
         "grid shrink-0 place-items-center bg-accent-soft text-[var(--accent)] ring-1 ring-inset ring-[var(--accent-ring)]",
+        "[box-shadow:inset_0_1px_0_0_var(--rim-light),0_0_20px_-8px_var(--accent-ring)]",
         sizes[size],
         className,
       )}
@@ -43,15 +44,20 @@ export function FeatureCard({
     <SpotlightCard
       className={cn(
         "h-full rounded-[var(--radius-card)] border border-border-subtle bg-surface-1",
-        "transition-colors duration-300 hover:border-[color-mix(in_oklab,var(--accent)_38%,var(--border-default))]",
+        "[box-shadow:var(--shadow-e2),inset_0_1px_0_0_var(--rim-light)]",
+        "holo transition-[border-color,box-shadow] duration-[var(--dur-base)] ease-[var(--ease-tide)]",
+        "hover:border-[color-mix(in_oklab,var(--accent)_38%,var(--border-default))]",
+        "hover:[box-shadow:var(--shadow-e4),inset_0_1px_0_0_var(--rim-light-strong)]",
         className,
       )}
     >
       <div className="relative flex h-full flex-col p-5 sm:p-6">
-        {icon && <IconTile className="mb-4">{icon}</IconTile>}
+        {icon && <IconTile className="mb-4 transition-transform duration-[var(--dur-base)] ease-[var(--ease-tide)] group-hover:scale-105">{icon}</IconTile>}
         <h3 className="flex items-start gap-1.5 text-[0.975rem] font-semibold text-text-primary">
           {title}
-          {href && <ArrowUpRight className="mt-0.5 size-3.5 shrink-0 text-text-muted" />}
+          {href && (
+            <ArrowUpRight className="mt-0.5 size-3.5 shrink-0 text-text-muted transition-[transform,color] duration-[var(--dur-quick)] group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[var(--accent)]" />
+          )}
         </h3>
         {description && (
           <p className="mt-2 text-sm leading-relaxed text-text-secondary">{description}</p>
@@ -62,16 +68,25 @@ export function FeatureCard({
     </SpotlightCard>
   );
 
-  const wrapped = tilt ? <TiltCard max={5} className="h-full">{inner}</TiltCard> : inner;
+  /* `tilt` now buys the pointer-tracked HoloCard rather than the old TiltCard:
+     same prop, same call sites, real perspective. Cards without it still get
+     the sheen and the elevation change, which is the right default for a grid
+     of eight — eight things tilting at once is a fairground. */
+  const wrapped = tilt
+    ? <HoloCard max={5} lift={20} className="h-full rounded-[var(--radius-card)]">{inner}</HoloCard>
+    : inner;
 
   if (href) {
     return (
-      <Link href={href} className="group block h-full rounded-[var(--radius-card)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]">
+      <Link
+        href={href}
+        className="group block h-full rounded-[var(--radius-card)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+      >
         {wrapped}
       </Link>
     );
   }
-  return wrapped;
+  return <div className="group h-full">{wrapped}</div>;
 }
 
 /** Compact numbered/labelled fact used in dense grids. */
@@ -87,7 +102,9 @@ export function FactCard({
   return (
     <div
       className={cn(
-        "rounded-[var(--radius-card)] border border-border-subtle bg-surface-1 p-5",
+        "group rounded-[var(--radius-card)] border border-border-subtle bg-surface-1 p-5",
+        "[box-shadow:var(--shadow-e2),inset_0_1px_0_0_var(--rim-light)]",
+        "lift",
         className,
       )}
     >
