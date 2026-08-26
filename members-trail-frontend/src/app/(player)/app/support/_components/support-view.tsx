@@ -10,6 +10,8 @@ import {
   StatTile, Textarea, useToast,
 } from "@/components/ui";
 import { useCurrentUser, useTickets } from "@/lib/hooks/use-data";
+import { useCreateTicket } from "@/lib/hooks/use-mutations";
+import { humanMessage } from "@/lib/api/errors";
 import { cn, formatDate, formatDuration } from "@/lib/utils";
 import type { Ticket, TicketCategory, TicketMessage, TicketStatus } from "@/types";
 import { RelativeTime, useLiveNow } from "../../_components/time";
@@ -45,6 +47,7 @@ export function SupportView() {
   const { data: user } = useCurrentUser();
   const now = useLiveNow(30_000);
   const toast = useToast();
+  const createTicket = useCreateTicket();
 
   const [filter, setFilter] = useState<"all" | "open" | "resolved">("all");
   const [selected, setSelected] = useState<Ticket | null>(null);
@@ -73,7 +76,22 @@ export function SupportView() {
 
   const submitTicket = async () => {
     setBusy(true);
-    await new Promise((r) => setTimeout(r, 900));
+    try {
+      await createTicket.mutateAsync({
+        subject: form.subject.trim(),
+        category: form.category,
+        body: form.body.trim(),
+        /* Declared by the client from the chosen category, and re-derived by the
+         * server: a financial dispute routes to a compliance-trained agent and
+         * carries a different SLA, so it is not a decision a form gets to make
+         * alone. */
+        financialDispute: isFinancial,
+      });
+    } catch (err) {
+      toast.error("Ticket not created", humanMessage(err));
+      setBusy(false);
+      return;
+    }
     setBusy(false);
     setNewOpen(false);
     toast.success(

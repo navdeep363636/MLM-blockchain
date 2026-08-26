@@ -58,7 +58,7 @@ function ChartTooltip({
   if (!active || !payload?.length) return null;
   const fmt = valueFormatter ?? ((v: number) => formatNumber(v, { maximumFractionDigits: 2 }));
   return (
-    <div className="rounded-xl border border-border-default bg-surface-2/95 px-3 py-2 shadow-[0_16px_40px_-16px_rgba(0,0,0,0.85)] backdrop-blur">
+    <div className="rounded-xl border border-border-default glass-2 px-3 py-2 [box-shadow:var(--shadow-e4),inset_0_1px_0_0_var(--rim-light)]">
       {label != null && (
         <p className="mb-1.5 text-xs font-medium text-text-muted">
           {labelFormatter ? labelFormatter(label) : label}
@@ -112,11 +112,20 @@ export function ChartFrame({
   const fmt = valueFormatter ?? ((v: number) => formatNumber(v, { maximumFractionDigits: 2 }));
 
   return (
-    <div className={cn("rounded-[var(--radius-card)] border border-border-subtle bg-surface-1", className)}>
+    <div
+      className={cn(
+        "relative rounded-[var(--radius-card)] border border-border-subtle bg-surface-1",
+        /* A chart frame gets the panel material but NOT a hover tilt: reading a
+           value off a moving axis is the one place depth actively hurts. The
+           card is raised; its contents stay still. */
+        "[box-shadow:var(--shadow-e2),inset_0_1px_0_0_var(--rim-light)]",
+        className,
+      )}
+    >
       {(title || action || canTable) && (
         <div className="flex flex-wrap items-start justify-between gap-3 px-5 pb-3 pt-4">
           <div className="min-w-0">
-            {title && <h3 className="text-sm font-semibold text-text-primary">{title}</h3>}
+            {title && <h3 className="font-display text-sm font-semibold tracking-tight text-text-primary">{title}</h3>}
             {description && <p className="mt-0.5 text-xs text-text-muted">{description}</p>}
           </div>
           <div className="flex items-center gap-2">
@@ -126,7 +135,7 @@ export function ChartFrame({
                 onClick={() => setView((v) => (v === "chart" ? "table" : "chart"))}
                 aria-label={view === "chart" ? "Show data as table" : "Show chart"}
                 title={view === "chart" ? "Show data as table" : "Show chart"}
-                className="grid size-8 place-items-center rounded-lg text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary"
+                className="grid size-8 place-items-center rounded-lg text-text-muted transition-[background-color,color,box-shadow] duration-[var(--dur-quick)] hover:bg-surface-2 hover:text-text-primary hover:[box-shadow:inset_0_1px_0_0_var(--rim-light)]"
               >
                 {view === "chart" ? <Table2 className="size-4" /> : <LineIcon className="size-4" />}
               </button>
@@ -140,7 +149,10 @@ export function ChartFrame({
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-5 pb-2">
           {series.map((s, i) => (
             <span key={s.key} className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
-              <span className="size-2 rounded-[2px]" style={{ background: s.color ?? seriesColor(i) }} />
+              <span
+                className="size-2 rounded-[2px]"
+                style={{ background: s.color ?? seriesColor(i), boxShadow: `0 0 8px -1px ${s.color ?? seriesColor(i)}` }}
+              />
               {s.label}
             </span>
           ))}

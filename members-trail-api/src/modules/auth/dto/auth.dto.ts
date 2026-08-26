@@ -174,9 +174,14 @@ export class TwoFaLoginDto {
 /* -------------------------------- refresh --------------------------------- */
 
 export class RefreshDto {
-  @ApiProperty()
-  @IsString() @MinLength(20) @MaxLength(200)
-  refreshToken!: string;
+  @ApiPropertyOptional({
+    description:
+      "Optional for browser clients, which present the token in the httpOnly " +
+      "`mt_rt` cookie instead. Native clients, which have no cookie jar, send it " +
+      "here. The endpoint refuses when neither is present.",
+  })
+  @IsOptional() @IsString() @MinLength(20) @MaxLength(200)
+  refreshToken?: string;
 }
 
 /* ------------------------------- passwords -------------------------------- */

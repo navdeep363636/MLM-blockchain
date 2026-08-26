@@ -1,4 +1,5 @@
 import { Logger } from "@nestjs/common";
+import { keccak256, toHex } from "viem";
 import type { Job } from "bullmq";
 import { Jobs } from "@/queues/queue.constants";
 import { CommissionProcessor, TreasuryProcessor, WithdrawalProcessor } from "./economy.processor";
@@ -16,6 +17,7 @@ import type { PayoutInstruction } from "@/modules/wallet/withdrawal.service";
  * ========================================================================== */
 
 const TOKEN = "0x1111111111111111111111111111111111111111";
+const PAYOUT = "0x4444444444444444444444444444444444444444";
 
 function job(name: string, data: unknown): Job {
   return { id: "j1", name, data, queueName: "withdrawal", attemptsMade: 0, opts: { attempts: 3 } } as unknown as Job;
@@ -46,28 +48,63 @@ describe("WithdrawalProcessor", () => {
     processor = new WithdrawalProcessor(
       withdrawal as never,
       submitter as never,
-      { contracts: { mttToken: TOKEN } } as never,
+      { contracts: { mttToken: TOKEN, payout: PAYOUT } } as never,
     );
   });
 
   afterEach(() => jest.restoreAllMocks());
 
-  it("submits an ERC-20 transfer to the TOKEN contract with the whitelisted address as the argument", async () => {
+  it("settles through the PAYOUT RAIL, carrying the withdrawal reference on chain", async () => {
     const result = await processor.process(job(Jobs.ProcessWithdrawal, { withdrawalId: "w1" }));
 
     expect(submitter.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({
-        functionName: "transfer",
-        /* The callee is the token, not the member — sending to the member's
-         * address as `to` would be a plain BNB transfer of nothing. */
-        toAddress: TOKEN,
-        args: [chainInstruction.toAddress, chainInstruction.amountWei],
+        contract: "payout",
+        functionName: "payout",
+        /*
+         * payout(to, amount, withdrawalRef).
+         *
+         * The third argument is what makes this better than a bare token
+         * transfer: the contract stores it, so a replayed submission is refused
+         * on chain rather than by this service remembering correctly, and the
+         * settlement is traceable back to the request that authorised it.
+         */
+        args: [
+          chainInstruction.toAddress,
+          chainInstruction.amountWei,
+          keccak256(toHex(chainInstruction.ref)),
+        ],
         idempotencyKey: "withdrawal:w1",
         relatedType: "withdrawal",
         relatedId: "w1",
       }),
     );
-    expect(result).toMatchObject({ rail: "chain", outboundTxRef: "OTX-1" });
+    expect(result).toMatchObject({ rail: "chain:payout", outboundTxRef: "OTX-1" });
+  });
+
+  it("falls back to a direct token transfer when the payout rail is unconfigured, and says so", async () => {
+    const warn = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+    processor = new WithdrawalProcessor(
+      withdrawal as never,
+      submitter as never,
+      { contracts: { mttToken: TOKEN, payout: undefined } } as never,
+    );
+
+    const result = await processor.process(job(Jobs.ProcessWithdrawal, { withdrawalId: "w1" }));
+
+    expect(submitter.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contract: "mttToken",
+        functionName: "transfer",
+        args: [chainInstruction.toAddress, chainInstruction.amountWei],
+      }),
+    );
+    expect(result).toMatchObject({ rail: "chain:token" });
+
+    /* The fallback is less safe — the relayer key must hold the rewards pool and
+     * there is no on-chain daily limit or replay guard. It must never be silent. */
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("PAYOUT_ADDRESS is unset"));
+    warn.mockRestore();
   });
 
   it("takes the destination from the service, IGNORING any address in the job payload", async () => {
@@ -78,7 +115,14 @@ describe("WithdrawalProcessor", () => {
     );
 
     const [args] = submitter.enqueue.mock.calls[0] as [{ args: string[] }];
-    expect(args.args).toEqual([chainInstruction.toAddress, chainInstruction.amountWei]);
+    /* Destination and amount both come from the service's instruction, never
+     * from the payload — and the on-chain reference is derived from the
+     * service's ref, so a forged payload cannot redirect or relabel a payout. */
+    expect(args.args).toEqual([
+      chainInstruction.toAddress,
+      chainInstruction.amountWei,
+      keccak256(toHex(chainInstruction.ref)),
+    ]);
     expect(withdrawal.beginPayout).toHaveBeenCalledWith("w1");
   });
 
@@ -104,17 +148,17 @@ describe("WithdrawalProcessor", () => {
     expect(result).toMatchObject({ skipped: "STATUS_REJECTED" });
   });
 
-  it("refuses to pay when the token address is unconfigured, rather than sending to nowhere", async () => {
+  it("refuses to pay when NO rail is configured, rather than sending to nowhere", async () => {
     processor = new WithdrawalProcessor(
       withdrawal as never,
       submitter as never,
-      { contracts: { mttToken: undefined } } as never,
+      { contracts: { mttToken: undefined, payout: undefined } } as never,
     );
     jest.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
 
     await expect(
       processor.process(job(Jobs.ProcessWithdrawal, { withdrawalId: "w1" })),
-    ).rejects.toThrow(/MTT_TOKEN_ADDRESS is not configured/);
+    ).rejects.toThrow(/neither PAYOUT_ADDRESS nor MTT_TOKEN_ADDRESS/);
     expect(submitter.enqueue).not.toHaveBeenCalled();
   });
 

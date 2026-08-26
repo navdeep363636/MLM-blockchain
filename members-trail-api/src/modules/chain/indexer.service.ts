@@ -1,15 +1,15 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { IsNull, Repository } from "typeorm";
-import type { Abi, GetLogsReturnType } from "viem";
+import type { GetLogsReturnType } from "viem";
 import { ChainEvent, IndexerCursor } from "@/database/entities";
 import { EventBusService, Events } from "@/events";
 import { DbRoutinesService } from "@/database/routines/db-routines.service";
 import { RedisService } from "@/common/redis/redis.service";
 import { RpcService } from "./rpc.service";
 import {
-  Contracts, HEALTHY_LAG_BLOCKS, MIN_CONFIRMATIONS, REFERRAL_EVENTS, REORG_REWIND_BLOCKS,
-  STAKING_EVENTS, type ContractName,
+  HEALTHY_LAG_BLOCKS, INDEXED_SPECS, MIN_CONFIRMATIONS, REORG_REWIND_BLOCKS,
+  assertSpecsValid, watchedEventAbi, type ContractName, type ContractSpec,
 } from "./chain.constants";
 
 /* ============================================================================
@@ -48,18 +48,13 @@ import {
  *     and an error to fix and replay.
  * ========================================================================== */
 
-/** Registry of what to watch. Adding a contract is adding a row here. */
-interface WatchTarget {
-  name: ContractName;
-  configKey: "staking" | "referralDistributor" | "mttToken";
-  events: Abi;
-}
-
-const TARGETS: WatchTarget[] = [
-  { name: Contracts.Staking, configKey: "staking", events: STAKING_EVENTS },
-  { name: Contracts.ReferralDistributor, configKey: "referralDistributor", events: REFERRAL_EVENTS },
-];
-
+/*
+ * What to watch now comes from CONTRACT_SPECS, and the event ABIs are FILTERED
+ * FROM THE GENERATED ABI rather than re-declared here. That is the fix for the
+ * defect this file's own header warned about: "an ABI mismatch does not throw,
+ * it silently matches nothing". It was warning about a bug it already had —
+ * seven of the eight signatures were wrong.
+ */
 const INDEX_LOCK_TTL_SECONDS = 120;
 
 export interface IndexRunResult {
@@ -91,7 +86,7 @@ export interface IndexerStatus {
 }
 
 @Injectable()
-export class IndexerService {
+export class IndexerService implements OnModuleInit {
   private readonly log = new Logger(IndexerService.name);
 
   constructor(
@@ -103,6 +98,22 @@ export class IndexerService {
     private readonly routines: DbRoutinesService,
   ) {}
 
+  /**
+   * Refuses to start if any watched event name is absent from the ABI.
+   *
+   * Deliberately fatal. The alternative — log a warning and carry on — is how a
+   * chain layer ends up reporting healthy while indexing nothing, which is the
+   * exact failure this service spent its first production life having.
+   */
+  onModuleInit(): void {
+    assertSpecsValid();
+
+    const summary = INDEXED_SPECS.map(
+      (s) => `${s.name}[${s.watch.length}]`,
+    ).join(" ");
+    this.log.log(`event specs validated against the generated ABIs: ${summary}`);
+  }
+
   /* ==================================================================== *
    * The run loop's single step
    * ==================================================================== */
@@ -110,7 +121,7 @@ export class IndexerService {
   /** Indexes every configured contract once. Called by the indexer cron. */
   async runAll(): Promise<IndexRunResult[]> {
     const results: IndexRunResult[] = [];
-    for (const target of TARGETS) {
+    for (const target of INDEXED_SPECS) {
       if (!this.rpc.hasAddress(target.configKey)) {
         results.push({
           contract: target.name,
@@ -131,7 +142,7 @@ export class IndexerService {
    * would both write, and while the unique index makes that harmless, it wastes
    * an RPC budget that providers meter.
    */
-  private async runOne(target: WatchTarget): Promise<IndexRunResult> {
+  private async runOne(target: ContractSpec): Promise<IndexRunResult> {
     const address = this.rpc.address(target.configKey);
     const cursorKey = `${target.name}@${address.toLowerCase()}`;
 
@@ -151,7 +162,7 @@ export class IndexerService {
   }
 
   private async indexUnderLock(
-    target: WatchTarget,
+    target: ContractSpec,
     address: `0x${string}`,
     cursorKey: string,
   ): Promise<IndexRunResult> {
@@ -190,7 +201,12 @@ export class IndexerService {
 
     let logs: GetLogsReturnType;
     try {
-      logs = await this.rpc.logs({ address, events: target.events, fromBlock, toBlock });
+      logs = await this.rpc.logs({
+        address,
+        events: watchedEventAbi(target),
+        fromBlock,
+        toBlock,
+      });
     } catch (e) {
       /* The cursor is NOT advanced on failure: the range will be retried, which
        * is exactly the behaviour a subscription cannot offer. */

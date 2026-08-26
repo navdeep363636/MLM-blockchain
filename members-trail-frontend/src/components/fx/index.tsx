@@ -163,22 +163,33 @@ export function AnimatedCounter({
 
 /* ------------------------------ Backgrounds ------------------------------ */
 
-/** Slow-drifting orange aurora blobs. Purely decorative. */
+/**
+ * Slow-drifting coloured lights. Purely decorative.
+ *
+ * Now built from the `--haze-*` tokens rather than literal colour-mixes, so the
+ * light-theme variant is a different, softer set of colours instead of the dark
+ * palette at lower opacity — which is what made this read grey in light mode.
+ */
 export function AuroraBackground({ className, intensity = 1 }: { className?: string; intensity?: number }) {
+  const layers = [
+    { v: "--haze-1", cls: "-left-[10%] -top-[20%] size-[46rem] blur-[120px]", anim: "aurora 22s ease-in-out infinite alternate" },
+    { v: "--haze-2", cls: "-right-[15%] top-[6%] size-[38rem] blur-[130px]", anim: "aurora 28s ease-in-out infinite alternate-reverse" },
+    { v: "--haze-3", cls: "bottom-[-25%] left-[22%] size-[34rem] blur-[140px]", anim: "aurora 34s ease-in-out infinite alternate" },
+    { v: "--haze-4", cls: "right-[12%] bottom-[-10%] size-[26rem] blur-[110px]", anim: "drift-3d 30s ease-in-out infinite alternate" },
+  ];
   return (
     <div className={cn("pointer-events-none absolute inset-0 overflow-hidden", className)} aria-hidden>
-      <div
-        className="absolute -left-[10%] -top-[20%] size-[46rem] rounded-full blur-[120px] animate-[aurora_22s_ease-in-out_infinite_alternate]"
-        style={{ background: `color-mix(in oklab, var(--accent) ${22 * intensity}%, transparent)` }}
-      />
-      <div
-        className="absolute -right-[15%] top-[10%] size-[38rem] rounded-full blur-[130px] animate-[aurora_28s_ease-in-out_infinite_alternate-reverse]"
-        style={{ background: `color-mix(in oklab, var(--color-brand-700) ${18 * intensity}%, transparent)` }}
-      />
-      <div
-        className="absolute bottom-[-25%] left-[25%] size-[34rem] rounded-full blur-[140px] animate-[aurora_34s_ease-in-out_infinite_alternate]"
-        style={{ background: `color-mix(in oklab, var(--series-2) ${9 * intensity}%, transparent)` }}
-      />
+      {layers.map((l) => (
+        <div
+          key={l.v}
+          className={cn("absolute rounded-full motion-reduce:animate-none", l.cls)}
+          style={{
+            background: `var(${l.v})`,
+            opacity: intensity,
+            animation: l.anim,
+          }}
+        />
+      ))}
     </div>
   );
 }
@@ -296,23 +307,30 @@ export function TiltCard({
     `radial-gradient(300px circle at ${x}% ${y}%, color-mix(in oklab, var(--accent) 22%, transparent), transparent 65%)`,
   );
 
+  /* `perspective` applies to an element's CHILDREN, never to the element it is
+     declared on. It used to sit on the same node as the rotation here, which
+     made the "3D" tilt a plain affine skew — no foreshortening, no near edge.
+     The perspective now lives on this wrapper, one level up from the rotation,
+     which is the only place it does anything. */
   return (
-    <motion.div
-      ref={ref}
-      onMouseMove={onMove}
-      onMouseLeave={onLeave}
-      style={{ rotateX: rx, rotateY: ry, transformStyle: "preserve-3d", perspective: 1000 }}
-      className={cn("relative", className)}
-    >
-      {children}
-      {glare && !reduce && (
-        <motion.span
-          aria-hidden
-          style={{ backgroundImage: glareBg }}
-          className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-0 transition-opacity duration-300 hover:opacity-100"
-        />
-      )}
-    </motion.div>
+    <div className="scene h-full" style={{ perspective: 1000 }}>
+      <motion.div
+        ref={ref}
+        onMouseMove={onMove}
+        onMouseLeave={onLeave}
+        style={{ rotateX: rx, rotateY: ry, transformStyle: "preserve-3d" }}
+        className={cn("relative h-full", className)}
+      >
+        {children}
+        {glare && !reduce && (
+          <motion.span
+            aria-hidden
+            style={{ backgroundImage: glareBg }}
+            className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-0 transition-opacity duration-300 hover:opacity-100"
+          />
+        )}
+      </motion.div>
+    </div>
   );
 }
 
@@ -377,15 +395,22 @@ export function Magnetic({ children, strength = 0.25, className }: { children: R
 export function ScrollProgress({ className }: { className?: string }) {
   const { scrollYProgress } = useScroll();
   const w = useSpring(scrollYProgress, { stiffness: 120, damping: 26, restDelta: 0.001 });
+  const head = useTransform(w, (v) => `${Math.min(1, Math.max(0, v)) * 100}%`);
   return (
-    <motion.div
-      style={{ scaleX: w }}
-      aria-hidden
-      className={cn(
-        "fixed inset-x-0 top-0 z-[90] h-0.5 origin-left bg-gradient-to-r from-[var(--color-brand-400)] to-[var(--color-brand-600)]",
-        className,
-      )}
-    />
+    <div aria-hidden className={cn("pointer-events-none fixed inset-x-0 top-0 z-[90] h-[3px]", className)}>
+      <motion.div
+        style={{ scaleX: w }}
+        className="h-full origin-left bg-[linear-gradient(90deg,var(--color-brand-600),var(--accent)_55%,var(--color-brand-300))]"
+      />
+      {/* The head: a small bright dot that rides the leading edge. Positioned
+          with `left`, not parented to the scaled bar — a child of a scaleX
+          transform is stretched with it, and the dot would render as an
+          ever-widening ellipse. */}
+      <motion.span
+        style={{ left: head }}
+        className="absolute top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--color-brand-200)] shadow-[0_0_12px_2px_var(--accent-ring)]"
+      />
+    </div>
   );
 }
 
@@ -473,3 +498,25 @@ export function FlashValue({ value, className, children }: { value: number | str
 }
 
 export { AnimatePresence, motion };
+
+/* ============================================================================
+ * Theme v2 — "Helix". The depth layer.
+ *
+ * These are re-exported from here so every existing `@/components/fx` import
+ * keeps working and picks the new primitives up for free. Nothing above was
+ * removed or renamed: `Reveal`, `TiltCard`, `SpotlightCard`, `Magnetic` and the
+ * rest still behave exactly as they did, and the new components sit alongside
+ * them rather than replacing them.
+ *
+ *   ./scene       perspective containers, parallax, sticky scroll scenes
+ *   ./helix       the 3D token helix, orbit rings, coins, the tide ribbon
+ *   ./text        word / line / character reveals
+ *   ./surfaces    holo cards, glass, magnetic CTAs, hover rows
+ *   ./atmosphere  the background stack (mesh haze, star field, grid floor)
+ * ========================================================================== */
+
+export * from "./scene";
+export * from "./helix";
+export * from "./text";
+export * from "./surfaces";
+export * from "./atmosphere";

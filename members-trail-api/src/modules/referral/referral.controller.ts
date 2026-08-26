@@ -1,6 +1,6 @@
 import { Controller, Get, HttpCode, Post, Query } from "@nestjs/common";
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { CurrentUser, RequireKyc, type AuthUser } from "@/common/decorators";
+import { CurrentUser, Idempotent, RequireKyc, type AuthUser } from "@/common/decorators";
 import type { Paginated } from "@/common/dto";
 import { CommissionService } from "./commission.service";
 import { ReferralService } from "./referral.service";
@@ -100,6 +100,7 @@ export class ReferralController {
   }
 
   @Post("claim")
+  @Idempotent("commission")
   @HttpCode(200)
   @RequireKyc(1)
   @ApiOperation({

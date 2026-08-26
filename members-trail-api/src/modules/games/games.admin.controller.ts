@@ -30,7 +30,7 @@ export class GamesAdminController {
   }
 
   @Put()
-  @RequirePermissions("game:write")
+  @RequirePermissions("games:write")
   @ApiOperation({
     summary: "Create or update a game and its Points caps",
     description: "Refuses a session cap above the daily cap — a single session must not out-earn a whole day.",

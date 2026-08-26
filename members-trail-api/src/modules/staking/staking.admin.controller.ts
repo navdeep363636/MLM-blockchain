@@ -29,7 +29,7 @@ export class StakingAdminController {
   }
 
   @Put("pools")
-  @RequirePermissions("staking:pool:write")
+  @RequirePermissions("staking:write")
   @ApiOperation({
     summary: "Create or update a pool mirror",
     description:
@@ -46,7 +46,7 @@ export class StakingAdminController {
   }
 
   @Post("pools/:poolId/recompute-apr")
-  @RequirePermissions("staking:pool:write")
+  @RequirePermissions("staking:write")
   @ApiOperation({
     summary: "Recompute the realised APR for a period",
     description:

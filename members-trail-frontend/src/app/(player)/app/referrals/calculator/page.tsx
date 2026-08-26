@@ -5,8 +5,7 @@ import { Ban, Info, Landmark, Scale, ShieldCheck, Users } from "lucide-react";
 import { Badge, Button, Callout, LevelBadge } from "@/components/ui";
 import { PageHeader } from "@/components/layout";
 import { CommissionCalculator } from "@/app/(public)/referral-program/_components/calculator";
-import { commissionConfig } from "@/lib/mock/admin";
-import { formatToken } from "@/lib/utils";
+import { CapFormula, EligibilityThreshold, RateTable } from "./_components/plan-facts";
 
 export const metadata = { title: "Commission structure" };
 
@@ -20,11 +19,13 @@ const ELIGIBLE = [
   { label: "Withdrawals", eligible: false, note: "Money leaving the platform generates nothing." },
 ];
 
-const GATES = [
-  { icon: <ShieldCheck />, title: "Tier 1 KYC before release", body: "Commission accrues in a pending state without KYC, but only becomes withdrawable once you are Tier 1 verified." },
-  { icon: <Users />, title: `Minimum ${commissionConfig.minAccountAgeDays} days and ${commissionConfig.minGameplaySessions} sessions`, body: "A referred account must reach a minimum age and a minimum number of genuine gameplay sessions before it can generate its first commission." },
-  { icon: <Landmark />, title: "Pool must be funded", body: "Even inside your cap, an entry only credits if the commission pool has been funded from reconciled revenue. Otherwise it queues until the next Treasury deposit." },
-  { icon: <Ban />, title: "No self-referral or loops", body: "Shared identity, device or payment fingerprints are flagged at registration. A refers B who refers A is blocked outright." },
+/* `title` is a node rather than a string because one of these thresholds comes
+ * from the live plan. `key` therefore uses an explicit id. */
+const GATES: { id: string; icon: React.ReactNode; title: React.ReactNode; body: string }[] = [
+  { id: "kyc", icon: <ShieldCheck />, title: "Tier 1 KYC before release", body: "Commission accrues in a pending state without KYC, but only becomes withdrawable once you are Tier 1 verified." },
+  { id: "threshold", icon: <Users />, title: <EligibilityThreshold />, body: "A referred account must reach a minimum age and a minimum number of genuine gameplay sessions before it can generate its first commission." },
+  { id: "funding", icon: <Landmark />, title: "Pool must be funded", body: "Even inside your cap, an entry only credits if the commission pool has been funded from reconciled revenue. Otherwise it queues until the next Treasury deposit." },
+  { id: "loops", icon: <Ban />, title: "No self-referral or loops", body: "Shared identity, device or payment fingerprints are flagged at registration. A refers B who refers A is blocked outright." },
 ];
 
 export default function CalculatorPage() {
@@ -41,47 +42,10 @@ export default function CalculatorPage() {
         }
       />
 
-      {/* Rate table */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        {commissionConfig.levels.map((l) => (
-          <div key={l.level} className="relative overflow-hidden rounded-[var(--radius-card)] border border-border-subtle bg-surface-1 p-5">
-            <span
-              className="absolute inset-x-0 top-0 h-0.5"
-              style={{ background: `var(--series-${l.level})` }}
-            />
-            <div className="flex items-baseline justify-between gap-3">
-              <LevelBadge level={l.level} />
-              <span className="tnum font-display text-2xl font-semibold tracking-tight text-text-primary">
-                {l.ratePct}%
-              </span>
-            </div>
-            <p className="mt-3 text-sm text-text-secondary">
-              {l.level === 1
-                ? "Someone who signed up with your code."
-                : l.level === 2
-                  ? "Someone your direct referral brought in."
-                  : "One step further. This is where it stops."}
-            </p>
-            <p className="mt-2 text-xs leading-relaxed text-text-muted">
-              Applied to that member&apos;s eligible real-money spend only.
-            </p>
-          </div>
-        ))}
-      </div>
-
-      <Callout tone="brand" title="How your monthly cap is calculated" icon={<Scale />} className="mt-5">
-        <p className="mt-1">
-          <code className="rounded bg-surface-3 px-1.5 py-0.5 font-mono text-[11px] text-text-secondary">
-            cap = min(₹{formatToken(commissionConfig.monthlyCapAbsolute, 0)},
-            {" "}{commissionConfig.monthlyCapMultiplier} × your trailing 3-month average real-money spend
-            + ₹{formatToken(commissionConfig.monthlyCapBase, 0)})
-          </code>
-          <br />
-          Tying the ceiling loosely to your own engagement as a player — rather than purely to how
-          many people you recruit — is what keeps referral income secondary. Amounts above the cap are
-          not paid and do not carry over into the following month.
-        </p>
-      </Callout>
+      {/* Rate table and cap formula both quote the live plan, so they are client
+          components — see _components/plan-facts.tsx. */}
+      <RateTable />
+      <CapFormula />
 
       {/* Eligibility */}
       <div className="mt-6 overflow-hidden rounded-[var(--radius-card)] border border-border-subtle bg-surface-1">
@@ -114,7 +78,7 @@ export default function CalculatorPage() {
       <h2 className="mt-8 mb-4 text-sm font-semibold text-text-primary">Conditions that must also be met</h2>
       <div className="grid gap-4 sm:grid-cols-2">
         {GATES.map((g) => (
-          <div key={g.title} className="flex gap-3.5 rounded-[var(--radius-card)] border border-border-subtle bg-surface-1 p-5">
+          <div key={g.id} className="flex gap-3.5 rounded-[var(--radius-card)] border border-border-subtle bg-surface-1 p-5">
             <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent-soft text-[var(--accent)] [&>svg]:size-4">
               {g.icon}
             </span>

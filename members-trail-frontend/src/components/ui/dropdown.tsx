@@ -54,14 +54,21 @@ export function Dropdown({
             exit={{ opacity: 0, y: -6, scale: 0.97 }}
             transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
             className={cn(
-              "absolute z-50 mt-2 min-w-52 overflow-hidden rounded-xl border border-border-default bg-surface-2 p-1.5 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.8)]",
+              "absolute z-50 mt-2 min-w-52 overflow-hidden rounded-2xl border border-border-default p-1.5",
+              /* Popovers are the one place a heavy blur is worth its cost: the
+                 menu must stay readable over a dashboard full of charts, and a
+                 solid fill at this size hides too much of what you were
+                 looking at. */
+              "glass-2",
               align === "end" ? "right-0" : "left-0",
               menuClassName,
             )}
           >
             {items.map((it, i) => {
               const cls = cn(
-                "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors",
+                "group/mi relative flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm",
+                "transition-[background-color,color,transform] duration-[var(--dur-instant)] ease-[var(--ease-tide)]",
+                "hover:translate-x-0.5",
                 it.tone === "danger"
                   ? "text-critical-400 hover:bg-critical-500/10"
                   : "text-text-secondary hover:bg-surface-3 hover:text-text-primary",

@@ -44,7 +44,7 @@ export class FraudAdminController {
   }
 
   @Patch("alerts/:ref/resolve")
-  @RequirePermissions("fraud:resolve")
+  @RequirePermissions("fraud:write")
   @ApiOperation({
     summary: "Close an alert with a decision and a note",
     description:
@@ -68,7 +68,7 @@ export class FraudAdminController {
   }
 
   @Put("rules")
-  @RequirePermissions("fraud:rules:write")
+  @RequirePermissions("fraud:write")
   @ApiOperation({
     summary: "Create or update a detection rule",
     description:
@@ -86,7 +86,7 @@ export class FraudAdminController {
   }
 
   @Post("sweep")
-  @RequirePermissions("fraud:resolve")
+  @RequirePermissions("fraud:write")
   @ApiOperation({
     summary: "Run every enabled detection pattern now",
     description: "Normally driven by the cron. Alerts are deduped, so running it twice is harmless.",
@@ -97,7 +97,7 @@ export class FraudAdminController {
   }
 
   @Post("sweep/cap-hugging")
-  @RequirePermissions("fraud:resolve")
+  @RequirePermissions("fraud:write")
   @ApiOperation({
     summary: "Run the cap-hugging pattern for a month",
     description: "Low-signal on its own: a member at their cap may simply be a successful referrer.",

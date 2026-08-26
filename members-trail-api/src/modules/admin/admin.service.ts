@@ -5,20 +5,23 @@ import {
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import {
-  ApprovalRequest, AuditLog, Commission, FraudAlert, RolePermission, Ticket, User, Withdrawal,
+  ApprovalRequest, AuditLog, Commission, FraudAlert, KycSubmission, PointsLedgerEntry,
+  RolePermission, Ticket, User, Withdrawal,
   type ApprovalKind, type UserStatus,
 } from "@/database/entities";
 import { EventBusService, Events } from "@/events";
-import { paginate, type Paginated } from "@/common/dto";
-import { Ref, addHours, toDbAmount } from "@/common/utils";
+import { paginate, safeSort, type Paginated } from "@/common/dto";
+import { Ref, addHours, dec, monthKey, toDbAmount } from "@/common/utils";
 import { AuditService } from "@/modules/audit/audit.service";
 import { NotificationsService } from "@/modules/notifications/notifications.service";
 import { CommissionService } from "@/modules/referral/commission.service";
 import { DbRoutinesService } from "@/database/routines/db-routines.service";
+import { MEMBER_SORTS } from "./dto/admin.dto";
 import type {
   ApprovalQuery, ApprovalResponse, AuditEntryResponse, AuditQuery, ChangeUserStatusRequest,
-  CreateApprovalRequest, DecideApprovalRequest, PlatformKpisResponse, RolePermissionResponse,
-  SetRolePermissionRequest,
+  CreateApprovalRequest, DecideApprovalRequest, MemberQuery, MemberSummaryResponse,
+  PlatformKpisResponse, RolePermissionResponse, SetRolePermissionRequest, StaffIdentityResponse,
+  StaffMemberResponse,
 } from "./dto/admin.dto";
 
 /* ============================================================================
@@ -67,6 +70,8 @@ export class AdminService {
     @InjectRepository(FraudAlert) private readonly alerts: Repository<FraudAlert>,
     @InjectRepository(Ticket) private readonly tickets: Repository<Ticket>,
     @InjectRepository(Commission) private readonly commissions: Repository<Commission>,
+    @InjectRepository(KycSubmission) private readonly kycSubmissions: Repository<KycSubmission>,
+    @InjectRepository(PointsLedgerEntry) private readonly pointsLedger: Repository<PointsLedgerEntry>,
     private readonly commission: CommissionService,
     private readonly routines: DbRoutinesService,
     private readonly notifications: NotificationsService,
@@ -472,18 +477,42 @@ export class AdminService {
      * and one of them (active members in the last 30 days) scanned the whole
      * users table for want of an index. */
     const k = await this.routines.adminKpis();
-    const members = k.members;
-    const activeMembers30d = k.activeMembers30d;
-    const kycVerified = k.kycVerified;
-    const frozen = k.frozenAccounts;
-    const withdrawalsInReview = k.withdrawalsInReview;
-    const openFraudAlerts = k.openFraudAlerts;
-    const pendingApprovals = k.pendingApprovals;
-    const breachedTickets = k.breachedTickets;
+    /* Coerced through Number: a COUNT over a view arrives from the driver as a
+     * string, and a response that mixes 4 with "0" sorts as text in the browser. */
+    const members = Number(k.members);
+    const activeMembers30d = Number(k.activeMembers30d);
+    const kycVerified = Number(k.kycVerified);
+    const frozen = Number(k.frozenAccounts);
+    const withdrawalsInReview = Number(k.withdrawalsInReview);
+    const openFraudAlerts = Number(k.openFraudAlerts);
+    const pendingApprovals = Number(k.pendingApprovals);
+    const breachedTickets = Number(k.breachedTickets);
 
     /* The invariant itself, from the service that owns it — rather than a second,
      * possibly-divergent calculation here. */
     const solvency = await this.commission.fundingAvailable();
+
+    /* The dashboard's tiles and charts. Six index-backed reads in parallel: the
+     * alternative was a second endpoint, and a dashboard assembled from two
+     * responses shows an operator a half-updated screen — which is precisely the
+     * mistake this page exists to catch. */
+    const [
+      liability, ratio, treasury, activeToday, activeYesterday, active30dPrior,
+      points30d, pendingWithdrawals, openKyc, openTickets,
+    ] = await Promise.all([
+        this.routines.mttLiability(),
+        this.routines.payoutRatio(monthKey()),
+        this.routines.treasuryPeriod(monthKey()),
+        this.activeMembersToday(),
+        this.activeMembersOnDay(1),
+        this.activeMembersInWindow(60, 30),
+        this.pointsIssuedSince(30),
+        this.pendingWithdrawalTotals(),
+        this.kycSubmissions.count({ where: [{ status: "pending" }, { status: "in_review" }] }),
+        this.tickets.count({
+          where: [{ status: "open" }, { status: "pending_user" }, { status: "escalated" }],
+        }),
+      ]);
 
     const queuedCommissionMtt = toDbAmount(k.queuedCommissionMtt);
 
@@ -526,7 +555,317 @@ export class AdminService {
        * blocker attached, not a metric to trend. */
       commissionSolvent: solvency.solvent,
       attentionRequired,
+
+      activeMembersToday: activeToday,
+      pointsIssued30d: points30d,
+      mttLiability: toDbAmount(liability.totalLiabilityMtt),
+      mttStaked: toDbAmount(liability.stakedMtt),
+      treasuryHeadroomMtt: toDbAmount(solvency.availableMtt),
+      pendingWithdrawals: pendingWithdrawals.count,
+      pendingWithdrawalsMtt: pendingWithdrawals.amount,
+      openKycQueue: openKyc,
+      openTickets,
+      commissionPayoutRatioPct: this.bpsToPct(ratio.commissionRatioBps),
+      outflowRatioPct: this.bpsToPct(ratio.outflowRatioBps),
+      revenueFundedPct: this.fundedPct(solvency),
+      activeTodayDeltaPct: this.deltaPct(activeToday, activeYesterday),
+      active30dDeltaPct: this.deltaPct(activeMembers30d, active30dPrior),
+      stakingOutflowRatioPct: this.shareOf(treasury.stakingPoolOut, treasury.reconciledInflow),
     };
+  }
+
+  /* ==================================================================== *
+   * Dashboard support reads
+   * ==================================================================== */
+
+  /**
+   * Members with a session validated today, UTC.
+   *
+   * `lastActiveAt` rather than a session row count: one member with four devices
+   * is one active member, and counting sessions would have made a security
+   * incident look like growth.
+   */
+  private async activeMembersToday(): Promise<number> {
+    const start = new Date();
+    start.setUTCHours(0, 0, 0, 0);
+    return this.users.createQueryBuilder("u")
+      .where("u.lastActiveAt >= :start", { start })
+      .andWhere("u.isStaff = 0")
+      .getCount();
+  }
+
+  /**
+   * Members active on a single day, `daysAgo` days back.
+   *
+   * A closed interval, not "since": comparing today-so-far against a whole
+   * yesterday would show a decline every morning and a recovery every evening.
+   */
+  private async activeMembersOnDay(daysAgo: number): Promise<number> {
+    const start = new Date();
+    start.setUTCHours(0, 0, 0, 0);
+    start.setUTCDate(start.getUTCDate() - daysAgo);
+    const end = new Date(start.getTime() + 86_400_000);
+    return this.users.createQueryBuilder("u")
+      .where("u.lastActiveAt >= :start", { start })
+      .andWhere("u.lastActiveAt < :end", { end })
+      .andWhere("u.isStaff = 0")
+      .getCount();
+  }
+
+  /**
+   * Members active in a window that ENDED `endDaysAgo` days ago.
+   *
+   * Note the limit this figure carries: `lastActiveAt` records only the most
+   * recent visit, so a member active in both windows counts once — in the later
+   * one. The prior-window count is therefore a floor, and the delta it feeds is
+   * conservative rather than flattering. Measuring it properly needs the session
+   * table, which is a heavier read than a dashboard tile justifies.
+   */
+  private async activeMembersInWindow(startDaysAgo: number, endDaysAgo: number): Promise<number> {
+    const now = Date.now();
+    return this.users.createQueryBuilder("u")
+      .where("u.lastActiveAt >= :start", { start: new Date(now - startDaysAgo * 86_400_000) })
+      .andWhere("u.lastActiveAt < :end", { end: new Date(now - endDaysAgo * 86_400_000) })
+      .andWhere("u.isStaff = 0")
+      .getCount();
+  }
+
+  /**
+   * Percentage change, or null when there is no basis.
+   *
+   * Zero-to-something is not "infinite growth" and not "0%"; it is a comparison
+   * that cannot be made, and the dashboard renders null as no delta at all.
+   */
+  private deltaPct(current: number, prior: number): number | null {
+    if (prior <= 0) return null;
+    return Number((((current - prior) / prior) * 100).toFixed(1));
+  }
+
+  /** One decimal share of a total, or null when the total is zero. */
+  private shareOf(part: string, total: string): number | null {
+    const t = dec(total);
+    if (t.lte(0)) return null;
+    return Number(dec(part).div(t).mul(100).toFixed(1));
+  }
+
+  /** Points credited — not net — over a trailing window. Debits are conversions out. */
+  private async pointsIssuedSince(days: number): Promise<string> {
+    const since = new Date(Date.now() - days * 86_400_000);
+    const row = await this.pointsLedger.createQueryBuilder("p")
+      .select("SUM(p.amount)", "total")
+      .where("p.createdAt >= :since", { since })
+      .andWhere("p.amount > 0")
+      .getRawOne<{ total: string | null }>();
+    return toDbAmount(row?.total ?? 0);
+  }
+
+  /**
+   * Withdrawals in flight, by count and value.
+   *
+   * "In flight" is every non-terminal state, not just `review`: a member's money
+   * is committed from the moment they ask, and a dashboard that counts only the
+   * ones a human has looked at understates the platform's obligations.
+   */
+  private async pendingWithdrawalTotals(): Promise<{ count: number; amount: string }> {
+    const row = await this.withdrawals.createQueryBuilder("w")
+      .select("COUNT(*)", "count")
+      .addSelect("SUM(w.amountMtt)", "amount")
+      .where("w.status NOT IN (:...done)", {
+        done: ["completed", "rejected", "cancelled", "failed"],
+      })
+      .getRawOne<{ count: string; amount: string | null }>();
+    return { count: Number(row?.count ?? 0), amount: toDbAmount(row?.amount ?? 0) };
+  }
+
+  private bpsToPct(bps: number | null): number | null {
+    if (bps === null || bps === undefined) return null;
+    return Number(dec(bps).div(100).toFixed(1));
+  }
+
+  /**
+   * Share of committed commission covered by confirmed funding.
+   *
+   * Capped at 100. The pool is routinely funded ahead of commitments and
+   * "312% funded" invites the reading that members are owed three times what
+   * they earned.
+   */
+  private fundedPct(solvency: { poolFundedMtt: string; committedMtt: string }): number | null {
+    const committed = dec(solvency.committedMtt);
+    if (committed.lte(0)) return null;
+    const pct = dec(solvency.poolFundedMtt).div(committed).mul(100);
+    return Number(pct.gt(100) ? "100.0" : pct.toFixed(1));
+  }
+
+  /* ==================================================================== *
+   * Directories
+   * ==================================================================== */
+
+  /**
+   * Who is operating the back-office, and what they may do.
+   *
+   * The approver list is computed HERE rather than filtered in the browser. The
+   * client asking "who can second-approve me" and the server deciding "may this
+   * person second-approve that request" have to agree, and the only way to
+   * guarantee that is for one of them to be the single source. A UI that offers
+   * an ineligible approver produces a rejected submission and a confused
+   * operator; a UI that offers the requester themselves is a control failure.
+   */
+  async staffIdentity(actorId: string): Promise<StaffIdentityResponse> {
+    const me = await this.users.findOne({ where: { id: actorId, isStaff: true } });
+    if (!me) throw new NotFoundException("No staff record for the current session");
+
+    const [colleagues, modules] = await Promise.all([
+      this.users.find({
+        where: { isStaff: true },
+        order: { fullName: "ASC" },
+        take: 200,
+      }),
+      this.permissionMatrix(),
+    ]);
+
+    const mine = modules.filter((m) => m.role === me.role);
+
+    return {
+      me: this.toStaff(me),
+      permissions: this.permissionStrings(mine),
+      modules: mine,
+      approvers: colleagues
+        .filter((c) => c.id !== me.id && c.status === "active" && c.twoFaEnabledAt !== null)
+        .map((c) => this.toStaff(c)),
+      /* The operator's clock is not authoritative for an SLA countdown. */
+      serverTime: new Date().toISOString(),
+    };
+  }
+
+  /** The staff directory. Small by nature, so it is not paginated. */
+  async listStaff(): Promise<StaffMemberResponse[]> {
+    const rows = await this.users.find({
+      where: { isStaff: true },
+      order: { role: "ASC", fullName: "ASC" },
+      take: 200,
+    });
+    return rows.map((r) => this.toStaff(r));
+  }
+
+  /**
+   * The member directory.
+   *
+   * Contact details are masked in every row. An operator confirming they have
+   * the right account is served by a mask; reading ten thousand addresses off a
+   * list is not a support task, and the unmasked value is on the member's own
+   * record where the read is attributable to one person and one reason.
+   *
+   * Deliberately carries no balances. A directory row with money on it would put
+   * every member's holdings behind one search box.
+   */
+  async listMembers(q: MemberQuery): Promise<Paginated<MemberSummaryResponse>> {
+    const qb = this.users.createQueryBuilder("u").where("u.isStaff = 0");
+
+    if (q.status) qb.andWhere("u.status = :status", { status: q.status });
+    if (q.kycTier) qb.andWhere("u.kycTier = :tier", { tier: q.kycTier });
+    if (q.country) qb.andWhere("u.country = :country", { country: q.country.toUpperCase() });
+    if (q.minRiskScore !== undefined) {
+      qb.andWhere("u.riskScore >= :risk", { risk: q.minRiskScore });
+    }
+    if (q.from) qb.andWhere("u.createdAt >= :from", { from: new Date(q.from) });
+    if (q.to) qb.andWhere("u.createdAt <= :to", { to: new Date(q.to) });
+
+    /* Search is on `ref`, `displayName` and `referralCode` only. Not on email or
+     * phone: those columns are stored hashed for exactly this reason, and a LIKE
+     * over a member's plaintext contact details is the query an operator should
+     * not be able to run casually. Looking up a known address goes through the
+     * hash, which is an equality match on one person. */
+    if (q.q) {
+      const term = q.q.trim();
+      qb.andWhere(
+        "(u.ref LIKE :like OR u.displayName LIKE :like OR u.referralCode = :exact)",
+        { like: `%${term}%`, exact: term.toUpperCase() },
+      );
+    }
+
+    const sortBy = safeSort(q.sortBy, [...MEMBER_SORTS], "createdAt");
+    const [rows, total] = await qb
+      .orderBy(`u.${sortBy}`, q.sortDir)
+      .skip(q.skip)
+      .take(q.limit)
+      .getManyAndCount();
+
+    return paginate(rows.map((r) => this.toMemberSummary(r)), total, q);
+  }
+
+  /* ------------------------------- mappers -------------------------------- */
+
+  private toStaff(u: User): StaffMemberResponse {
+    return {
+      id: u.id,
+      name: u.fullName ?? u.displayName,
+      email: u.email,
+      role: u.role,
+      twoFactorEnabled: u.twoFaEnabledAt !== null,
+      lastActiveAt: u.lastActiveAt?.toISOString() ?? null,
+      active: u.status === "active",
+    };
+  }
+
+  private toMemberSummary(u: User): MemberSummaryResponse {
+    return {
+      id: u.id,
+      ref: u.ref,
+      displayName: u.displayName,
+      email: this.maskEmail(u.email),
+      phone: this.maskPhone(u.phone ?? null),
+      country: u.country ?? null,
+      status: u.status,
+      kycTier: u.kycTier,
+      twoFactorEnabled: u.twoFaEnabledAt !== null,
+      walletAddress: this.truncateAddress(u.walletAddress ?? null),
+      walletType: u.walletType ?? null,
+      referralCode: u.referralCode,
+      /* Whether, not by whom. The sponsor's identity is another member's data and
+       * belongs on the referral screen, behind its own permission. */
+      wasReferred: u.referredById !== null,
+      joinedAt: u.createdAt.toISOString(),
+      lastActiveAt: u.lastActiveAt?.toISOString() ?? null,
+      riskScore: u.riskScore,
+      riskFlags: u.riskFlags ?? [],
+    };
+  }
+
+  /** `alice@example.com` → `a•••@example.com`. The domain stays: it is often the tell. */
+  private maskEmail(email: string | null): string {
+    if (!email) return "—";
+    const at = email.indexOf("@");
+    if (at <= 0) return "•••";
+    return `${email[0]}•••${email.slice(at)}`;
+  }
+
+  private maskPhone(phone: string | null): string | null {
+    if (!phone) return null;
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length < 4) return "•••";
+    return `•••• ${digits.slice(-2)}`;
+  }
+
+  private truncateAddress(address: string | null): string | null {
+    if (!address) return null;
+    return address.length <= 12 ? address : `${address.slice(0, 6)}…${address.slice(-4)}`;
+  }
+
+  /**
+   * Flattens the module matrix into the permission strings the guard checks.
+   *
+   * The UI needs to know whether to render a button; the guard decides whether
+   * the request is allowed. Both read this same list, so a hidden button and a
+   * 403 can never disagree.
+   */
+  private permissionStrings(modules: RolePermissionResponse[]): string[] {
+    const perms: string[] = [];
+    for (const m of modules) {
+      if (m.canRead) perms.push(`${m.module}:read`);
+      if (m.canWrite) perms.push(`${m.module}:write`);
+      if (m.canApprove) perms.push(`${m.module}:approve`);
+    }
+    return perms.sort();
   }
 }
 

@@ -1,5 +1,12 @@
 # Members Trail — Frontend
 
+> **Now wired to the API.** The mock data layer is gone — `src/lib/mock/` no longer
+> exists. Every read goes through `src/lib/hooks/use-data.ts` and every write
+> through `src/lib/hooks/use-mutations.ts`, both talking to the Members Trail API.
+> Set `NEXT_PUBLIC_API_URL` (see `.env.example`) and read **`INTEGRATION.md`** before
+> changing anything in `src/lib/api/`.
+
+
 Next.js frontend for the Members Trail play-to-earn gaming and affiliate rewards
 platform, built to the Functional Requirements Document (FRD v1.0). Covers the
 public marketing site, the full player application, and the 14-page admin

@@ -6,7 +6,7 @@
 import Link from "next/link";
 import { ArrowRight, Star, Users } from "lucide-react";
 import { Badge, Button, SkeletonCard } from "@/components/ui";
-import { RevealGroup, RevealItem, TiltCard } from "@/components/fx";
+import { HoloCard, RevealGroup, RevealItem } from "@/components/fx";
 import { useGames } from "@/lib/hooks/use-data";
 import { formatCompact, formatNumber } from "@/lib/utils";
 import { GameArt } from "./game-art";
@@ -32,9 +32,25 @@ export function FeaturedGames() {
       >
         {featured.map((g) => (
           <RevealItem key={g.id} className="w-[17rem] shrink-0 snap-start md:w-auto">
-            <TiltCard max={6} className="h-full">
-              <article className="flex h-full flex-col overflow-hidden rounded-[var(--radius-card)] border border-border-subtle bg-surface-1 transition-colors hover:border-[color-mix(in_oklab,var(--accent)_38%,var(--border-default))]">
-                <GameArt hue={g.thumbnailHue} title={g.title} />
+            <HoloCard max={6} lift={26} className="h-full rounded-[var(--radius-card)]">
+              <article
+                className="group flex h-full flex-col overflow-hidden rounded-[var(--radius-card)] border border-border-subtle bg-surface-1
+                           [box-shadow:var(--shadow-e2),inset_0_1px_0_0_var(--rim-light)]
+                           transition-[border-color,box-shadow] duration-[var(--dur-base)] ease-[var(--ease-tide)]
+                           hover:border-[color-mix(in_oklab,var(--accent)_38%,var(--border-default))]
+                           hover:[box-shadow:var(--shadow-e4),inset_0_1px_0_0_var(--rim-light-strong)]"
+              >
+                {/* The cover art zooms very slightly inside its own clip on
+                    hover. It is the one "media" element on these cards, and
+                    scaling it rather than the card keeps the text crisp — a
+                    scaled card resamples its own type. */}
+                <div className="overflow-hidden">
+                  <GameArt
+                    hue={g.thumbnailHue}
+                    title={g.title}
+                    className="transition-transform duration-[var(--dur-cinema)] ease-[var(--ease-tide)] group-hover:scale-[1.06] motion-reduce:transform-none"
+                  />
+                </div>
                 <div className="flex flex-1 flex-col p-4">
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="text-sm font-semibold text-text-primary">{g.title}</h3>
@@ -69,7 +85,7 @@ export function FeaturedGames() {
                   </div>
                 </div>
               </article>
-            </TiltCard>
+            </HoloCard>
           </RevealItem>
         ))}
       </RevealGroup>
@@ -80,7 +96,7 @@ export function FeaturedGames() {
         </Button>
         <p className="text-xs text-text-muted">
           Points ranges are per scored session and vary with performance and{" "}
-          <Link href="/how-it-works#caps" className="text-[var(--accent-hover)] underline underline-offset-2">
+          <Link href="/how-it-works#caps" className="link-slide text-[var(--accent-hover)]">
             daily caps
           </Link>
           . They are not an earnings estimate.

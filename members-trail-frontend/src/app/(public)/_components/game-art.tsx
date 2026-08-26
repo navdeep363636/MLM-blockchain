@@ -80,7 +80,7 @@ export function GameArt({
 /** Small square chip version — used in marquees and list rows. */
 export function GameChip({ hue, title }: { hue: number; title: string }) {
   return (
-    <span className="inline-flex items-center gap-2.5 rounded-full border border-border-subtle bg-surface-1 py-1.5 pl-1.5 pr-4">
+    <span className="inline-flex items-center gap-2.5 rounded-full border border-border-subtle bg-surface-1 py-1.5 pl-1.5 pr-4 [box-shadow:var(--shadow-e1),inset_0_1px_0_0_var(--rim-light)]">
       <GameArt hue={hue} title={title} ratio="size-7" className="rounded-full" compact monogramClass="text-[9px]" />
       <span className="whitespace-nowrap text-sm font-medium text-text-secondary">{title}</span>
     </span>

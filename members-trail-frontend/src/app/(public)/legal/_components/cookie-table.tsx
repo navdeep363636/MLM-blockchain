@@ -3,7 +3,7 @@
  * Cookie Policy page stays fully static and prints cleanly. */
 
 import { Check, X } from "lucide-react";
-import { cookieGroups, type CookieGroup } from "@/lib/mock/legal";
+import { cookieGroups, type CookieGroup } from "@/content/cookies";
 
 const ORDER: CookieGroup["category"][] = [
   "Strictly necessary",

@@ -1,6 +1,8 @@
 import { Controller, Get, HttpCode, Param, Post, Query } from "@nestjs/common";
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { ClientIp, CurrentUser, Public, RequireKyc, type AuthUser } from "@/common/decorators";
+import {
+  ClientIp, CurrentUser, Idempotent, Public, RequireKyc, type AuthUser,
+} from "@/common/decorators";
 import type { Paginated } from "@/common/dto";
 import { TournamentsService } from "./tournaments.service";
 import {
@@ -61,6 +63,7 @@ export class TournamentsController {
   }
 
   @Post(":ref/register")
+  @Idempotent("tournament")
   @HttpCode(201)
   @ApiBearerAuth()
   @RequireKyc(1)

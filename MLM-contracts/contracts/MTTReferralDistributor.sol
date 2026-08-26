@@ -52,7 +52,19 @@ contract MTTReferralDistributor is AccessControl, ReentrancyGuard {
         bytes32 dedupeKey
     );
     event CommissionClaimed(address indexed recipient, uint256 amount);
-    event CommissionClawedBack(address indexed recipient, uint256 amount, bytes32 indexed sourceEventId);
+    /**
+     * @dev `reason` is emitted, not stored. A clawback is a rare compliance act
+     *      that a human will have to justify later, so the justification belongs
+     *      in the permanent record next to the amount — but storing a string in
+     *      contract state would cost gas on every clawback forever to hold data
+     *      nothing on-chain ever reads.
+     */
+    event CommissionClawedBack(
+        address indexed recipient,
+        uint256 amount,
+        bytes32 indexed sourceEventId,
+        string reason
+    );
     event KycStatusUpdated(address indexed user, bool approved);
 
     constructor(address mttToken, address admin) {
@@ -96,7 +108,7 @@ contract MTTReferralDistributor is AccessControl, ReentrancyGuard {
         require(recipient != address(0), "recipient=0");
         require(amount > 0, "amount=0");
 
-        bytes32 dedupeKey = keccak256(abi.encodePacked(recipient, level, sourceEventId));
+        bytes32 dedupeKey = dedupeKeyFor(recipient, level, sourceEventId);
         require(!processedCommissions[dedupeKey], "already recorded");
         require(totalRecorded + amount <= totalDeposited, "insufficient funded pool balance");
 
@@ -107,23 +119,119 @@ contract MTTReferralDistributor is AccessControl, ReentrancyGuard {
         emit CommissionRecorded(recipient, level, amount, sourceEventId, dedupeKey);
     }
 
+    /// One line of a batched commission settlement.
+    struct CommissionEntry {
+        address recipient;
+        uint8 level;
+        uint256 amount;
+    }
+
+    /**
+     * @notice Records every commission owed for ONE revenue event, atomically.
+     *
+     * This is how the backend is meant to settle. A single qualifying purchase
+     * generates up to three commissions — level 1, 2 and 3 up the referral
+     * chain — and recording them one transaction at a time has two failure
+     * modes that matter:
+     *
+     *   · PARTIAL SETTLEMENT. Level 1 lands, level 2 reverts on the pool
+     *     invariant, and the ledger now says one member was paid for a purchase
+     *     and their upline was not. Nothing on-chain marks that as incomplete.
+     *     Here the invariant is checked once against the TOTAL, so either the
+     *     whole chain is recorded or none of it is.
+     *
+     *   · COST. Three transactions carry three base fees and three signatures
+     *     for one economic event, on a platform whose whole promise is that
+     *     commission is a capped percentage of real revenue.
+     *
+     * Per-entry dedupe is preserved exactly as in the single-entry path, so a
+     * replayed batch is refused on the first already-recorded line rather than
+     * partially applied.
+     */
+    function recordCommissionBatch(CommissionEntry[] calldata entries, bytes32 sourceEventId)
+        external
+        onlyRole(ORACLE_ROLE)
+    {
+        uint256 n = entries.length;
+        require(n > 0, "empty batch");
+        require(n <= 16, "batch too large");
+
+        uint256 total = 0;
+        for (uint256 i = 0; i < n; i++) {
+            require(entries[i].recipient != address(0), "recipient=0");
+            require(entries[i].amount > 0, "amount=0");
+            total += entries[i].amount;
+        }
+
+        /* One invariant check, against the sum. This is the anti-pyramid
+         * safeguard: the batch is refused whole if real revenue has not already
+         * funded all of it. */
+        require(totalRecorded + total <= totalDeposited, "insufficient funded pool balance");
+
+        for (uint256 i = 0; i < n; i++) {
+            CommissionEntry calldata e = entries[i];
+            bytes32 dedupeKey = dedupeKeyFor(e.recipient, e.level, sourceEventId);
+            require(!processedCommissions[dedupeKey], "already recorded");
+
+            processedCommissions[dedupeKey] = true;
+            commissionBalance[e.recipient] += e.amount;
+
+            emit CommissionRecorded(e.recipient, e.level, e.amount, sourceEventId, dedupeKey);
+        }
+
+        totalRecorded += total;
+    }
+
     /**
      * @notice Reverses a previously recorded, unclaimed commission — e.g. if
      *         the underlying transaction was refunded or found fraudulent
      *         (FRD Section 11.5, clawback provisions). Cannot claw back
      *         amounts already claimed by the user.
      */
-    function clawback(address recipient, uint256 amount, bytes32 sourceEventId) external onlyRole(COMPLIANCE_ROLE) {
+    function clawback(
+        address recipient,
+        uint256 amount,
+        bytes32 sourceEventId,
+        string calldata reason
+    ) external onlyRole(COMPLIANCE_ROLE) {
+        require(amount > 0, "amount=0");
         require(commissionBalance[recipient] >= amount, "exceeds balance");
+        require(bytes(reason).length > 0, "reason required");
+
         commissionBalance[recipient] -= amount;
         totalRecorded -= amount;
-        emit CommissionClawedBack(recipient, amount, sourceEventId);
+
+        /* `totalRecorded` falls, which frees the same capacity back to the pool.
+         * That is correct: the revenue that funded this commission is still
+         * deposited, and it can now fund a legitimate one. */
+        emit CommissionClawedBack(recipient, amount, sourceEventId, reason);
     }
 
     /// @notice Compliance-gated KYC flag. Commission is claimable only once approved.
     function setKycApproved(address user, bool approved) external onlyRole(COMPLIANCE_ROLE) {
         kycApproved[user] = approved;
         emit KycStatusUpdated(user, approved);
+    }
+
+    /**
+     * @notice Batched KYC flag updates.
+     *
+     * KYC decisions arrive from a review queue, so they arrive in groups. One
+     * transaction per approval means a reviewer clearing forty submissions pays
+     * forty base fees and the backend tracks forty independent confirmations,
+     * any of which can be the one that silently fails.
+     */
+    function setKycApprovedBatch(address[] calldata users, bool approved)
+        external
+        onlyRole(COMPLIANCE_ROLE)
+    {
+        uint256 n = users.length;
+        require(n > 0 && n <= 100, "bad batch size");
+        for (uint256 i = 0; i < n; i++) {
+            require(users[i] != address(0), "user=0");
+            kycApproved[users[i]] = approved;
+            emit KycStatusUpdated(users[i], approved);
+        }
     }
 
     /// @notice Claim all currently recorded, unclaimed commission. Requires Tier-1 KYC approval.
@@ -142,5 +250,65 @@ contract MTTReferralDistributor is AccessControl, ReentrancyGuard {
     /// @notice View helper: funded-but-not-yet-recorded balance available for new commissions.
     function availablePoolBalance() external view returns (uint256) {
         return totalDeposited - totalRecorded;
+    }
+
+    /**
+     * @notice The dedupe key for a commission, computed on-chain.
+     *
+     * The backend has to know whether a commission was already recorded before
+     * it spends gas finding out by reverting. It could hash the tuple itself, but
+     * then two implementations of `abi.encodePacked` — one in Solidity, one in
+     * viem — have to agree forever about the packing of a `uint8`. They are one
+     * refactor away from not agreeing, and the failure is silent: a key that
+     * matches nothing reads as "not yet recorded" and invites a double payment.
+     */
+    function dedupeKeyFor(address recipient, uint8 level, bytes32 sourceEventId)
+        public
+        pure
+        returns (bytes32)
+    {
+        return keccak256(abi.encodePacked(recipient, level, sourceEventId));
+    }
+
+    /// @notice Whether this exact commission has already been recorded.
+    function isRecorded(address recipient, uint8 level, bytes32 sourceEventId)
+        external
+        view
+        returns (bool)
+    {
+        return processedCommissions[dedupeKeyFor(recipient, level, sourceEventId)];
+    }
+
+    /// @notice One member's claim state, in a single call.
+    function getAccount(address user)
+        external
+        view
+        returns (uint256 claimable, bool kyc, bool claimNow)
+    {
+        claimable = commissionBalance[user];
+        kyc = kycApproved[user];
+        claimNow = kyc && claimable > 0;
+    }
+
+    /// @notice Claimable balances for many members. For treasury reconciliation.
+    function commissionBalances(address[] calldata users)
+        external
+        view
+        returns (uint256[] memory balances)
+    {
+        balances = new uint256[](users.length);
+        for (uint256 i = 0; i < users.length; i++) {
+            balances[i] = commissionBalance[users[i]];
+        }
+    }
+
+    /**
+     * @notice Whether every recorded-but-unclaimed commission is actually held here.
+     *
+     * `totalRecorded - totalClaimed` is what the contract owes. Anyone can check
+     * it against the balance without trusting the platform's own dashboard.
+     */
+    function isSolvent() external view returns (bool) {
+        return mtt.balanceOf(address(this)) >= (totalRecorded - totalClaimed);
     }
 }

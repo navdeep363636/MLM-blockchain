@@ -19,7 +19,7 @@ export function AuthFootLink({
   return (
     <p className="mt-6 text-center text-sm text-text-muted">
       {prompt}{" "}
-      <Link href={href} className="font-medium text-[var(--accent-hover)] hover:underline">
+      <Link href={href} className="link-slide font-medium text-[var(--accent-hover)]">
         {label}
       </Link>
     </p>
@@ -34,7 +34,13 @@ export function OAuthRow({ mode }: { mode: "signup" | "login" }) {
       <div className="grid grid-cols-2 gap-3">
         <button
           type="button"
-          className="inline-flex h-11 items-center justify-center gap-2.5 rounded-xl bg-surface-3 text-sm font-medium text-text-primary ring-1 ring-inset ring-border-default transition-colors hover:ring-border-strong"
+          className="inline-flex h-11 items-center justify-center gap-2.5 rounded-xl text-sm font-medium text-text-primary
+                     bg-[linear-gradient(180deg,var(--surface-3),color-mix(in_oklab,var(--surface-3)_84%,var(--surface-inset)))]
+                     ring-1 ring-inset ring-border-default
+                     [box-shadow:inset_0_1px_0_0_var(--rim-light),var(--shadow-e1)]
+                     transition-[box-shadow,transform,--tw-ring-color] duration-[var(--dur-quick)] ease-[var(--ease-tide)]
+                     hover:-translate-y-px hover:ring-border-strong hover:[box-shadow:inset_0_1px_0_0_var(--rim-light-strong),var(--shadow-e2)]
+                     active:translate-y-0"
         >
           <svg viewBox="0 0 24 24" className="size-4" aria-hidden>
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1Z" />
@@ -46,7 +52,13 @@ export function OAuthRow({ mode }: { mode: "signup" | "login" }) {
         </button>
         <button
           type="button"
-          className="inline-flex h-11 items-center justify-center gap-2.5 rounded-xl bg-surface-3 text-sm font-medium text-text-primary ring-1 ring-inset ring-border-default transition-colors hover:ring-border-strong"
+          className="inline-flex h-11 items-center justify-center gap-2.5 rounded-xl text-sm font-medium text-text-primary
+                     bg-[linear-gradient(180deg,var(--surface-3),color-mix(in_oklab,var(--surface-3)_84%,var(--surface-inset)))]
+                     ring-1 ring-inset ring-border-default
+                     [box-shadow:inset_0_1px_0_0_var(--rim-light),var(--shadow-e1)]
+                     transition-[box-shadow,transform,--tw-ring-color] duration-[var(--dur-quick)] ease-[var(--ease-tide)]
+                     hover:-translate-y-px hover:ring-border-strong hover:[box-shadow:inset_0_1px_0_0_var(--rim-light-strong),var(--shadow-e2)]
+                     active:translate-y-0"
         >
           <svg viewBox="0 0 24 24" className="size-4 fill-current" aria-hidden>
             <path d="M16.36 12.78c-.02-2.2 1.79-3.26 1.87-3.31-1.02-1.49-2.6-1.7-3.16-1.72-1.34-.14-2.62.79-3.3.79-.69 0-1.74-.77-2.86-.75-1.47.02-2.83.86-3.58 2.17-1.53 2.66-.39 6.6 1.1 8.76.73 1.06 1.6 2.24 2.74 2.2 1.1-.04 1.52-.71 2.85-.71 1.33 0 1.7.71 2.86.69 1.18-.02 1.94-1.07 2.67-2.14.84-1.23 1.18-2.42 1.2-2.48-.03-.01-2.3-.88-2.33-3.5ZM14.3 5.9c.6-.74 1.01-1.75.9-2.77-.87.04-1.94.59-2.57 1.32-.56.65-1.05 1.7-.92 2.7.98.08 1.98-.5 2.59-1.25Z" />
@@ -56,9 +68,9 @@ export function OAuthRow({ mode }: { mode: "signup" | "login" }) {
       </div>
 
       <div className="my-6 flex items-center gap-3">
-        <span className="h-px flex-1 bg-border-subtle" />
+        <span className="divider-glow h-px flex-1 opacity-60" />
         <span className="text-xs font-medium uppercase tracking-wider text-text-muted">or</span>
-        <span className="h-px flex-1 bg-border-subtle" />
+        <span className="divider-glow h-px flex-1 rotate-180 opacity-60" />
       </div>
     </>
   );

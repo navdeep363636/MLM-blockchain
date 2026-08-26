@@ -1,6 +1,5 @@
 /* L-04 · AML / KYC Policy — FRD 11.4 */
-import { LegalDoc } from "../_components/legal-doc";
-import { legalDocuments } from "@/lib/mock/legal";
+import { LegalDocFromApi } from "../_components/fetch-doc";
 
 export const metadata = {
   title: "AML / KYC Policy",
@@ -9,5 +8,5 @@ export const metadata = {
 };
 
 export default function AmlKycPage() {
-  return <LegalDoc doc={legalDocuments["aml-kyc"]} />;
+  return <LegalDocFromApi slug="aml-kyc" />;
 }

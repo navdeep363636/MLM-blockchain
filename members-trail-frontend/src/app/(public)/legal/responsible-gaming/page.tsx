@@ -1,6 +1,5 @@
 /* L-07 · Responsible Gaming Policy — FRD 11.7 */
-import { LegalDoc } from "../_components/legal-doc";
-import { legalDocuments } from "@/lib/mock/legal";
+import { LegalDocFromApi } from "../_components/fetch-doc";
 
 export const metadata = {
   title: "Responsible Gaming Policy",
@@ -9,5 +8,5 @@ export const metadata = {
 };
 
 export default function ResponsibleGamingPage() {
-  return <LegalDoc doc={legalDocuments["responsible-gaming"]} />;
+  return <LegalDocFromApi slug="responsible-gaming" />;
 }

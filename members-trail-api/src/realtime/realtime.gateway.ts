@@ -8,7 +8,7 @@ import {
 import type { Server, Socket } from "socket.io";
 import { RedisService } from "@/common/redis/redis.service";
 import { CacheKeys } from "@/common/redis/cache.keys";
-import { Events } from "@/events";
+import { Events, type DomainEvent } from "@/events";
 
 /* ============================================================================
  * The realtime gateway.
@@ -180,12 +180,25 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
    *
    * The listeners are `@OnEvent` on the in-process bus, so a module publishing a
    * domain fact does not know or care that a socket exists.
+   *
+   * NOTE THE ENVELOPE. `EventBusService.publish` emits a `DomainEvent` wrapper —
+   * id, name, occurredAt, correlationId, actorId, payload — not the bare payload,
+   * because that wrapper is also the message body under the RabbitMQ transport
+   * and is what makes an event traceable. Every handler therefore destructures
+   * `event.payload` on its first line.
+   *
+   * This was originally written taking the payload directly, and the bug was
+   * invisible: `payload.userId` was `undefined`, so every event was emitted to
+   * the room `user:undefined`, which nobody is ever in. Nothing threw, nothing
+   * logged, and the entire realtime layer silently delivered nothing. It took
+   * connecting a socket and triggering a real event to see it.
    */
 
   @OnEvent(Events.PointsCredited)
-  onPointsCredited(payload: {
+  onPointsCredited(event: DomainEvent<{
     userId: string; amount: number; source: string; runningBalance: number;
-  }): void {
+  }>): void {
+    const payload = event.payload;
     this.toUser(payload.userId, "points.credited", {
       amount: payload.amount,
       source: payload.source,
@@ -194,9 +207,10 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @OnEvent(Events.GameSessionValidated)
-  onSessionValidated(payload: {
+  onSessionValidated(event: DomainEvent<{
     userId: string; ref: string; serverScore: number; pointsAwarded: number; pointsCapped: number;
-  }): void {
+  }>): void {
+    const payload = event.payload;
     this.toUser(payload.userId, "session.validated", {
       ref: payload.ref,
       /* The server score, because that is what was credited from. */
@@ -207,9 +221,10 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @OnEvent(Events.ConversionCompleted)
-  onConversionCompleted(payload: {
+  onConversionCompleted(event: DomainEvent<{
     userId: string; ref: string; pointsSpent: number; mttCredited: string;
-  }): void {
+  }>): void {
+    const payload = event.payload;
     this.toUser(payload.userId, "conversion.completed", {
       ref: payload.ref,
       pointsSpent: payload.pointsSpent,
@@ -218,7 +233,8 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @OnEvent(Events.CommissionReleased)
-  onCommissionReleased(payload: { recipientId: string; ref: string; amountMtt: string }): void {
+  onCommissionReleased(event: DomainEvent<{ recipientId: string; ref: string; amountMtt: string }>): void {
+    const payload = event.payload;
     this.toUser(payload.recipientId, "commission.released", {
       ref: payload.ref,
       amountMtt: payload.amountMtt,
@@ -226,9 +242,10 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @OnEvent(Events.CommissionCalculated)
-  onCommissionCalculated(payload: {
+  onCommissionCalculated(event: DomainEvent<{
     recipientId: string; level: number; amountMtt: string; status: string;
-  }): void {
+  }>): void {
+    const payload = event.payload;
     this.toUser(payload.recipientId, "commission.calculated", {
       level: payload.level,
       amountMtt: payload.amountMtt,
@@ -239,7 +256,8 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @OnEvent(Events.WithdrawalApproved)
-  onWithdrawalApproved(payload: { userId: string; ref: string; amountMtt: string }): void {
+  onWithdrawalApproved(event: DomainEvent<{ userId: string; ref: string; amountMtt: string }>): void {
+    const payload = event.payload;
     this.toUser(payload.userId, "withdrawal.approved", {
       ref: payload.ref,
       amountMtt: payload.amountMtt,
@@ -247,9 +265,10 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @OnEvent(Events.WithdrawalCompleted)
-  onWithdrawalCompleted(payload: {
+  onWithdrawalCompleted(event: DomainEvent<{
     userId: string; ref: string; amountMtt: string; txHash: string;
-  }): void {
+  }>): void {
+    const payload = event.payload;
     this.toUser(payload.userId, "withdrawal.completed", {
       ref: payload.ref,
       amountMtt: payload.amountMtt,
@@ -258,7 +277,8 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @OnEvent(Events.WithdrawalRejected)
-  onWithdrawalRejected(payload: { userId: string; ref: string; reason: string }): void {
+  onWithdrawalRejected(event: DomainEvent<{ userId: string; ref: string; reason: string }>): void {
+    const payload = event.payload;
     this.toUser(payload.userId, "withdrawal.rejected", {
       ref: payload.ref,
       reason: payload.reason,
@@ -266,7 +286,8 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @OnEvent(Events.DepositCompleted)
-  onDepositCompleted(payload: { userId: string; ref: string; amountMtt: string }): void {
+  onDepositCompleted(event: DomainEvent<{ userId: string; ref: string; amountMtt: string }>): void {
+    const payload = event.payload;
     this.toUser(payload.userId, "deposit.completed", {
       ref: payload.ref,
       amountMtt: payload.amountMtt,
@@ -274,7 +295,8 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @OnEvent(Events.StakeRecorded)
-  onStakeRecorded(payload: { userId: string; poolId: number; amountMtt: string }): void {
+  onStakeRecorded(event: DomainEvent<{ userId: string; poolId: number; amountMtt: string }>): void {
+    const payload = event.payload;
     this.toUser(payload.userId, "staking.staked", {
       poolId: payload.poolId,
       amountMtt: payload.amountMtt,
@@ -282,9 +304,10 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @OnEvent(Events.UnstakeRecorded)
-  onUnstakeRecorded(payload: {
+  onUnstakeRecorded(event: DomainEvent<{
     userId: string; poolId: number; principalMtt: string; rewardsPaidMtt: string; penaltyMtt: string;
-  }): void {
+  }>): void {
+    const payload = event.payload;
     this.toUser(payload.userId, "staking.unstaked", {
       poolId: payload.poolId,
       principalMtt: payload.principalMtt,
@@ -297,7 +320,8 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @OnEvent(Events.RewardClaimed)
-  onRewardClaimed(payload: { userId: string; poolId: number; amountMtt: string }): void {
+  onRewardClaimed(event: DomainEvent<{ userId: string; poolId: number; amountMtt: string }>): void {
+    const payload = event.payload;
     this.toUser(payload.userId, "staking.reward_claimed", {
       poolId: payload.poolId,
       amountMtt: payload.amountMtt,
@@ -305,9 +329,10 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @OnEvent(Events.QuestCompleted)
-  onQuestCompleted(payload: {
+  onQuestCompleted(event: DomainEvent<{
     userId: string; questId: string; title: string; rewardPoints: number;
-  }): void {
+  }>): void {
+    const payload = event.payload;
     this.toUser(payload.userId, "quest.completed", {
       questId: payload.questId,
       title: payload.title,
@@ -317,9 +342,10 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @OnEvent(Events.AchievementUnlocked)
-  onAchievementUnlocked(payload: {
+  onAchievementUnlocked(event: DomainEvent<{
     userId: string; code: string; title: string; pointsAwarded: number;
-  }): void {
+  }>): void {
+    const payload = event.payload;
     this.toUser(payload.userId, "achievement.unlocked", {
       code: payload.code,
       title: payload.title,
@@ -328,12 +354,14 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @OnEvent(Events.KycApproved)
-  onKycApproved(payload: { userId: string; tier: number }): void {
+  onKycApproved(event: DomainEvent<{ userId: string; tier: number }>): void {
+    const payload = event.payload;
     this.toUser(payload.userId, "kyc.approved", { tier: payload.tier });
   }
 
   @OnEvent(Events.KycRejected)
-  onKycRejected(payload: { userId: string; reason?: string }): void {
+  onKycRejected(event: DomainEvent<{ userId: string; reason?: string }>): void {
+    const payload = event.payload;
     this.toUser(payload.userId, "kyc.rejected", { reason: payload.reason ?? null });
   }
 
@@ -344,12 +372,14 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
    * open tab, rather than discovering it when a withdrawal fails.
    */
   @OnEvent(Events.AccountFrozen)
-  onAccountFrozen(payload: { userId: string; reason: string }): void {
+  onAccountFrozen(event: DomainEvent<{ userId: string; reason: string }>): void {
+    const payload = event.payload;
     this.toUser(payload.userId, "account.frozen", { reason: payload.reason });
   }
 
   @OnEvent(Events.UserStatusChanged)
-  onStatusChanged(payload: { userId: string; to: string; reason: string }): void {
+  onStatusChanged(event: DomainEvent<{ userId: string; to: string; reason: string }>): void {
+    const payload = event.payload;
     this.toUser(payload.userId, "account.status_changed", {
       status: payload.to,
       reason: payload.reason,
@@ -357,7 +387,8 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @OnEvent(Events.TournamentSettled)
-  onTournamentSettled(payload: { ref: string; paidEntries: number; totalPaid: string }): void {
+  onTournamentSettled(event: DomainEvent<{ ref: string; paidEntries: number; totalPaid: string }>): void {
+    const payload = event.payload;
     /* Not member-specific, so it goes nowhere near a user room: each winner
      * learns their own result from their prize transaction. Staff see the
      * settlement. */
@@ -371,7 +402,8 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   /* ------------------------- staff-facing pushes ------------------------- */
 
   @OnEvent(Events.FraudAlertRaised)
-  onFraudAlert(payload: { ref?: string; kind: string; severity?: string }): void {
+  onFraudAlert(event: DomainEvent<{ ref?: string; kind: string; severity?: string }>): void {
+    const payload = event.payload;
     this.toStaff("fraud.alert", {
       ref: payload.ref ?? null,
       kind: payload.kind,
@@ -380,7 +412,8 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @OnEvent(Events.PayoutRatioBreach)
-  onPayoutRatioBreach(payload: { payoutRatioBps: number; thresholdBps?: number }): void {
+  onPayoutRatioBreach(event: DomainEvent<{ payoutRatioBps: number; thresholdBps?: number }>): void {
+    const payload = event.payload;
     this.toStaff("treasury.payout_ratio_breach", {
       payoutRatioBps: payload.payoutRatioBps,
       thresholdBps: payload.thresholdBps ?? null,
@@ -388,7 +421,8 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @OnEvent(Events.ChainReorgDetected)
-  onReorg(payload: { contract: string; rewoundTo: number; orphanedProcessed: number }): void {
+  onReorg(event: DomainEvent<{ contract: string; rewoundTo: number; orphanedProcessed: number }>): void {
+    const payload = event.payload;
     this.toStaff("chain.reorg", {
       contract: payload.contract,
       rewoundTo: payload.rewoundTo,
@@ -398,7 +432,8 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @OnEvent(Events.ApprovalRequested)
-  onApprovalRequested(payload: { kind: string; ref?: string; targetId?: string | null }): void {
+  onApprovalRequested(event: DomainEvent<{ kind: string; ref?: string; targetId?: string | null }>): void {
+    const payload = event.payload;
     this.toStaff("approval.requested", {
       kind: payload.kind,
       ref: payload.ref ?? null,

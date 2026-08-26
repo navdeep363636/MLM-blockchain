@@ -29,7 +29,7 @@ export class TournamentsAdminController {
   }
 
   @Post()
-  @RequirePermissions("tournament:write")
+  @RequirePermissions("tournaments:write")
   @ApiOperation({
     summary: "Create a tournament as a draft",
     description: "Prize shares must total exactly 10000 bps. Entry cannot open until it is published.",
@@ -44,7 +44,7 @@ export class TournamentsAdminController {
   }
 
   @Put(":id")
-  @RequirePermissions("tournament:write")
+  @RequirePermissions("tournaments:write")
   @ApiOperation({
     summary: "Update a draft tournament",
     description: "Refuses with PRIZE_SPLIT_LOCKED once the tournament has been published.",
@@ -60,7 +60,7 @@ export class TournamentsAdminController {
   }
 
   @Patch(":id/publish")
-  @RequirePermissions("tournament:write")
+  @RequirePermissions("tournaments:write")
   @ApiOperation({
     summary: "Publish a tournament: lock the prize split and open entry",
     description: "One-way. After this the split, pool and entry fee cannot be changed.",
@@ -76,7 +76,7 @@ export class TournamentsAdminController {
   }
 
   @Post(":id/settle")
-  @RequirePermissions("tournament:settle")
+  @RequirePermissions("tournaments:approve")
   @ApiOperation({
     summary: "Settle a finished tournament and pay the prizes",
     description:
@@ -92,7 +92,7 @@ export class TournamentsAdminController {
   }
 
   @Patch(":id/disqualify")
-  @RequirePermissions("tournament:settle")
+  @RequirePermissions("tournaments:approve")
   @ApiOperation({
     summary: "Disqualify an entry with a recorded reason",
     description: "Refuses once a prize has been paid — recovery goes through the audited adjustment flow.",
