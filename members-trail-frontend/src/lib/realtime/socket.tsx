@@ -71,7 +71,18 @@ const EVENTS: Record<string, Invalidator> = {
   /* play */
   "quest.completed": invalidate(qk.quests(), qk.points()),
   "achievement.unlocked": invalidate(qk.achievements(), qk.notifications()),
-  "tournament.settled": invalidate(qk.tournaments(), qk.balance(), qk.notifications()),
+  /**
+   * A GAMEPLAY session finished validating — the server replayed it and decided
+   * what it was worth.
+   *
+   * This used to invalidate `qk.sessions()`, the list of active LOGIN sessions on
+   * the security screen, on the strength of the name alone. Two unrelated things
+   * are called a session, and the one the gateway means is the one that awards
+   * points: it carries `serverScore`, `pointsAwarded` and `pointsCapped`. So the
+   * points ledger, the balance, the quest progress it advances and the board it
+   * ranks on are what go stale here — and none of them were being refetched.
+   */
+  "session.validated": invalidate(qk.points(), qk.balance(), qk.quests(), qk.leaderboard()),
 
   /* identity */
   "kyc.approved": invalidate(qk.me(), qk.kycMine(), qk.withdrawalLimits(), qk.notifications()),
@@ -80,16 +91,32 @@ const EVENTS: Record<string, Invalidator> = {
    * things gated on it have to be re-read, not just the banner. */
   "account.status_changed": invalidate(qk.me(), qk.wallet(), qk.notifications()),
   "account.frozen": invalidate(qk.me(), qk.wallet(), qk.notifications()),
-  "session.validated": invalidate(qk.sessions()),
 
-  /* staff room */
+  /* staff room — these arrive only on a staff socket, never a member's */
   "approval.requested": invalidate(qk.adminApprovals(), qk.adminKpis()),
   "fraud.alert": invalidate(qk.adminFraudAlerts(), qk.adminKpis()),
   "treasury.payout_ratio_breach": invalidate(qk.adminKpis(), qk.analytics()),
   "chain.reorg": invalidate(qk.adminChainStatus()),
+  /**
+   * Settlement is a STAFF event. The gateway emits it to `staff:ops` only, with
+   * the entry count and the total paid — a member never receives it, and each
+   * winner learns their own result from their prize transaction instead.
+   *
+   * It was listed among the member events, invalidating a player's balance and
+   * marked as worth interrupting them for, which described a push that cannot
+   * reach them. The tournament list is what an operator is looking at when this
+   * lands.
+   */
+  "tournament.settled": invalidate(qk.adminTournaments(), qk.tournaments(), qk.adminKpis()),
 };
 
-/** Events a member should be told about, not merely have refetched behind them. */
+/**
+ * Events a member should be told about, not merely have refetched behind them.
+ *
+ * Member-facing only. `tournament.settled` used to be here and is not a member
+ * event at all — it goes to the staff room — so it could only ever have toasted
+ * at an operator, about a settlement they were already looking at.
+ */
 const TOASTWORTHY = new Set([
   "deposit.completed",
   "withdrawal.approved",
@@ -101,7 +128,6 @@ const TOASTWORTHY = new Set([
   "account.frozen",
   "account.status_changed",
   "achievement.unlocked",
-  "tournament.settled",
 ]);
 
 /* --------------------------------- context -------------------------------- */
