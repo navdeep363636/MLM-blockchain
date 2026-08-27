@@ -149,7 +149,7 @@ export function ParallaxLayer({
     return <div ref={ref} className={className}>{children}</div>;
   }
   return (
-    <motion.div ref={ref} className={cn("will-change-transform", className)} style={{ y, scale: s, opacity: o }}>
+    <motion.div ref={ref} className={className} style={{ y, scale: s, opacity: o }}>
       {children}
     </motion.div>
   );
@@ -185,7 +185,7 @@ export function ScrollScene({
 
   return (
     <div ref={ref} className={cn("scene", className)}>
-      <motion.div style={{ rotateX: rx, translateZ: z, opacity }} className="will-change-transform">
+      <motion.div style={{ rotateX: rx, translateZ: z, opacity }} >
         {children}
       </motion.div>
     </div>
@@ -265,7 +265,7 @@ function StickyPanel({
   return (
     <motion.div
       style={{ opacity, translateZ: z, rotateX: rx }}
-      className={cn(i === 0 ? "relative" : "absolute inset-0", "flex items-center will-change-transform")}
+      className={cn(i === 0 ? "relative" : "absolute inset-0", "flex items-center")}
       aria-hidden={undefined}
     >
       <div className="w-full">{children}</div>

@@ -18,8 +18,9 @@
  * ========================================================================== */
 
 import { motion, useInView, useReducedMotion, type Variants } from "framer-motion";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { useRevealArmed } from "./reveal-gate";
 
 /* The same guarantee as `Reveal` in ./index: if the observer never fires — fast
    programmatic scroll, print, restored scroll position — show anyway. A blank
@@ -76,7 +77,8 @@ export function WordReveal({
   const reduce = useReducedMotion();
   const ref = useRef<HTMLSpanElement>(null);
   const shown = useEntered(ref);
-  const words = children.split(" ");
+  const armed = useRevealArmed(ref);
+  const words = useMemo(() => children.split(" "), [children]);
   const hot = new Set((highlight ?? []).map((w) => w.toLowerCase().replace(/[^a-z0-9]/g, "")));
 
   if (reduce) return <Tag className={className}>{children}</Tag>;
@@ -88,8 +90,10 @@ export function WordReveal({
       ref={ref}
       className={cn("scene-near", className)}
       variants={wordParent(stagger, delay)}
-      initial="hidden"
-      animate={shown ? "show" : "hidden"}
+      /* The hero headline is the FCP element. It must be in the HTML AND
+         visible; see ./reveal-gate.ts. */
+      initial={false}
+      animate={armed && !shown ? "hidden" : "show"}
     >
       {words.map((w, i) => (
         /* NOT `.clip-line` — that utility is `display: block`, and using it
@@ -103,7 +107,7 @@ export function WordReveal({
           <motion.span
             variants={wordChild}
             className={cn(
-              "inline-block origin-bottom will-change-transform",
+              "inline-block origin-bottom",
               hot.has(w.toLowerCase().replace(/[^a-z0-9]/g, "")) && "text-gradient-brand",
             )}
             style={{ transformStyle: "preserve-3d" }}
@@ -127,16 +131,16 @@ export function LineReveal({
   const reduce = useReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
   const shown = useEntered(ref);
+  const armed = useRevealArmed(ref);
 
   if (reduce) return <div className={className}>{children}</div>;
 
   return (
     <div ref={ref} className={cn("clip-line", className)}>
       <motion.div
-        initial={{ y: "104%", opacity: 0 }}
-        animate={shown ? { y: "0%", opacity: 1 } : undefined}
-        transition={{ duration, delay, ease: [0.16, 1, 0.3, 1] }}
-        className="will-change-transform"
+        initial={false}
+        animate={armed && !shown ? { y: "104%", opacity: 0 } : { y: "0%", opacity: 1 }}
+        transition={{ duration: Math.min(duration, 0.4), delay, ease: [0.16, 1, 0.3, 1] }}
       >
         {children}
       </motion.div>
@@ -154,6 +158,7 @@ export function CharCascade({
   const reduce = useReducedMotion();
   const ref = useRef<HTMLSpanElement>(null);
   const shown = useEntered(ref);
+  const armed = useRevealArmed(ref);
   const chars = [...children];
 
   if (reduce) return <span className={className}>{children}</span>;
@@ -164,9 +169,13 @@ export function CharCascade({
         <motion.span
           key={i}
           aria-hidden
-          className="inline-block will-change-transform"
-          initial={{ opacity: 0, z: -60, rotateY: i % 2 ? 42 : -42, y: 10 }}
-          animate={shown ? { opacity: 1, z: 0, rotateY: 0, y: 0 } : undefined}
+          className="inline-block"
+          initial={false}
+          animate={
+            armed && !shown
+              ? { opacity: 0, z: -60, rotateY: i % 2 ? 42 : -42, y: 10 }
+              : { opacity: 1, z: 0, rotateY: 0, y: 0 }
+          }
           transition={{ duration: 0.6, delay: delay + i * stagger, ease: [0.16, 1, 0.3, 1] }}
           style={{ transformStyle: "preserve-3d" }}
         >
@@ -193,6 +202,7 @@ export function MaskWipe({
   const reduce = useReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
   const shown = useEntered(ref);
+  const armed = useRevealArmed(ref);
 
   const axis = from === "left" || from === "right" ? "to right" : "to bottom";
   const flip = from === "right" || from === "top";
@@ -202,8 +212,12 @@ export function MaskWipe({
   return (
     <div ref={ref} className={cn("relative", className)}>
       <motion.div
-        initial={{ clipPath: flip ? "inset(0 0 0 100%)" : axis === "to right" ? "inset(0 100% 0 0)" : "inset(100% 0 0 0)" }}
-        animate={shown ? { clipPath: "inset(0 0 0 0)" } : undefined}
+        initial={false}
+        animate={
+          armed && !shown
+            ? { clipPath: flip ? "inset(0 0 0 100%)" : axis === "to right" ? "inset(0 100% 0 0)" : "inset(100% 0 0 0)" }
+            : { clipPath: "inset(0 0 0 0)" }
+        }
         transition={{ duration: 1, delay, ease: [0.16, 1, 0.3, 1] }}
       >
         {children}

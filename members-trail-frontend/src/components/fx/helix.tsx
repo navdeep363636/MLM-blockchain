@@ -24,8 +24,8 @@
  * turns the object — the helix is the scroll indicator.
  * ========================================================================== */
 
-import { motion, useReducedMotion, useScroll, useSpring, useTransform } from "framer-motion";
-import { useRef } from "react";
+import { motion, useInView, useReducedMotion, useScroll, useSpring, useTransform } from "framer-motion";
+import { useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 /* -------------------------------------------------------------------------- */
@@ -120,7 +120,7 @@ export function Coin3D({ size = 72, className, front, back }: {
 const SPIN_SECONDS = 46;
 
 export function TokenHelix({
-  count = 22,
+  count = 14,
   radius = 132,
   rise = 26,
   turn = 34,
@@ -136,6 +136,18 @@ export function TokenHelix({
 }) {
   const reduce = useReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
+  /*
+   * Every token carries its own infinite `helix-spin` counter-rotation, so a
+   * 15-node double helix is 30 concurrently running compositor animations plus
+   * the ring's own. CSS animations do not stop when their element scrolls out of
+   * view, so on the landing page that entire set kept the compositor busy for
+   * the whole session no matter how far down the reader had gone.
+   *
+   * `useInView` here drives `animation-play-state` on the subtree. Paused is not
+   * the same as removed — the helix keeps its position, so scrolling back up
+   * resumes rather than restarting.
+   */
+  const inView = useInView(ref, { margin: "150px" });
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
   const spun = useSpring(scrollYProgress, { stiffness: 70, damping: 24, restDelta: 0.001 });
   const pitch = useTransform(spun, [0, 0.5, 1], [18, 3, -14]);
@@ -145,7 +157,7 @@ export function TokenHelix({
 
   /* Deterministic, so the server render and the client render agree exactly —
      a hero that reflows on hydration is worse than one that never animates. */
-  const nodes = Array.from({ length: count * strands }, (_, k) => {
+  const nodes = useMemo(() => Array.from({ length: count * strands }, (_, k) => {
     const strand = k % strands;
     const i = Math.floor(k / strands);
     const angle = i * turn + (360 / strands) * strand;
@@ -155,10 +167,15 @@ export function TokenHelix({
     const depth = Math.cos((angle * Math.PI) / 180);
     const size = 26 + 20 * ((depth + 1) / 2);
     return { angle, y, size, depth, strand, key: k };
-  });
+  }), [count, strands, turn, rise, height]);
 
   return (
-    <div ref={ref} className={cn("pointer-events-none relative select-none", className)} aria-hidden>
+    <div
+      ref={ref}
+      data-anim-paused={!inView || undefined}
+      className={cn("pointer-events-none relative select-none", className)}
+      aria-hidden
+    >
       <div className="scene-far absolute inset-0 grid place-items-center">
         {/* ── camera ────────────────────────────────────────────────────────
             Scroll drives the PITCH and the vertical drift, not the spin.
@@ -219,7 +236,11 @@ export function TokenHelix({
                     className="block"
                     style={{
                       opacity: 0.4 + 0.6 * ((n.depth + 1) / 2),
-                      filter: n.depth < -0.15 ? `blur(${Math.abs(n.depth) * 1.8}px)` : undefined,
+                      /* The back half of the helix used to carry a per-node
+                         `filter: blur()` inside a preserve-3d tree — roughly
+                         half of 30-44 nodes each forcing their own
+                         rasterisation. Opacity alone reads as depth here and
+                         composites for free. */
                     }}
                   >
                     <TokenFace
@@ -247,7 +268,7 @@ export function TokenHelix({
         }}
       />
       <div
-        className="absolute left-1/2 top-1/2 size-72 -translate-x-1/2 -translate-y-1/2 rounded-full blur-[80px]"
+        className="absolute left-1/2 top-1/2 size-72 -translate-x-1/2 -translate-y-1/2 rounded-full blur-[48px]"
         style={{ background: "color-mix(in oklab, var(--accent) 18%, transparent)" }}
       />
     </div>
@@ -365,6 +386,18 @@ export function OrbitRing({
 export function TideRibbon({ className, hue = "accent" }: { className?: string; hue?: "accent" | "cool" }) {
   const reduce = useReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
+  /*
+   * Every token carries its own infinite `helix-spin` counter-rotation, so a
+   * 15-node double helix is 30 concurrently running compositor animations plus
+   * the ring's own. CSS animations do not stop when their element scrolls out of
+   * view, so on the landing page that entire set kept the compositor busy for
+   * the whole session no matter how far down the reader had gone.
+   *
+   * `useInView` here drives `animation-play-state` on the subtree. Paused is not
+   * the same as removed — the helix keeps its position, so scrolling back up
+   * resumes rather than restarting.
+   */
+  const inView = useInView(ref, { margin: "150px" });
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
   const p = useSpring(scrollYProgress, { stiffness: 60, damping: 22 });
   const rotate = useTransform(p, [0, 1], [-14, 14]);
