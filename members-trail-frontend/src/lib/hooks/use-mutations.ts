@@ -30,7 +30,7 @@ import { useMutation, useQueryClient, type UseMutationResult } from "@tanstack/r
 import { api } from "@/lib/api/client";
 import { qk } from "@/lib/api/keys";
 import type {
-  ConversionQuote, OkResponse, TicketResponse, TransactionResponse, WithdrawalResponse,
+  ConversionQuote, ConversionResponse, OkResponse, TicketResponse, WithdrawalResponse,
 } from "@/lib/api/types";
 
 /* --------------------------------- plumbing ------------------------------- */
@@ -62,19 +62,26 @@ function useAction<TVars, TResult>(
 export interface ConvertVars {
   /** Points to spend. An integer count, so a number is the honest type here. */
   points: number;
-  /**
-   * The rate the member was shown, as points-per-MTT.
-   *
-   * Sent so the server can refuse if the rate moved between the quote and the
-   * confirmation. Without it, a scheduled rate change landing mid-flow silently
-   * gives the member a different amount than the one they agreed to.
-   */
-  expectedPointsPerMtt?: number;
 }
 
+/**
+ * Points → MTT.
+ *
+ * `POST /conversion` accepts `points` and NOTHING else — the endpoint runs under
+ * a `forbidNonWhitelisted` validation pipe, so an extra field is a 400 rather
+ * than an ignored key. This previously also sent `expectedPointsPerMtt` as a
+ * rate guard, which meant every conversion in the app was rejected.
+ *
+ * The guard itself is worth having and is NOT re-added here as a client-only
+ * field: a value the server accepts and ignores looks like protection without
+ * being any. It needs `CreateConversionRequest` to carry it and the service to
+ * compare it against the active rate; until then the confirmation step showing
+ * the rate is the only thing standing between a mid-flow rate change and a
+ * surprise, and that is worth fixing server-side next.
+ */
 export const useConvertPoints = () =>
-  useAction<ConvertVars, TransactionResponse>(
-    (v) => api.post<TransactionResponse>("/conversion", v),
+  useAction<ConvertVars, ConversionResponse>(
+    (v) => api.post<ConversionResponse>("/conversion", { points: v.points }),
     [qk.wallet(), qk.points(), qk.conversion()],
   );
 
@@ -87,20 +94,49 @@ export const useConversionQuote = () =>
 
 /* ================================== Wallet ================================ */
 
+/** Provenance of the funds, as the AML record requires. Matches SOURCE_TAGS server-side. */
+export type SourceTag = "gameplay" | "staking" | "referral" | "deposit" | "prize";
+
 export interface WithdrawVars {
+  /**
+   * Which rail. Required by the server, and the two branches take different
+   * destinations: `mtt` needs an on-chain address, `fiat` an opaque payout
+   * method reference. Omitting it made every withdrawal a 400.
+   */
+  kind: "mtt" | "fiat";
   /** MTT, as the member typed it. Never a float. */
   amountMtt: string;
-  /** Which whitelisted address. The server rejects anything not on the list. */
-  addressId?: string;
-  destination?: string;
+  /** EVM address. Required by the server for kind=mtt, refused for kind=fiat. */
+  destinationAddress?: string;
+  /**
+   * Opaque payout-method reference for kind=fiat. Bank details never cross this
+   * wire, which is why it is a reference and not an account number.
+   */
+  payoutMethodRef?: string;
   /** AML source tagging — required by the FRD, so it is not optional here. */
-  sourceTag: "gameplay" | "staking" | "referral";
-  twoFaCode?: string;
+  sourceTag: SourceTag;
 }
 
+/**
+ * Requests a withdrawal.
+ *
+ * The payload is assembled field by field rather than spread, because the server
+ * refuses unknown properties: passing the caller's object through is how
+ * `destination`, `addressId` and `twoFaCode` — none of which the API declares —
+ * used to turn every request into a 400. A step-up 2FA code, when that is wired,
+ * belongs in the `X-Two-Fa-Code` header the API already allows through CORS, not
+ * in this body.
+ */
 export const useRequestWithdrawal = () =>
   useAction<WithdrawVars, WithdrawalResponse>(
-    (v) => api.post<WithdrawalResponse>("/wallet/withdrawals", v),
+    (v) =>
+      api.post<WithdrawalResponse>("/wallet/withdrawals", {
+        kind: v.kind,
+        amountMtt: v.amountMtt,
+        sourceTag: v.sourceTag,
+        ...(v.destinationAddress ? { destinationAddress: v.destinationAddress } : {}),
+        ...(v.payoutMethodRef ? { payoutMethodRef: v.payoutMethodRef } : {}),
+      }),
     [qk.wallet()],
   );
 
@@ -266,11 +302,34 @@ export const useCancelListing = () =>
 
 /* ================================== Support =============================== */
 
+/**
+ * Opens a ticket.
+ *
+ * `financialDispute` is NOT in this payload and must not be: the server derives
+ * it from the category — withdrawal, commission and KYC tickets are routed to
+ * compliance-trained agents — and it refuses the field outright, which used to
+ * make every ticket a 400. The UI still computes the same predicate locally to
+ * decide what to tell the member, which is fine; it just cannot assert it.
+ *
+ * `disputedRef` is the one thing the client legitimately supplies here, and it is
+ * optional: the reference of the item being disputed, when the member reached
+ * support from a specific withdrawal or commission row. Neither of the two forms
+ * that open tickets today collects one, so neither sends it.
+ */
 export const useCreateTicket = () =>
   useAction<
-    { subject: string; category: string; body: string; financialDispute?: boolean },
+    { subject: string; category: string; body: string; disputedRef?: string },
     TicketResponse
-  >((v) => api.post<TicketResponse>("/support/tickets", v), [qk.tickets()]);
+  >(
+    (v) =>
+      api.post<TicketResponse>("/support/tickets", {
+        subject: v.subject,
+        category: v.category,
+        body: v.body,
+        ...(v.disputedRef ? { disputedRef: v.disputedRef } : {}),
+      }),
+    [qk.tickets()],
+  );
 
 export const useReplyToTicket = () =>
   useAction<{ ref: string; body: string }, Record<string, unknown>>(
@@ -382,8 +441,36 @@ export const useLogoutEverywhere = () =>
 
 /* ==================================== KYC ================================= */
 
+/** One identity document, as the API registers it. Every field is required. */
+export interface KycDocumentInput {
+  kind: "id_front" | "id_back" | "selfie" | "address_proof" | "source_of_funds";
+  /** Object-store key from the presigned upload. At least 8 characters. */
+  storageKey: string;
+  /** One of image/jpeg, image/png, image/webp, image/heic, application/pdf. */
+  mimeType: string;
+  /** Actual byte length. Must be at least 1 — a zero here is a rejected submission. */
+  sizeBytes: number;
+  /** SHA-256 of the uploaded bytes, 64 lowercase hex characters. Required. */
+  sha256: string;
+}
+
+export interface SubmitKycVars {
+  tier: 1 | 2;
+  documents: KycDocumentInput[];
+  /** Overrides the country on file when the ID is foreign. ISO-3166-1 alpha-2. */
+  documentCountry?: string;
+}
+
+/**
+ * Registers a KYC submission.
+ *
+ * Typed rather than `Record<string, unknown>` on purpose: this used to be a loose
+ * record, which is how the caller came to send `sizeBytes: 0` and no `sha256` at
+ * all — both rejected by the server, so no submission could succeed. A named
+ * shape makes the next caller's mistake a compile error.
+ */
 export const useSubmitKyc = () =>
-  useAction<Record<string, unknown>, Record<string, unknown>>(
+  useAction<SubmitKycVars, Record<string, unknown>>(
     (v) => api.post("/kyc/submissions", v),
     [qk.kycMine(), qk.me()],
   );
@@ -413,14 +500,35 @@ export const useRegister = () =>
     Record<string, unknown>
   >((v) => api.post("/auth/register", v), []);
 
+/**
+ * The OTP channel, as the API names it.
+ *
+ * `phone`, not `sms`. The distinction is the channel versus the transport, and
+ * sending "sms" failed the enum on every phone verification in the app.
+ */
+export type OtpChannel = "email" | "phone";
+
+export interface VerifyOtpVars {
+  channel: OtpChannel;
+  code: string;
+  /**
+   * The address or number the code went to. The API calls this `identifier`, and
+   * it is what lets an unauthenticated caller — which is every caller on the
+   * verify screen, since the account has no session until it is verified — say
+   * which account the code belongs to.
+   */
+  identifier?: string;
+}
+
 export const useVerifyOtp = () =>
-  useAction<{ channel: "email" | "sms"; target?: string; code: string }, Record<string, unknown>>(
+  useAction<VerifyOtpVars, Record<string, unknown>>(
     (v) => api.post("/auth/verify-otp", v),
     [qk.me()],
   );
 
+/** Resend requires the identifier: there is no session to infer it from. */
 export const useResendOtp = () =>
-  useAction<{ channel: "email" | "sms"; target?: string }, { resendAfter?: number }>(
+  useAction<{ channel: OtpChannel; identifier: string }, { resendAfter?: number }>(
     (v) => api.post("/auth/resend-otp", v),
     [],
   );

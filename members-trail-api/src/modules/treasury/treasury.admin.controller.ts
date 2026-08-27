@@ -1,9 +1,10 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from "@nestjs/common";
-import { ApiOperation, ApiTags } from "@nestjs/swagger";
+import { ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CurrentUser, RequirePermissions, StaffOnly, type AuthUser } from "@/common/decorators";
 import { TreasuryService } from "./treasury.service";
 import {
   ApproveOutflowDto, InflowQuery, OutflowQuery, ProposeOutflowDto, ReconcileBatchDto,
+  TreasuryInflowResponse, TreasuryOutflowResponse,
 } from "./dto/treasury.dto";
 
 /**
@@ -38,12 +39,14 @@ export class TreasuryAdminController {
 
   @Get("inflows")
   @ApiOperation({ summary: "Inflow ledger with reconciliation status" })
+  @ApiOkResponse({ type: TreasuryInflowResponse, isArray: true })
   inflows(@Query() q: InflowQuery) {
     return this.treasury.listInflows(q);
   }
 
   @Get("outflows")
   @ApiOperation({ summary: "Outflow ledger with on-chain tx hashes" })
+  @ApiOkResponse({ type: TreasuryOutflowResponse, isArray: true })
   outflows(@Query() q: OutflowQuery) {
     return this.treasury.listOutflows(q);
   }

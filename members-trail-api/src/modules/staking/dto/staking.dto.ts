@@ -49,18 +49,41 @@ export class StakingPositionResponse {
   @ApiPropertyOptional({ nullable: true }) lastSyncedBlock!: number | null;
 }
 
+/** Optional partial-exit amount for the unstake preview. */
+export class UnstakePreviewQuery {
+  @ApiPropertyOptional({
+    description:
+      "MTT to unstake, as a decimal string. Omit to preview a full exit. Clamped " +
+      "to the position size rather than refused, so a slider at the maximum " +
+      "previews everything instead of erroring.",
+  })
+  @IsOptional() @IsNumberString()
+  amountMtt?: string;
+}
+
 export class UnstakePreviewResponse {
   @ApiProperty() poolId!: number;
-  @ApiProperty({ description: "Principal returned in full — never reduced by the penalty" })
+  @ApiProperty({
+    description:
+      "Principal returned in full — never reduced by the penalty. Equals the " +
+      "requested amount for a partial exit, the whole position otherwise.",
+  })
   principal!: string;
-  @ApiProperty() pendingRewards!: string;
+  @ApiProperty({ description: "Rewards realised by THIS exit, pro rata to the principal withdrawn" })
+  pendingRewards!: string;
   @ApiProperty({ description: "True when the lock has not yet expired" }) early!: boolean;
   @ApiProperty() penaltyBps!: number;
-  @ApiProperty({ description: "Penalty taken from pendingRewards only" }) penaltyMtt!: string;
+  @ApiProperty({ description: "Penalty taken from the realised rewards only" }) penaltyMtt!: string;
   @ApiProperty({ description: "pendingRewards − penalty" }) rewardsPayable!: string;
   @ApiProperty({ description: "principal + rewardsPayable" }) totalReceived!: string;
   @ApiPropertyOptional({ nullable: true, description: "Wait until this instant to avoid the penalty" })
   penaltyFreeAt!: string | null;
+  @ApiProperty({ description: "True when this previews less than the whole position" })
+  partial!: boolean;
+  @ApiProperty({ description: "The whole position, for context on a partial preview" })
+  positionAmount!: string;
+  @ApiProperty({ description: "All rewards accrued on the position, not just the realised share" })
+  positionPendingRewards!: string;
 }
 
 export class StakeRequest {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle, Camera, CheckCircle2, Clock, FileText, Lock, RefreshCw,
@@ -16,6 +16,36 @@ import { cn } from "@/lib/utils";
 type DocKind = "id_front" | "id_back" | "selfie" | "address_proof";
 type Status = "collecting" | "submitted" | "approved" | "rejected" | "more_info";
 
+/**
+ * What the API needs to know about an attached document.
+ *
+ * All four fields are measured from the actual file, never assumed. The digest in
+ * particular: `sha256` is what lets the reviewer prove the bytes they open are the
+ * bytes the member sent, so a placeholder value would be worse than no value —
+ * it would be a claim about a document nobody verified. That is why attaching a
+ * document here reads the file rather than flipping a boolean.
+ */
+interface DocMeta {
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+}
+
+/** Mirrored from the server's presigned-upload policy (ALLOWED_MIME_TYPES). */
+const ACCEPTED_MIME = ["image/jpeg", "image/png", "image/webp", "image/heic", "application/pdf"];
+const ACCEPT_ATTR = ACCEPTED_MIME.join(",");
+const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024;
+
+/** SHA-256 of the file's bytes, hex, computed in the browser. */
+async function digest(file: File): Promise<string> {
+  const buf = await file.arrayBuffer();
+  const hash = await crypto.subtle.digest("SHA-256", buf);
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 const DOCS: { kind: DocKind; label: string; hint: string; tier: 1 | 2; icon: React.ReactNode }[] = [
   { kind: "id_front", label: "Government ID — front", hint: "Passport, driving licence or national ID. Image or PDF, all four corners visible.", tier: 1, icon: <FileText /> },
   { kind: "id_back", label: "Government ID — back", hint: "Skip only if your document is single-sided, like a passport photo page.", tier: 1, icon: <FileText /> },
@@ -27,8 +57,8 @@ export function KycFlow() {
   const toast = useToast();
   const submitKyc = useSubmitKyc();
   const [status, setStatus] = useState<Status>("collecting");
-  const [uploaded, setUploaded] = useState<Record<DocKind, boolean>>({
-    id_front: false, id_back: false, selfie: false, address_proof: false,
+  const [uploaded, setUploaded] = useState<Record<DocKind, DocMeta | null>>({
+    id_front: null, id_back: null, selfie: null, address_proof: null,
   });
   const [tier2, setTier2] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -38,34 +68,86 @@ export function KycFlow() {
   const doneCount = required.filter((d) => uploaded[d.kind]).length;
   const canSubmit = uploaded.id_front && uploaded.selfie && (!tier2 || uploaded.address_proof);
 
-  const toggle = (k: DocKind) => {
-    setUploaded((u) => ({ ...u, [k]: !u[k] }));
-    if (!uploaded[k]) toast.success("Document attached", "Encrypted and queued for review.");
+  /* One hidden input drives every tile. `pending` records which document the
+   * picker was opened for, in a ref rather than state because the change event
+   * arrives long after the click and must read the value set by it. */
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const pending = useRef<DocKind | null>(null);
+
+  const pick = (k: DocKind) => {
+    pending.current = k;
+    fileRef.current?.click();
+  };
+
+  /**
+   * Attaches one document.
+   *
+   * The size and type checks are the server's own limits, applied here so a
+   * member learns their 40MB scan is too large before waiting on an upload —
+   * not to replace the server's checks, which still run.
+   */
+  const attach = async (k: DocKind, file: File | null | undefined) => {
+    if (!file) return;
+    if (!ACCEPTED_MIME.includes(file.type)) {
+      toast.error("That file type is not accepted", "Use a JPEG, PNG, WebP, HEIC or PDF.");
+      return;
+    }
+    if (file.size > MAX_DOCUMENT_BYTES) {
+      toast.error("That file is too large", "The limit is 15MB per document.");
+      return;
+    }
+    if (file.size === 0) {
+      toast.error("That file is empty", "Pick the document again.");
+      return;
+    }
+    try {
+      const sha256 = await digest(file);
+      setUploaded((u) => ({
+        ...u,
+        [k]: { filename: file.name, mimeType: file.type, sizeBytes: file.size, sha256 },
+      }));
+      toast.success("Document attached", "Encrypted and queued for review.");
+    } catch {
+      toast.error("Couldn't read that file", "Try attaching it again.");
+    }
   };
 
   const submit = async () => {
     setBusy(true);
     try {
       /* NOTE the shape: the API takes document REFERENCES — a storage key, a mime
-       * type, a size — not file bytes. Identity documents are uploaded straight to
-       * object storage by a separate signed-URL flow so they never pass through
-       * the API process or its logs, and this call registers what was stored.
+       * type, a size, a digest — not file bytes. Identity documents are uploaded
+       * straight to object storage by a separate signed-URL flow so they never
+       * pass through the API process or its logs, and this call registers what
+       * was stored.
        *
-       * That upload step is not built yet, which is why the keys below are
-       * placeholders derived from the selected kinds. The submission will be
-       * REFUSED by the provider integration rather than silently accepted — which
-       * is the correct failure: a KYC record pointing at documents that do not
-       * exist would be worse than no record. */
+       * The mime type, size and SHA-256 below are MEASURED from the file the
+       * member picked. They used to be hard-coded ("image/jpeg", 0 bytes, no
+       * digest), which the API rejected outright — `sizeBytes` must be at least
+       * 1 and `sha256` is required — so no submission could ever succeed.
+       *
+       * `storageKey` is still a placeholder, because the signed-URL upload step
+       * does not exist yet. That is the remaining gap and it fails honestly: the
+       * provider integration refuses a record pointing at an object that was
+       * never stored, which is the correct outcome. A KYC record that looks
+       * complete but references nothing would be worse than no record. */
+      const documents = (Object.keys(uploaded) as DocKind[])
+        .map((kind) => ({ kind, meta: uploaded[kind] }))
+        .filter((d): d is { kind: DocKind; meta: DocMeta } => d.meta !== null)
+        .map(({ kind, meta }) => ({
+          kind,
+          storageKey: `pending-upload/${kind}/${meta.sha256.slice(0, 16)}`,
+          mimeType: meta.mimeType,
+          sizeBytes: meta.sizeBytes,
+          sha256: meta.sha256,
+        }));
+
       await submitKyc.mutateAsync({
-        tier: 1,
-        documents: (Object.keys(uploaded) as DocKind[])
-          .filter((k) => uploaded[k])
-          .map((kind) => ({
-            kind,
-            storageKey: `pending-upload/${kind}`,
-            mimeType: "image/jpeg",
-            sizeBytes: 0,
-          })),
+        /* Tier 2 is the enhanced check, and it is what the member asked for when
+         * they attached a proof of address. Sending tier 1 regardless would have
+         * the server verify them to a lower tier than the documents support. */
+        tier: tier2 ? 2 : 1,
+        documents,
       });
       setStatus("submitted");
       toast.success("Submitted for review", "Most decisions land within a few minutes.");
@@ -192,7 +274,10 @@ export function KycFlow() {
 
           <div className="mt-5 flex flex-col gap-3 sm:flex-row">
             <Button
-              onClick={() => { setStatus("collecting"); if (!rejected) setUploaded((u) => ({ ...u, selfie: false })); }}
+              /* On a "more info" outcome the ID documents were accepted and only
+               * the selfie needs retaking, so that one attachment is cleared and
+               * the rest are kept. */
+              onClick={() => { setStatus("collecting"); if (!rejected) setUploaded((u) => ({ ...u, selfie: null })); }}
               fullWidth
               icon={<RefreshCw className="size-4" />}
             >
@@ -255,10 +340,12 @@ export function KycFlow() {
                 </div>
                 <p className="mt-1 text-xs leading-relaxed text-text-muted">{d.hint}</p>
               </div>
+              {/* Both paths end in a real file picker: the digest the API
+                  requires can only be computed from the actual bytes. */}
               <Button
                 size="sm"
                 variant={on ? "outline" : "secondary"}
-                onClick={() => (d.kind === "selfie" && !on ? setSelfieOpen(true) : toggle(d.kind))}
+                onClick={() => (d.kind === "selfie" ? setSelfieOpen(true) : pick(d.kind))}
                 icon={d.kind === "selfie" ? <Camera className="size-3.5" /> : <Upload className="size-3.5" />}
               >
                 {on ? "Replace" : d.kind === "selfie" ? "Capture" : "Upload"}
@@ -308,6 +395,23 @@ export function KycFlow() {
         </Link>
       </p>
 
+      {/* The one file input every tile uses. */}
+      <input
+        ref={fileRef}
+        type="file"
+        className="sr-only"
+        accept={ACCEPT_ATTR}
+        onChange={(e) => {
+          const kind = pending.current;
+          const file = e.target.files?.[0];
+          /* Reset first: without this, re-picking the same file fires no change
+           * event and the member's second attempt looks like it did nothing. */
+          e.target.value = "";
+          pending.current = null;
+          if (kind) void attach(kind, file);
+        }}
+      />
+
       {/* Liveness capture */}
       <Modal
         open={selfieOpen}
@@ -319,7 +423,15 @@ export function KycFlow() {
         footer={
           <>
             <Button variant="ghost" onClick={() => setSelfieOpen(false)}>Cancel</Button>
-            <Button onClick={() => { toggle("selfie"); setSelfieOpen(false); }}>Capture</Button>
+            {/* Attaches a photo. The live camera capture is not built, and a
+                "Capture" button that produced no image was why the selfie
+                reached the API with no bytes, no size and no digest. */}
+            <Button
+              onClick={() => { setSelfieOpen(false); pick("selfie"); }}
+              icon={<Upload className="size-4" />}
+            >
+              Attach a photo
+            </Button>
           </>
         }
       >
@@ -327,15 +439,13 @@ export function KycFlow() {
           <div className="absolute inset-6 rounded-[50%] border-2 border-dashed border-[var(--accent)] opacity-60" />
           <div className="relative text-center">
             <Camera className="mx-auto size-8 text-text-muted" />
-            <p className="mt-2 text-xs text-text-muted">Camera stream mounts here</p>
+            <p className="mt-2 text-xs text-text-muted">Live capture is not available yet</p>
           </div>
-          <span className="absolute inset-x-0 bottom-0 bg-surface-0/80 px-4 py-2 text-center text-xs text-text-secondary backdrop-blur">
-            Turn your head slowly to the left
-          </span>
         </div>
         <p className="mt-3 text-xs leading-relaxed text-text-muted">
-          The capture happens in-browser and is sent directly to our KYC provider for matching against
-          your ID. We store the result, not the video stream.
+          In-browser liveness capture is still being built. For now, attach a clear photo of your
+          face: it goes to our KYC provider for matching against your ID, and we store the result
+          rather than the image.
         </p>
       </Modal>
     </div>

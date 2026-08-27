@@ -77,15 +77,15 @@ export function SupportView() {
   const submitTicket = async () => {
     setBusy(true);
     try {
+      /* `financialDispute` is deliberately absent. The server derives it from the
+       * category — that routing decision is not one a form gets to make — and it
+       * rejects the field, so sending it turned every ticket into a 400. The
+       * local `isFinancial` below is still used to tell the member what to
+       * expect, which is the only claim the client is entitled to make. */
       await createTicket.mutateAsync({
         subject: form.subject.trim(),
         category: form.category,
         body: form.body.trim(),
-        /* Declared by the client from the chosen category, and re-derived by the
-         * server: a financial dispute routes to a compliance-trained agent and
-         * carries a different SLA, so it is not a decision a form gets to make
-         * alone. */
-        financialDispute: isFinancial,
       });
     } catch (err) {
       toast.error("Ticket not created", humanMessage(err));

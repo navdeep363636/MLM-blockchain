@@ -119,8 +119,18 @@ describe("RealtimeGateway", () => {
       expect(jwt.verifyAsync).toHaveBeenCalledWith("tok123");
     });
 
+    /**
+     * The claim is `staff`, which is what SessionService.signAccessToken issues
+     * and what JwtAuthGuard reads.
+     *
+     * This test used to mock `isStaff: true` — a claim no part of this API emits
+     * — and passed against a gateway that read the same invented name. Both
+     * sides agreed on a fiction, so the staff room was never joined in
+     * production and the suite was green throughout. Mocking the real claim name
+     * is what makes this test able to fail.
+     */
     it("puts staff in the ops room IN ADDITION to their own", async () => {
-      jwt.verifyAsync.mockResolvedValue({ sub: "s1", jti: "j2", isStaff: true });
+      jwt.verifyAsync.mockResolvedValue({ sub: "s1", jti: "j2", staff: true });
       const client = socketDouble();
       await gateway.handleConnection(client as never);
 
@@ -131,6 +141,17 @@ describe("RealtimeGateway", () => {
     it("does not put a member in the staff room", async () => {
       const client = socketDouble();
       await gateway.handleConnection(client as never);
+      expect(client.join).not.toHaveBeenCalledWith("staff:ops");
+    });
+
+    /** Guards the exact regression: a token whose staff flag is under any other
+     *  name must not grant the staff room. */
+    it("ignores an `isStaff` claim — that is not the name the API issues", async () => {
+      jwt.verifyAsync.mockResolvedValue({ sub: "s2", jti: "j3", isStaff: true });
+      const client = socketDouble();
+      await gateway.handleConnection(client as never);
+
+      expect(client.join).toHaveBeenCalledWith("user:s2");
       expect(client.join).not.toHaveBeenCalledWith("staff:ops");
     });
   });
