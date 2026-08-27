@@ -7,6 +7,7 @@ import {
 } from "@nestjs/websockets";
 import type { Server, Socket } from "socket.io";
 import { RedisService } from "@/common/redis/redis.service";
+import type { AccessTokenClaims } from "@/common/guards";
 import { CacheKeys } from "@/common/redis/cache.keys";
 import { Events, type DomainEvent } from "@/events";
 
@@ -97,11 +98,21 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
         return;
       }
 
-      const payload = await this.jwt.verifyAsync<{
-        sub: string;
-        jti: string;
-        isStaff?: boolean;
-      }>(token);
+      /**
+       * Typed with the SHARED claim type, not a local structural guess.
+       *
+       * This used to declare its own `{ sub, jti, isStaff }`, and `isStaff` is not
+       * a claim this API issues — the token carries `staff` (see
+       * `AccessTokenClaims`, set in SessionService.signAccessToken). So the
+       * staff flag read `undefined` on every connection, no socket ever joined
+       * `staff:ops`, and every staff-facing push — approvals, fraud alerts,
+       * payout-ratio breaches, reorgs — was emitted to an empty room. Nothing
+       * threw and nothing logged, which is exactly how it survived: the same
+       * failure mode the comment below this one describes.
+       *
+       * Reusing the type means the next rename is a compile error here.
+       */
+      const payload = await this.jwt.verifyAsync<AccessTokenClaims & { jti: string }>(token);
 
       /* The revocation check. A JWT stays cryptographically valid until it
        * expires; the session record is what says it is still live. */
@@ -113,11 +124,11 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
       client.data.userId = payload.sub;
       client.data.jti = payload.jti;
-      client.data.isStaff = Boolean(payload.isStaff);
+      client.data.isStaff = payload.staff === true;
 
       /* Rule 2: the only join, and it comes from the verified token. */
       await client.join(userRoom(payload.sub));
-      if (payload.isStaff) await client.join(staffRoom);
+      if (client.data.isStaff) await client.join(staffRoom);
 
       client.emit("ready", {
         connected: true,
