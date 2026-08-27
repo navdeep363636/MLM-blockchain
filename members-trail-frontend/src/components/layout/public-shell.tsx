@@ -8,8 +8,9 @@ import { ArrowUpRight, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { publicFooterNav, publicNav } from "@/lib/nav";
 import { Button } from "@/components/ui";
-import { WalletConnectButton } from "@/components/web3";
+import { LazyWalletConnectButton } from "@/components/web3/lazy-connect-button";
 import { GlassPanel, MeshHaze, ScrollProgress } from "@/components/fx";
+import { NavLink } from "./nav-link";
 import { Logo } from "./logo";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -62,13 +63,16 @@ export function PublicHeader() {
               {publicNav.map((l) => {
                 const active = pathname === l.href;
                 return (
-                  <Link
+                  <NavLink
                     key={l.href}
                     href={l.href}
+                    active={active}
+                    showIndicator={false}
                     className={cn(
                       "group relative rounded-xl px-3.5 py-2 text-sm font-medium transition-colors duration-[var(--dur-quick)]",
-                      active ? "text-text-primary" : "text-text-muted hover:text-text-primary",
+                      "text-text-muted hover:text-text-primary",
                     )}
+                    activeClassName="text-text-primary"
                   >
                     {/* Hover plate, drawn behind the label. A background on the
                         link itself would animate its own text colour with it. */}
@@ -92,7 +96,7 @@ export function PublicHeader() {
                         />
                       </>
                     )}
-                  </Link>
+                  </NavLink>
                 );
               })}
             </nav>
@@ -100,7 +104,7 @@ export function PublicHeader() {
             <div className="flex items-center gap-2">
               <ThemeToggle className="hidden sm:grid" />
               <div className="hidden sm:block">
-                <WalletConnectButton compact />
+                <LazyWalletConnectButton compact />
               </div>
               <Button href="/login" variant="ghost" size="sm" className="hidden md:inline-flex">Log in</Button>
               <Button href="/signup" size="sm" className="hidden md:inline-flex">Sign up free</Button>
@@ -147,7 +151,7 @@ export function PublicHeader() {
                       </motion.div>
                     ))}
                     <div className="flex flex-col gap-2 pt-3">
-                      <WalletConnectButton />
+                      <LazyWalletConnectButton />
                       <Button href="/login" variant="outline" fullWidth>Log in</Button>
                       <Button href="/signup" fullWidth>Sign up free</Button>
                     </div>
