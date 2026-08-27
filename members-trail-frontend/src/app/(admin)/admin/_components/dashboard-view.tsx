@@ -384,13 +384,21 @@ function FundingSplit() {
 /* --------------------------------- Trends -------------------------------- */
 
 function Trends() {
-  const { data: revenue, isLoading } = useRevenueByStream();
-  const { data: tvl } = useStakingTvlTrend();
-  const latest = tvl[tvl.length - 1];
+  const { data: revenue, isLoading: revenueLoading } = useRevenueByStream();
+  const { data: tvl, isLoading: tvlLoading } = useStakingTvlTrend();
+  const latest = tvl.at(-1);
   const first = tvl[0];
-  const growth = first ? ((latest.tvl - first.tvl) / first.tvl) * 100 : 0;
+  const growth = first && latest ? ((latest.tvl - first.tvl) / first.tvl) * 100 : 0;
 
-  if (isLoading) {
+  /* Both, not just revenue.
+   *
+   * These are two independent requests and the gate used to watch only the
+   * first. When revenue resolved before the TVL series — which is the common
+   * ordering, since the TVL query is the slower of the two — this rendered with
+   * `tvl` still at its empty fallback and threw on `latest.tvl`, taking the
+   * whole admin dashboard to its error boundary. A loading gate has to cover
+   * every query the render below actually dereferences. */
+  if (revenueLoading || tvlLoading) {
     return (
       <div className="grid gap-4 xl:grid-cols-2">
         <SkeletonCard />
@@ -425,8 +433,8 @@ function Trends() {
           footnote="Rewards on this TVL are variable and recalculated from Treasury inflows — never a fixed APR."
         />
         <div className="grid gap-3 sm:grid-cols-3">
-          <MiniStat label="Current TVL" value={`${formatCompact(latest.tvl)} MTT`} sub={latest.month} />
-          <MiniStat label="Active stakers" value={formatNumber(latest.stakers)} sub="unique addresses" />
+          <MiniStat label="Current TVL" value={latest ? `${formatCompact(latest.tvl)} MTT` : "—"} sub={latest?.month ?? "no data"} />
+          <MiniStat label="Active stakers" value={latest ? formatNumber(latest.stakers) : "—"} sub="unique addresses" />
           <MiniStat label="12-month growth" value={formatPercent(growth, 1)} sub="TVL change" tone="good" />
         </div>
       </div>
