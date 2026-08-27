@@ -1184,7 +1184,28 @@ export function usePublicStats() {
 export const usePublicConfig = (): Resource<PublicConfig> =>
   useResource(
     qk.publicConfig(),
-    () => api.get<PublicConfig>("/public/config", { anonymous: true }),
+    async () => {
+      const res = await api.get<Partial<PublicConfig>>("/public/config", { anonymous: true });
+      /* Merged over the empty config, one level deep, rather than returned raw.
+       *
+       * The fallback below only applies when the request has produced NOTHING.
+       * A response that arrives with a block missing — no `conversion`, no
+       * `referral` — replaced the whole object, and the screens that read
+       * `policy.conversion.perUserDailyPoints` threw. /app/wallet/convert and
+       * /referral-program both went to their error boundaries this way, and
+       * /referral-program is a public marketing page.
+       *
+       * One level is the right depth: every top-level key here is either a
+       * scalar, an array, or a flat block of scalars. */
+      const got = res ?? {};
+      return {
+        ...EMPTY_PUBLIC_CONFIG,
+        ...got,
+        password: { ...EMPTY_PUBLIC_CONFIG.password, ...(got.password ?? {}) },
+        referral: { ...EMPTY_PUBLIC_CONFIG.referral, ...(got.referral ?? {}) },
+        conversion: { ...EMPTY_PUBLIC_CONFIG.conversion, ...(got.conversion ?? {}) },
+      };
+    },
     EMPTY_PUBLIC_CONFIG,
     { staleTime: FRESH.config },
   );
@@ -1228,9 +1249,14 @@ const EMPTY_PUBLIC_CONFIG: PublicConfig = {
 export const usePublicReferralPlan = (): Resource<CommissionConfig> => {
   const res = usePublicConfig();
   const data = useMemo<CommissionConfig>(() => {
-    const r = res.data.referral;
+    /* `/public/config` is the one read on this path and it is optional all the
+     * way down: this drives a PUBLIC marketing page and a member-facing
+     * calculator, and neither may white-screen because the config endpoint
+     * answered with a block this app has not seen. An absent plan renders as an
+     * empty plan, which the components below already handle. */
+    const r = res.data.referral ?? ({} as NonNullable<PublicConfig["referral"]>);
     return {
-      levels: r.levels.map((l) => ({
+      levels: (r.levels ?? []).map((l) => ({
         level: (l.level === 2 ? 2 : l.level === 3 ? 3 : 1) as 1 | 2 | 3,
         ratePct: l.rateBps / 100,
       })),
