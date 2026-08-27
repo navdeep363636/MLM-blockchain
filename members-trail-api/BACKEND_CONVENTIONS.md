@@ -288,3 +288,124 @@ set, not the schema's, so joining one against an id column raises "illegal mix o
 collations" on any server installed with a different default. Two procedures loop
 over the JSON array with a routine variable instead; it is still one round trip
 from the application, and it survives a move between machines.
+
+---
+
+## Two bugs the tests could not see
+
+Both were found by connecting a real client and triggering a real action. Both had
+passing unit tests over them. They are recorded here because the *reason* they were
+invisible is more useful than the fix.
+
+### 1. Every realtime event was delivered to nobody
+
+`EventBusService.publish` emits a `DomainEvent` envelope — `{ id, name, occurredAt,
+correlationId, actorId, payload }` — because that wrapper is also the message body
+under the RabbitMQ transport and is what makes an event traceable. All 23 handlers
+in `RealtimeGateway` were written to take the *payload* directly:
+
+```ts
+@OnEvent(Events.UserStatusChanged)
+onStatusChanged(payload: { userId: string; to: string }) {
+  this.toUser(payload.userId, "account.status_changed", { … });   // undefined
+}
+```
+
+`payload.userId` was `undefined`, so every event was addressed to the room
+`user:undefined`, which nobody is ever in. Nothing threw. Nothing logged an error.
+The gateway's own "refuse to emit with no recipient" guard fired silently and
+correctly, and the entire realtime layer delivered nothing to anyone.
+
+**Why the tests missed it.** The gateway spec called the handlers with the bare
+payload — the same shape the handlers wrongly expected. Sixteen tests passed,
+asserting a contract that did not exist. *A test double that disagrees with the
+producer is worse than no test.* The spec now builds the real envelope through a
+helper, so the two cannot drift again.
+
+### 2. Value-moving mutations that were not idempotent
+
+Seven endpoints carried `@Idempotent(scope)` — conversion, stake, unstake, claim,
+withdrawal, store purchase, marketplace. Five that move value did not:
+
+| Endpoint | What a double-click did |
+| --- | --- |
+| `POST /tournaments/:ref/register` | Debited the entry fee twice |
+| `POST /referral/claim` | Two claims of released commission |
+| `POST /quests/:id/claim` | Credited the Points reward twice |
+| `POST /wallet/deposits` | Two payment intents at the provider |
+| `POST /support/tickets` | Two tickets, one agent's time wasted |
+
+Confirmed by posting the same body twice with the same `Idempotency-Key` and
+getting two records back. All five are now `@Idempotent`.
+
+**Why the tests missed it.** Every unit test called the service directly. The
+interceptor is HTTP-layer, so no service test could ever exercise it, and the e2e
+suite covered the endpoints that already had it. The lesson is narrow and useful:
+*a guard implemented as an interceptor is only tested through the transport.*
+
+---
+
+## Endpoints added for the frontend integration
+
+| Route | Why it exists |
+| --- | --- |
+| `GET /public/stats` | The landing page's live figures. Unauthenticated, cached 5 min. Anything the ledger cannot substantiate returns null, and the UI omits that tile — the FRD forbids hard-coded marketing numbers, and equally forbids inventing one. |
+| `GET /public/config` | Registration policy, referral rates, conversion caps. These were constants in the frontend bundle, where they had **already drifted** from the server's list. |
+| `GET /admin/me` | The operator's own record, effective permissions, and the colleagues eligible to be their second approver — computed server-side so the UI cannot offer a four-eyes violation. |
+| `GET /admin/staff` | The staff directory. |
+| `GET /admin/members` | Member directory. Contact details masked, no balances, and search deliberately excludes email and phone: those columns are stored hashed precisely so that a LIKE over every member's contact details is not a query an operator can run casually. |
+| `GET /admin/analytics/*` | Five dashboard series, on the SQL views. Cached 60s — the only admin reads that are cached, because a monthly series and a live counter are nothing alike underneath. |
+| `GET /admin/conversion/caps` | The read side of a setting that only had a write side. |
+
+`GET /admin/kpis` gained the dashboard tiles: actives today with a real
+period-over-period delta (null when there is no prior basis — a platform's first
+day has no growth figure), Points issued, MTT liability, treasury headroom, and the
+three ratios.
+
+## The RBAC defect this uncovered
+
+Cross-checking the guards against the seeded matrix showed that **29 of the 32
+permission strings used by admin routes could never be granted.** The matrix
+produces `module:read|write|approve`; the routes asked for things like
+`withdrawal:approve`, `conversion:rate:propose` and `approval:decide`. Every one of
+those routes returned 403 to every role, super admin included — the entire admin
+API was unreachable.
+
+Two fixes, both needed. The route strings are normalised to the matrix's
+vocabulary, preserving the write/approve split wherever four eyes matter
+(`conversion:write` proposes, `conversion:approve` decides). And the seeded matrix
+gained the nine modules it was missing — approvals, cms, games, quests, store,
+tournaments, staking, chain, notifications. Super admin now reaches all 27 guarded
+permissions; support reaches 2; compliance 9; finance 7.
+
+There is a cheap regression check for this, worth running after any route change:
+
+```bash
+# every permission a route demands
+grep -rhoE '@RequirePermissions\("[^)]+\)' src --include=*.ts \
+  | sed -E 's/@RequirePermissions\(//; s/\)$//' | tr -d '"' | tr ',' '\n' \
+  | sed 's/^ *//' | sort -u > /tmp/required
+
+# every permission the matrix can grant
+mysql -N -B -e "SELECT role,module,canRead,canWrite,canApprove FROM role_permissions" members_trail \
+  | awk '{if($3==1)print $2":read"; if($4==1)print $2":write"; if($5==1)print $2":approve"}' \
+  | sort -u > /tmp/grantable
+
+comm -23 /tmp/required /tmp/grantable   # must be empty
+```
+
+## Refresh tokens now travel in an httpOnly cookie
+
+`POST /auth/login`, `/auth/login/2fa` and `/auth/refresh` set `mt_rt` —
+httpOnly, SameSite=Lax, Secure in production, path-scoped to `/api/v1/auth` so it
+is not attached to two hundred unrelated requests. `/auth/refresh` reads the cookie
+first and the body second; `logout` and `logout-all` clear it.
+
+The body contract is unchanged, because a native client has no cookie jar. The
+cookie exists because a browser SPA has nowhere safe to put a long-lived token, and
+an XSS on a platform that moves money should not also hand over the ability to mint
+sessions for a month.
+
+A rejected refresh clears the cookie on the way out. Leaving it would make every
+reload retry a dead token — and since reuse is treated as a compromise, the client
+would keep destroying the sessions it had just created.

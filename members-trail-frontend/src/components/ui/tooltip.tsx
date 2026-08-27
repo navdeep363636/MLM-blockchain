@@ -39,8 +39,9 @@ export function Tooltip({
             exit={{ opacity: 0, scale: 0.94 }}
             transition={{ duration: 0.15 }}
             className={cn(
-              "absolute z-50 w-max max-w-64 rounded-lg border border-border-default bg-surface-3 px-2.5 py-1.5",
-              "text-xs leading-relaxed text-text-secondary shadow-xl",
+              "absolute z-50 w-max max-w-64 rounded-xl border border-border-default px-2.5 py-1.5",
+              "glass-2 [box-shadow:var(--shadow-e4),inset_0_1px_0_0_var(--rim-light)]",
+              "text-xs leading-relaxed text-text-secondary",
               pos,
             )}
           >

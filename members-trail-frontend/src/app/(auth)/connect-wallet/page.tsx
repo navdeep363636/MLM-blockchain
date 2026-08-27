@@ -2,6 +2,7 @@
 
 import { AuthHeading } from "../_components/auth-shell";
 import { WalletSetup } from "./_components/wallet-setup";
+import { Web3Provider } from "@/components/web3/web3-provider";
 
 export const metadata = {
   title: "Connect your wallet",
@@ -16,7 +17,9 @@ export default function ConnectWalletPage() {
         title="Where should your MTT go?"
         subtitle="Choose a destination for conversions, staking rewards and commission payouts. You can do this later, but you'll need it before your first conversion."
       />
-      <WalletSetup />
+      <Web3Provider>
+        <WalletSetup />
+      </Web3Provider>
     </>
   );
 }

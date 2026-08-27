@@ -209,6 +209,7 @@ export class WalletController {
   /* -------------------------------- deposits ------------------------------ */
 
   @Post("deposits")
+  @Idempotent("deposit")
   @HttpCode(201)
   @ApiOperation({
     summary: "Start a deposit and get the processor reference",

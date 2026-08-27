@@ -79,6 +79,7 @@ export const chainConfig = registerAs("chain", () => ({
     referralDistributor: env.REFERRAL_DISTRIBUTOR_ADDRESS,
     teamVesting: env.TEAM_VESTING_ADDRESS,
     advisorsVesting: env.ADVISORS_VESTING_ADDRESS,
+    payout: env.PAYOUT_ADDRESS,
   },
   indexer: {
     enabled: env.INDEXER_ENABLED,

@@ -95,7 +95,7 @@ export class NotificationsAdminController {
 
   @Post("broadcast")
   @HttpCode(202)
-  @RequirePermissions("notification:broadcast")
+  @RequirePermissions("notifications:write")
   @ApiOperation({
     summary: "Send a system or promotional notification to a list of members",
     description:

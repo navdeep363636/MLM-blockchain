@@ -3,6 +3,10 @@
 import { useState } from "react";
 import { CheckCircle2, Paperclip, Send, ShieldAlert } from "lucide-react";
 import { Button, Callout, Input, Select, Textarea, useToast } from "@/components/ui";
+import { useAuth } from "@/lib/auth/auth-context";
+import { useCreateTicket } from "@/lib/hooks/use-mutations";
+import { humanMessage } from "@/lib/api/errors";
+import { SUPPORT_EMAIL } from "@/lib/support";
 
 const CATEGORIES = [
   { value: "account", label: "Account & login" },
@@ -27,6 +31,18 @@ interface Errors {
 
 export function ContactForm() {
   const toast = useToast();
+  /* A ticket belongs to an account: it has an SLA, an assignee, an audit trail
+   * and a member to reply to. There is no unauthenticated ticket endpoint, and
+   * inventing one would be a spam intake with no identity behind it.
+   *
+   * So this form does one of two honest things. Signed in, it opens a real
+   * ticket. Signed out, it says plainly that it cannot, and gives the address
+   * that reaches a person. What it does NOT do — what it used to do — is show
+   * "we've opened a ticket and emailed you the reference" when nothing was
+   * created and no email was sent. */
+  const { phase } = useAuth();
+  const createTicket = useCreateTicket();
+  const canOpenTicket = phase === "authenticated";
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
@@ -52,16 +68,30 @@ export function ContactForm() {
 
   const submit = async (ev: React.FormEvent) => {
     ev.preventDefault();
+    if (!canOpenTicket) return;
     if (!validate()) {
       toast.error("Check the highlighted fields", "A few details are missing or invalid.");
       return;
     }
     setBusy(true);
-    // Wire this to POST /api/support/tickets when the backend is available.
-    await new Promise((r) => setTimeout(r, 900));
-    setBusy(false);
-    setSent(true);
-    toast.success("Message sent", "We've opened a ticket and emailed you the reference.");
+    try {
+      const ticket = await createTicket.mutateAsync({
+        subject: form.subject.trim(),
+        category: form.category === "partnership" ? "other" : form.category,
+        body: [
+          form.message.trim(),
+          "",
+          `— submitted via the contact form as ${form.name.trim()} <${form.email.trim()}>`,
+        ].join("\n"),
+        financialDispute: FINANCIAL.has(form.category),
+      });
+      setSent(true);
+      toast.success("Ticket opened", `Reference ${ticket.ref}. You can follow it in Support.`);
+    } catch (err) {
+      toast.error("Couldn't open a ticket", humanMessage(err));
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (sent) {
@@ -175,9 +205,25 @@ export function ContactForm() {
         never ask for them, and anyone who does is attempting fraud.
       </p>
 
-      <Button type="submit" loading={busy} fullWidth className="mt-5" icon={<Send className="size-4" />}>
-        Send message
-      </Button>
+      {canOpenTicket ? (
+        <Button type="submit" loading={busy} fullWidth className="mt-5" icon={<Send className="size-4" />}>
+          Send message
+        </Button>
+      ) : (
+        <Callout tone="info" title="Sign in to open a support ticket" className="mt-5">
+          <p className="mt-1">
+            A ticket is attached to your account so it has an owner, a response deadline and a
+            history you can read back. Signing in takes a moment and means you can follow the reply
+            in the app rather than in an inbox.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button href="/login" size="sm">Sign in</Button>
+            <Button href={`mailto:${SUPPORT_EMAIL}`} size="sm" variant="outline">
+              Email {SUPPORT_EMAIL}
+            </Button>
+          </div>
+        </Callout>
+      )}
     </form>
   );
 }

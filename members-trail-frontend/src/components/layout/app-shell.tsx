@@ -14,6 +14,7 @@ import type { NavGroup } from "@/lib/nav";
 import { Avatar, Badge, Dropdown, KycBadge } from "@/components/ui";
 import { WalletConnectButton, MockDataBanner, NetworkGuard } from "@/components/web3";
 import { useCurrentUser, useNotifications } from "@/lib/hooks/use-data";
+import { MeshHaze, PageTransition } from "@/components/fx";
 import { Logo } from "./logo";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -46,14 +47,20 @@ function NavSection({
         onClick={onNavigate}
         title={collapsed ? it.label : undefined}
         className={cn(
-          "group relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
+          "group relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium",
+          "transition-[background-color,color,box-shadow,transform] duration-[var(--dur-quick)] ease-[var(--ease-tide)]",
           active
-            ? "bg-accent-soft text-[var(--accent-hover)]"
-            : "text-text-muted hover:bg-surface-2 hover:text-text-primary",
+            ? "bg-accent-soft text-[var(--accent-hover)] ring-1 ring-inset ring-[var(--accent-ring)] [box-shadow:inset_0_1px_0_0_var(--rim-light)]"
+            : "text-text-muted hover:translate-x-0.5 hover:bg-surface-2 hover:text-text-primary",
           collapsed && "justify-center px-0",
         )}
       >
-        {active && <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-[var(--accent)]" />}
+        {active && (
+          <span
+            aria-hidden
+            className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-[var(--accent)] shadow-[0_0_10px_1px_var(--accent-ring)]"
+          />
+        )}
         <Icon className="size-4 shrink-0" />
         {!collapsed && it.label}
       </Link>
@@ -116,14 +123,18 @@ function NavSection({
                       href={it.href}
                       onClick={onNavigate}
                       className={cn(
-                        "relative block rounded-lg px-2.5 py-2 text-sm transition-all duration-200",
+                        "relative block rounded-lg px-2.5 py-2 text-sm",
+                        "transition-[background-color,color,transform] duration-[var(--dur-quick)] ease-[var(--ease-tide)]",
                         active
                           ? "bg-accent-soft font-medium text-[var(--accent-hover)]"
-                          : "text-text-muted hover:bg-surface-2 hover:text-text-secondary",
+                          : "text-text-muted hover:translate-x-0.5 hover:bg-surface-2 hover:text-text-secondary",
                       )}
                     >
                       {active && (
-                        <span className="absolute -left-[calc(0.75rem+1px)] top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-[var(--accent)]" />
+                        <span
+                          aria-hidden
+                          className="absolute -left-[calc(0.75rem+1px)] top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-[var(--accent)] shadow-[0_0_8px_1px_var(--accent-ring)]"
+                        />
                       )}
                       {it.label}
                     </Link>
@@ -161,23 +172,27 @@ export function AppShell({
   useEffect(() => setMobileOpen(false), [pathname]);
 
   const sidebar = (onNavigate?: () => void) => (
-    <div className="flex h-full flex-col">
-      <div className={cn("flex h-16 shrink-0 items-center gap-2 border-b border-border-subtle px-4", collapsed && "justify-center px-2")}>
+    <div className="relative flex h-full flex-col">
+      {/* A very faint haze behind the sidebar. It is the only thing separating
+          a 260px column of links from a grey rectangle, and it costs one
+          absolutely-positioned div. */}
+      <MeshHaze opacity={0.16} />
+      <div className={cn("relative flex h-16 shrink-0 items-center gap-2 border-b border-border-subtle px-4", collapsed && "justify-center px-2")}>
         <Logo compact={collapsed} />
         {!collapsed && variant === "admin" && (
           <Badge tone="brand" className="ml-auto">Admin</Badge>
         )}
       </div>
 
-      <nav className={cn("flex-1 space-y-1 overflow-y-auto p-3", collapsed && "px-2")} aria-label="Dashboard">
+      <nav className={cn("relative flex-1 space-y-1 overflow-y-auto p-3", collapsed && "px-2")} aria-label="Dashboard">
         {nav.map((g) => (
           <NavSection key={g.label} group={g} pathname={pathname} onNavigate={onNavigate} collapsed={collapsed} />
         ))}
       </nav>
 
       {!collapsed && (
-        <div className="shrink-0 border-t border-border-subtle p-3">
-          <div className="rounded-xl bg-surface-2 p-3">
+        <div className="relative shrink-0 border-t border-border-subtle p-3">
+          <div className="rounded-xl border border-border-subtle bg-surface-2 p-3 [box-shadow:inset_0_1px_0_0_var(--rim-light),var(--shadow-e1)]">
             <div className="flex items-center gap-2.5">
               <Avatar name={user.displayName} size="sm" />
               <div className="min-w-0 flex-1">
@@ -193,7 +208,7 @@ export function AppShell({
       <button
         onClick={() => setCollapsed((c) => !c)}
         aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        className="hidden shrink-0 items-center gap-2 border-t border-border-subtle px-4 py-3 text-xs text-text-muted transition-colors hover:text-text-primary lg:flex"
+        className="relative hidden shrink-0 items-center gap-2 border-t border-border-subtle px-4 py-3 text-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary lg:flex"
       >
         <PanelLeftClose className={cn("size-4 transition-transform duration-300", collapsed && "rotate-180")} />
         {!collapsed && "Collapse"}
@@ -206,7 +221,13 @@ export function AppShell({
       {/* Desktop sidebar */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 hidden border-r border-border-subtle bg-surface-1 transition-[width] duration-300 lg:block",
+          "fixed inset-y-0 left-0 z-40 hidden overflow-hidden border-r border-border-subtle bg-surface-1 lg:block",
+          "transition-[width] duration-[var(--dur-base)] ease-[var(--ease-tide)]",
+          /* The sidebar is the nearest surface on the page, so it carries the
+             page's only vertical rim light and a shadow cast rightward onto
+             the content. That single edge is what makes the layout read as two
+             planes rather than two background colours. */
+          "[box-shadow:inset_-1px_0_0_0_var(--rim-light),8px_0_32px_-24px_rgb(0_0_0_/_0.8)]",
           collapsed ? "w-[4.5rem]" : "w-[16.5rem]",
         )}
       >
@@ -220,12 +241,12 @@ export function AppShell({
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={() => setMobileOpen(false)}
-              className="absolute inset-0 bg-black/65 backdrop-blur-sm"
+              className="absolute inset-0 bg-[radial-gradient(120%_100%_at_0%_50%,rgb(0_0_0_/_0.5),rgb(0_0_0_/_0.78))] backdrop-blur-md"
             />
             <motion.aside
               initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }}
-              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-              className="absolute inset-y-0 left-0 w-[17rem] border-r border-border-default bg-surface-1"
+              transition={{ duration: 0.38, ease: [0.32, 0.72, 0, 1] }}
+              className="absolute inset-y-0 left-0 w-[17rem] overflow-hidden border-r border-border-default bg-surface-1 [box-shadow:var(--shadow-e5),inset_-1px_0_0_0_var(--rim-light)]"
             >
               <button
                 onClick={() => setMobileOpen(false)}
@@ -244,7 +265,11 @@ export function AppShell({
         <NetworkGuard />
         <MockDataBanner />
 
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border-subtle bg-surface-0/85 px-4 backdrop-blur-xl sm:px-6">
+        <header
+          className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border-subtle px-4 sm:px-6
+                     bg-[color-mix(in_oklab,var(--surface-0)_78%,transparent)] backdrop-blur-xl backdrop-saturate-150
+                     [box-shadow:inset_0_1px_0_0_var(--rim-light),0_10px_30px_-24px_rgb(0_0_0_/_0.9)]"
+        >
           <button
             onClick={() => setMobileOpen(true)}
             aria-label="Open menu"
@@ -253,12 +278,12 @@ export function AppShell({
             <Menu className="size-5" />
           </button>
 
-          {title && <h1 className="truncate text-base font-semibold text-text-primary">{title}</h1>}
+          {title && <h1 className="truncate font-display text-base font-semibold tracking-tight text-text-primary">{title}</h1>}
 
           <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
             <button
               aria-label="Search"
-              className="hidden size-10 place-items-center rounded-xl text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary sm:grid"
+              className="hidden size-10 place-items-center rounded-xl text-text-muted transition-[background-color,color,box-shadow] duration-[var(--dur-quick)] hover:bg-surface-2 hover:text-text-primary hover:[box-shadow:inset_0_1px_0_0_var(--rim-light)] sm:grid"
             >
               <Search className="size-4" />
             </button>
@@ -266,11 +291,11 @@ export function AppShell({
             <Link
               href={variant === "admin" ? "/admin/tickets" : "/app/notifications"}
               aria-label={`Notifications${unread ? ` (${unread} unread)` : ""}`}
-              className="relative grid size-10 place-items-center rounded-xl text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary"
+              className="relative grid size-10 place-items-center rounded-xl text-text-muted transition-[background-color,color,box-shadow] duration-[var(--dur-quick)] hover:bg-surface-2 hover:text-text-primary hover:[box-shadow:inset_0_1px_0_0_var(--rim-light)]"
             >
               <Bell className="size-4" />
               {unread > 0 && (
-                <span className="absolute right-1.5 top-1.5 grid min-w-4 place-items-center rounded-full bg-[var(--accent)] px-1 text-[10px] font-bold leading-4 text-white">
+                <span className="absolute right-1.5 top-1.5 grid min-w-4 place-items-center rounded-full bg-[var(--accent)] px-1 text-[10px] font-bold leading-4 text-white shadow-[0_0_10px_1px_var(--accent-ring)]">
                   {unread > 9 ? "9+" : unread}
                 </span>
               )}
@@ -285,7 +310,7 @@ export function AppShell({
             <Dropdown
               align="end"
               trigger={
-                <span className="grid place-items-center rounded-full ring-2 ring-transparent transition-all hover:ring-[var(--accent-ring)]">
+                <span className="grid place-items-center rounded-full ring-2 ring-transparent transition-[box-shadow,transform] duration-[var(--dur-quick)] ease-[var(--ease-tide)] hover:-translate-y-px hover:ring-[var(--accent-ring)] hover:[box-shadow:0_6px_18px_-8px_var(--accent-ring)]">
                   <Avatar name={user.displayName} size="sm" />
                 </span>
               }
@@ -309,8 +334,12 @@ export function AppShell({
           </div>
         </header>
 
-        <main id="main" className="mx-auto w-full max-w-[100rem] px-4 py-6 sm:px-6 sm:py-8">
-          {children}
+        {/* `scene` here, once, gives every card on every dashboard route a
+            shared vanishing point — which is why cards in a grid tilt as one
+            object rather than each about its own centre. `key={pathname}`
+            re-runs the page transition on navigation. */}
+        <main id="main" className="scene relative mx-auto w-full max-w-[100rem] px-4 py-6 sm:px-6 sm:py-8">
+          <PageTransition key={pathname}>{children}</PageTransition>
         </main>
       </div>
     </div>
@@ -354,6 +383,9 @@ export function PageHeader({
         </div>
         {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
       </div>
+      {/* A lit hairline under every page header. It is the one element that
+          makes 67 different screens feel like one product. */}
+      <div aria-hidden className="divider-glow mt-5 opacity-50" />
     </div>
   );
 }

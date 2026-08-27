@@ -1,6 +1,5 @@
 /* L-01 · Terms & Conditions — FRD 11.1 */
-import { LegalDoc } from "../_components/legal-doc";
-import { legalDocuments } from "@/lib/mock/legal";
+import { LegalDocFromApi } from "../_components/fetch-doc";
 
 export const metadata = {
   title: "Terms & Conditions",
@@ -9,5 +8,5 @@ export const metadata = {
 };
 
 export default function TermsPage() {
-  return <LegalDoc doc={legalDocuments.terms} />;
+  return <LegalDocFromApi slug="terms" />;
 }

@@ -6,7 +6,7 @@ import type { ConversionCapsConfig } from "@/modules/economy-config/economy-conf
 import { ConversionService } from "./conversion.service";
 import {
   AdminConversionQuery, ConversionResponse, DecideRateRequest, ProposeRateRequest,
-  RateResponse, RejectRateRequest, UpdateConversionCapsRequest,
+  ConversionCapsOverview, RateResponse, RejectRateRequest, UpdateConversionCapsRequest,
 } from "./dto/conversion.dto";
 
 /* ============================================================================
@@ -31,7 +31,7 @@ export class ConversionAdminController {
   }
 
   @Post("rates")
-  @RequirePermissions("conversion:rate:propose")
+  @RequirePermissions("conversion:write")
   @ApiOperation({
     summary: "Propose a new rate — takes effect only after a second approver signs off",
     description: "effectiveFrom must be in the future; a backdated rate would reprice settled conversions.",
@@ -46,7 +46,7 @@ export class ConversionAdminController {
   }
 
   @Patch("rates/:id/approve")
-  @RequirePermissions("conversion:rate:approve")
+  @RequirePermissions("conversion:approve")
   @ApiOperation({
     summary: "Approve a proposed rate",
     description: "Refuses with FOUR_EYES_VIOLATION if the approver is the proposer.",
@@ -62,7 +62,7 @@ export class ConversionAdminController {
   }
 
   @Patch("rates/:id/reject")
-  @RequirePermissions("conversion:rate:approve")
+  @RequirePermissions("conversion:approve")
   @ApiOperation({ summary: "Reject a proposed rate with a recorded reason" })
   @ApiOkResponse({ type: RateResponse })
   reject(
@@ -75,7 +75,7 @@ export class ConversionAdminController {
   }
 
   @Patch("caps")
-  @RequirePermissions("conversion:caps:write")
+  @RequirePermissions("conversion:write")
   @ApiOperation({
     summary: "Update the per-member daily and monthly conversion ceilings",
     description: "Versioned in platform_config — the previous values stay readable for audit.",
@@ -86,6 +86,20 @@ export class ConversionAdminController {
     @ClientIp() ip: string,
   ): Promise<ConversionCapsConfig> {
     return this.conversion.updateCaps(dto, actor.id, ip);
+  }
+
+  @Get("caps")
+  @ApiOperation({
+    summary: "The conversion ceilings in force, and today's global usage",
+    description:
+      "The write side of this has existed since the beginning; the read side did " +
+      "not, so the operator screen was showing ceilings compiled into the browser " +
+      "bundle while the server enforced whatever was last configured. Global usage " +
+      "is included because a per-member ceiling tells an operator nothing about " +
+      "whether the platform is close to its own daily limit.",
+  })
+  capsOverview(): Promise<ConversionCapsOverview> {
+    return this.conversion.capsOverview();
   }
 
   @Get()

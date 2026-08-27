@@ -21,7 +21,7 @@ export class ReportsController {
   constructor(private readonly reports: ReportsService) {}
 
   @Post()
-  @RequirePermissions("report:generate")
+  @RequirePermissions("reports:write")
   @ApiOperation({
     summary: "Generate a report",
     description:

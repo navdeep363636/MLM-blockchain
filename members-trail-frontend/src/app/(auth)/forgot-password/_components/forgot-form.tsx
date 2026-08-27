@@ -3,9 +3,12 @@
 import { useState } from "react";
 import { CheckCircle2, Mail, ShieldAlert } from "lucide-react";
 import { Button, Callout, Input, useToast } from "@/components/ui";
+import { useForgotPassword } from "@/lib/hooks/use-mutations";
+import { humanMessage } from "@/lib/api/errors";
 
 export function ForgotPasswordForm() {
   const toast = useToast();
+  const forgot = useForgotPassword();
   const [identifier, setIdentifier] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
@@ -16,10 +19,20 @@ export function ForgotPasswordForm() {
     if (!identifier.trim()) { setError("Enter the email or phone on your account."); return; }
     setError(null);
     setBusy(true);
-    await new Promise((r) => setTimeout(r, 850));
-    setBusy(false);
-    setSent(true);
-    toast.success("Reset link sent", "Check your inbox — the link is valid for 30 minutes.");
+    try {
+      await forgot.mutateAsync({ identifier: identifier.trim() });
+      /* Shown on success AND on most failures, deliberately: this endpoint does
+       * not reveal whether an account exists, so a different screen for "no such
+       * user" would hand an attacker the enumeration the API refuses to give.
+       * A rate limit is the one thing worth surfacing, because the member needs
+       * to know to wait rather than to keep pressing. */
+      setSent(true);
+      toast.success("Reset link sent", "Check your inbox — the link is valid for 30 minutes.");
+    } catch (err) {
+      setError(humanMessage(err));
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (sent) {

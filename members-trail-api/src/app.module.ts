@@ -45,8 +45,10 @@ import { SupportModule } from "./modules/support/support.module";
 import { FraudModule } from "./modules/fraud/fraud.module";
 import { CmsModule } from "./modules/cms/cms.module";
 import { AdminModule } from "./modules/admin/admin.module";
+import { AnalyticsModule } from "./modules/analytics/analytics.module";
 import { ReportsModule } from "./modules/reports/reports.module";
 import { WebhooksModule } from "./modules/webhooks/webhooks.module";
+import { PublicModule } from "./modules/public/public.module";
 
 /* ============================================================================
  * The application.
@@ -172,8 +174,10 @@ function workloadModules(): NonNullable<DynamicModule["imports"]> {
     FraudModule,
     CmsModule,
     AdminModule,
+    AnalyticsModule,
     ReportsModule,
     WebhooksModule,
+    PublicModule,
 
     /* Workers and crons, per this instance's role. */
     ...workloadModules(),

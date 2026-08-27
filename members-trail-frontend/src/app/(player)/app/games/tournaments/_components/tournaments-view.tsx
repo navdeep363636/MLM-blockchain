@@ -10,6 +10,8 @@ import {
 } from "@/components/ui";
 import { RevealGroup, RevealItem, SpotlightCard } from "@/components/fx";
 import { useGames, useLeaderboard, useTournaments } from "@/lib/hooks/use-data";
+import { useRegisterForTournament } from "@/lib/hooks/use-mutations";
+import { humanMessage } from "@/lib/api/errors";
 import { formatDate, formatNumber, formatToken } from "@/lib/utils";
 import type { LeaderboardEntry, Tournament } from "@/types";
 import { GameArt } from "@/app/(public)/_components/game-art";
@@ -19,6 +21,7 @@ type Filter = "live" | "scheduled" | "completed";
 
 export function TournamentsView() {
   const { data: tournaments, isLoading } = useTournaments();
+  const register = useRegisterForTournament();
   const { data: games } = useGames();
   const { data: leaderboard } = useLeaderboard();
   const toast = useToast();
@@ -48,7 +51,13 @@ export function TournamentsView() {
   const confirmEntry = async () => {
     if (!entering) return;
     setBusy(true);
-    await new Promise((r) => setTimeout(r, 900));
+    try {
+      await register.mutateAsync({ ref: entering.id });
+    } catch (err) {
+      toast.error("Entry not confirmed", humanMessage(err));
+      setBusy(false);
+      return;
+    }
     setBusy(false);
     setRegistered((m) => ({ ...m, [entering.id]: true }));
     toast.success(

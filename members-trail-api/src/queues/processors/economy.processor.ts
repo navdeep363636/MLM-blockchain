@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Processor } from "@nestjs/bullmq";
+import { keccak256, toHex } from "viem";
 import { Jobs, Queues } from "@/queues/queue.constants";
 import { chainConfig, type ChainConfig } from "@/config/configuration";
 import { WithdrawalService } from "@/modules/wallet/withdrawal.service";
@@ -71,30 +72,82 @@ export class WithdrawalProcessor extends BaseProcessor {
           return { withdrawalId: data.withdrawalId, rail: "fiat", pendingProvider: true };
         }
 
+        /*
+         * Settlement rail.
+         *
+         * PREFERRED: MTTPayout. The contract dedupes on the withdrawal reference,
+         * enforces a daily ceiling on what the relayer key can move, and emits the
+         * reference alongside the amount — so "did we pay this member twice" is
+         * answerable from chain data rather than from trusting this table.
+         *
+         * FALLBACK: a direct ERC-20 transfer from the token contract, which is
+         * what this did before MTTPayout existed. It works, but it requires the
+         * relayer key to BE the wallet holding the tokens — an always-online hot
+         * key with unilateral authority over the 400,000,000 MTT rewards pool and
+         * no on-chain limit. That is why the fallback warns every single time
+         * rather than quietly doing the less safe thing.
+         */
+        const payoutRail = this.chain.contracts.payout;
         const token = this.chain.contracts.mttToken;
-        if (!token) {
-          /* Thrown, not failed: an unconfigured token address is an operator
-           * mistake that a retry fixes. Refunding the member here would undo a
-           * payout they are still owed, and the request stays visible in
-           * `processing` until someone sets the address. */
+
+        if (!payoutRail && !token) {
+          /* Thrown, not failed: an unconfigured address is an operator mistake
+           * that a retry fixes. Refunding the member here would undo a payout
+           * they are still owed, and the request stays visible in `processing`
+           * until someone sets the address. */
           throw new Error(
-            `cannot pay ${instruction.ref}: MTT_TOKEN_ADDRESS is not configured on this instance`,
+            `cannot pay ${instruction.ref}: neither PAYOUT_ADDRESS nor MTT_TOKEN_ADDRESS ` +
+            "is configured on this instance",
           );
         }
 
-        const tx = await this.submitter.enqueue({
-          kind: "transfer",
-          functionName: "transfer",
-          /* ERC-20 transfer(to, value): the token contract is the callee, the
-           * member's whitelisted address is the argument. */
-          toAddress: token,
-          args: [instruction.toAddress, instruction.amountWei],
-          idempotencyKey: instruction.idempotencyKey,
-          relatedType: "withdrawal",
-          relatedId: instruction.withdrawalId,
-        });
+        const tx = payoutRail
+          ? await this.submitter.enqueue({
+              kind: "transfer",
+              contract: "payout",
+              functionName: "payout",
+              /*
+               * payout(to, amount, withdrawalRef).
+               *
+               * The reference is keccak256 of the platform's own withdrawal ref,
+               * so the contract's replay guard and the ledger key the same fact.
+               * Deriving it from `ref` rather than the row id keeps it stable and
+               * human-traceable: the same string appears in the member's history,
+               * in the audit log and in the event on the explorer.
+               */
+              args: [
+                instruction.toAddress,
+                instruction.amountWei,
+                keccak256(toHex(instruction.ref)),
+              ],
+              idempotencyKey: instruction.idempotencyKey,
+              relatedType: "withdrawal",
+              relatedId: instruction.withdrawalId,
+            })
+          : await (async () => {
+              this.log.warn(
+                `paying ${instruction.ref} by direct token transfer: PAYOUT_ADDRESS is unset, ` +
+                "so the relayer key must hold the rewards pool and no on-chain daily limit " +
+                "or replay guard applies. Deploy MTTPayout and set PAYOUT_ADDRESS.",
+              );
+              return this.submitter.enqueue({
+                kind: "transfer",
+                contract: "mttToken",
+                functionName: "transfer",
+                /* ERC-20 transfer(to, value): the token contract is the callee,
+                 * the member's whitelisted address is the argument. */
+                args: [instruction.toAddress, instruction.amountWei],
+                idempotencyKey: instruction.idempotencyKey,
+                relatedType: "withdrawal",
+                relatedId: instruction.withdrawalId,
+              });
+            })();
 
-        return { withdrawalId: data.withdrawalId, rail: "chain", outboundTxRef: tx.ref };
+        return {
+          withdrawalId: data.withdrawalId,
+          rail: payoutRail ? "chain:payout" : "chain:token",
+          outboundTxRef: tx.ref,
+        };
       },
     };
   }

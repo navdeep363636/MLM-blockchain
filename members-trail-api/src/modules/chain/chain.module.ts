@@ -6,6 +6,8 @@ import {
 import { ReferralModule } from "@/modules/referral/referral.module";
 import { StakingModule } from "@/modules/staking/staking.module";
 import { ChainAdminController } from "./chain.admin.controller";
+import { ChainReadService } from "./chain-read.service";
+import { ChainWriteService } from "./chain-write.service";
 import { EventDispatcherService } from "./event-dispatcher.service";
 import { IndexerService } from "./indexer.service";
 import { RpcService } from "./rpc.service";
@@ -29,7 +31,13 @@ import { TxSubmitterService } from "./tx-submitter.service";
     ReferralModule,
   ],
   controllers: [ChainAdminController],
-  providers: [RpcService, IndexerService, EventDispatcherService, TxSubmitterService],
-  exports: [RpcService, IndexerService, EventDispatcherService, TxSubmitterService],
+  providers: [
+    RpcService, ChainReadService, ChainWriteService,
+    IndexerService, EventDispatcherService, TxSubmitterService,
+  ],
+  exports: [
+    RpcService, ChainReadService, ChainWriteService,
+    IndexerService, EventDispatcherService, TxSubmitterService,
+  ],
 })
 export class ChainModule {}

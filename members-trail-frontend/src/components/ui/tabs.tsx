@@ -50,11 +50,25 @@ export function Tabs({
               {it.label}
               {it.badge}
               {on && (
-                <motion.span
-                  layoutId="tab-underline"
-                  className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-[var(--accent)]"
-                  transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-                />
+                <>
+                  {/* The indicator is a shared layout element, so switching tabs
+                      slides one bar rather than cross-fading two. */}
+                  <motion.span
+                    layoutId="tab-underline"
+                    className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-[var(--accent)]
+                               shadow-[0_0_10px_1px_var(--accent-ring)]"
+                    transition={{ duration: 0.36, ease: [0.32, 0.72, 0, 1] }}
+                  />
+                  {/* …and a soft glow above it, which is what makes the active
+                      tab read as lit from below instead of underlined. */}
+                  <motion.span
+                    layoutId="tab-glow"
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-0 bottom-0 h-8 rounded-t-lg
+                               bg-[linear-gradient(to_top,var(--accent-soft),transparent)]"
+                    transition={{ duration: 0.36, ease: [0.32, 0.72, 0, 1] }}
+                  />
+                </>
               )}
             </button>
           );
@@ -75,7 +89,14 @@ export function PillTabs({
   className?: string;
 }) {
   return (
-    <div role="tablist" className={cn("no-scrollbar flex items-center gap-1.5 overflow-x-auto", className)}>
+    <div
+      role="tablist"
+      className={cn(
+        "no-scrollbar flex items-center gap-1 overflow-x-auto rounded-full border border-border-subtle bg-surface-inset p-1",
+        "[box-shadow:inset_0_1px_3px_-1px_rgb(0_0_0_/_0.35)]",
+        className,
+      )}
+    >
       {items.map((it) => {
         const on = it.value === value;
         return (
@@ -85,15 +106,30 @@ export function PillTabs({
             aria-selected={on}
             onClick={() => onValueChange(it.value)}
             className={cn(
-              "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-200",
-              on
-                ? "bg-accent-soft text-[var(--accent-hover)] ring-1 ring-inset ring-[var(--accent-ring)]"
-                : "text-text-muted ring-1 ring-inset ring-border-subtle hover:bg-surface-2 hover:text-text-secondary",
+              "relative inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium",
+              "transition-colors duration-[var(--dur-quick)]",
+              on ? "text-[var(--accent-hover)]" : "text-text-muted hover:text-text-secondary",
             )}
           >
-            {it.label}
+            {/* The moving thumb. One element for the whole group — the pill
+                travels between options instead of appearing under each. */}
+            {on && (
+              <motion.span
+                layoutId="pill-thumb"
+                aria-hidden
+                className="absolute inset-0 rounded-full bg-surface-2 ring-1 ring-inset ring-[var(--accent-ring)]
+                           [box-shadow:inset_0_1px_0_0_var(--rim-light),var(--shadow-e2)]"
+                transition={{ type: "spring", stiffness: 420, damping: 34 }}
+              />
+            )}
+            <span className="relative">{it.label}</span>
             {typeof it.count === "number" && (
-              <span className={cn("tnum rounded-full px-1.5 text-[10px]", on ? "bg-[var(--accent)]/20" : "bg-surface-3")}>
+              <span
+                className={cn(
+                  "tnum relative rounded-full px-1.5 text-[10px]",
+                  on ? "bg-[var(--accent)]/20" : "bg-surface-3",
+                )}
+              >
                 {it.count}
               </span>
             )}
@@ -113,7 +149,13 @@ export function Accordion({
 }) {
   const [open, setOpen] = useState<number | null>(defaultOpen ?? null);
   return (
-    <div className={cn("divide-y divide-border-subtle overflow-hidden rounded-[var(--radius-card)] border border-border-subtle bg-surface-1", className)}>
+    <div
+      className={cn(
+        "divide-y divide-border-subtle overflow-hidden rounded-[var(--radius-panel)] border border-border-subtle bg-surface-1",
+        "[box-shadow:var(--shadow-e2),inset_0_1px_0_0_var(--rim-light)]",
+        className,
+      )}
+    >
       {items.map((it, i) => {
         const on = open === i;
         return (
@@ -121,15 +163,17 @@ export function Accordion({
             <button
               onClick={() => setOpen(on ? null : i)}
               aria-expanded={on}
-              className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-surface-2"
+              className="group/acc relative flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors duration-[var(--dur-quick)] hover:bg-surface-2"
             >
               <span className={cn("text-sm font-medium", on ? "text-[var(--accent-hover)]" : "text-text-primary")}>
                 {it.title}
               </span>
               <span
                 className={cn(
-                  "grid size-6 shrink-0 place-items-center rounded-full border border-border-default text-text-muted transition-transform duration-300",
-                  on && "rotate-45 border-[var(--accent)] text-[var(--accent)]",
+                  "grid size-6 shrink-0 place-items-center rounded-full border border-border-default text-text-muted",
+                  "transition-[transform,border-color,color,box-shadow] duration-[var(--dur-base)] ease-[var(--ease-tide)]",
+                  "group-hover/acc:border-border-strong",
+                  on && "rotate-[135deg] border-[var(--accent)] text-[var(--accent)] [box-shadow:0_0_0_4px_var(--accent-soft)]",
                 )}
               >
                 <svg viewBox="0 0 12 12" className="size-3 fill-none stroke-current stroke-[1.6]">

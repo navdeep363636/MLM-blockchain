@@ -15,7 +15,7 @@ import {
 } from "@/components/ui";
 import { LineSeries } from "@/components/charts";
 import { useConversionRates } from "@/lib/hooks/use-data";
-import { conversionCaps } from "@/lib/mock/admin";
+import { useAdminConversionCaps } from "@/lib/hooks/use-data";
 import { csvDownload, formatDate, formatNumber, formatPercent, timeAgo } from "@/lib/utils";
 import type { ConversionRateConfig } from "@/types";
 import { FourEyesModal, ROLE_LABEL } from "../../_components/four-eyes-modal";
@@ -68,11 +68,24 @@ export function ConversionView() {
   const [effectiveAt, setEffectiveAt] = useState("");
   const [approving, setApproving] = useState<ConversionRateConfig | null>(null);
   const [rejecting, setRejecting] = useState<ConversionRateConfig | null>(null);
-  const [caps, setCaps] = useState({
-    perUserDaily: conversionCaps.perUserDaily,
-    perUserMonthly: conversionCaps.perUserMonthly,
-    globalDaily: conversionCaps.globalDaily,
-  });
+  /* The ceilings in force, read from the server. Seeded into local state once
+   * they arrive so the form is editable, and re-seeded if they change underneath
+   * — an operator editing a stale ceiling would submit a value derived from a
+   * number that is no longer true. */
+  const { data: live } = useAdminConversionCaps();
+  const [caps, setCaps] = useState({ perUserDaily: 0, perUserMonthly: 0, globalDaily: 0 });
+  const [capsTouched, setCapsTouched] = useState(false);
+
+  useEffect(() => {
+    if (capsTouched) return;
+    setCaps({
+      perUserDaily: live.perUserDailyPoints,
+      perUserMonthly: live.perUserMonthlyPoints,
+      globalDaily: live.globalDailyPoints ?? 0,
+    });
+  }, [live, capsTouched]);
+
+  const globalUsed = Number(live.globalDailyUsedPoints);
 
   const active = rates.find((r) => r.status === "active");
   const pending = rates.filter((r) => r.status === "pending_approval" || r.status === "scheduled");
@@ -183,7 +196,9 @@ export function ConversionView() {
     },
   ];
 
-  const globalUsagePct = (conversionCaps.globalDailyUsed / caps.globalDaily) * 100;
+  /* No configured global ceiling means no brake, not a breached one. A division
+   * by zero here used to render Infinity% on the gauge. */
+  const globalUsagePct = caps.globalDaily > 0 ? (globalUsed / caps.globalDaily) * 100 : 0;
 
   return (
     <div className="space-y-6">
@@ -362,7 +377,7 @@ export function ConversionView() {
           <div className="space-y-4">
             <div className="rounded-xl border border-border-subtle bg-surface-inset p-4">
               <CapMeter
-                used={conversionCaps.globalDailyUsed}
+                used={globalUsed}
                 cap={caps.globalDaily}
                 label="Global daily conversion — today"
                 unit=""
@@ -376,12 +391,12 @@ export function ConversionView() {
             <div className="grid gap-3 sm:grid-cols-2">
               <MiniStat
                 label="Converted today"
-                value={formatNumber(conversionCaps.globalDailyUsed)}
+                value={formatNumber(globalUsed)}
                 sub="Points platform-wide"
               />
               <MiniStat
                 label="Remaining headroom"
-                value={formatNumber(Math.max(0, caps.globalDaily - conversionCaps.globalDailyUsed))}
+                value={formatNumber(Math.max(0, caps.globalDaily - globalUsed))}
                 sub="before queueing starts"
                 tone={globalUsagePct >= 90 ? "critical" : globalUsagePct >= 75 ? "warning" : "good"}
               />

@@ -28,6 +28,10 @@ export function Badge({
     <span
       className={cn(
         "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset",
+        /* One hairline of light on the top edge. At badge scale it is barely
+           perceptible individually and completely changes a dense table, where
+           forty of them otherwise read as flat printed stickers. */
+        "[box-shadow:inset_0_1px_0_0_rgb(255_255_255_/_0.07)]",
         tones[tone], className,
       )}
     >
@@ -133,7 +137,9 @@ export function Callout({
   return (
     <div
       className={cn(
-        "flex gap-3 rounded-r-xl border-l-2 bg-surface-2/60 px-4 py-3",
+        "relative flex gap-3 overflow-hidden rounded-r-xl rounded-l-sm border-l-2 px-4 py-3",
+        "bg-[linear-gradient(90deg,color-mix(in_oklab,var(--surface-2)_92%,transparent),color-mix(in_oklab,var(--surface-2)_45%,transparent))]",
+        "[box-shadow:inset_0_1px_0_0_var(--rim-light)]",
         border[tone], className,
       )}
     >

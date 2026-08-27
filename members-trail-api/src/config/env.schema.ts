@@ -87,6 +87,8 @@ export const envSchema = z.object({
   REFERRAL_DISTRIBUTOR_ADDRESS: z.string().optional(),
   TEAM_VESTING_ADDRESS: z.string().optional(),
   ADVISORS_VESTING_ADDRESS: z.string().optional(),
+  /** MTTPayout — the withdrawal settlement rail. See MTTPayout.sol. */
+  PAYOUT_ADDRESS: z.string().optional(),
 
   /** Indexer tuning. Confirmations guard against reorgs. */
   INDEXER_ENABLED: bool.default("true"),

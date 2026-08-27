@@ -1,4 +1,5 @@
 import { Logger } from "@nestjs/common";
+import { Events, type DomainEvent } from "@/events";
 import { RealtimeGateway } from "./realtime.gateway";
 
 /* ============================================================================
@@ -19,6 +20,26 @@ function socketDouble(over: Record<string, unknown> = {}) {
     emit: jest.fn(),
     disconnect: jest.fn(),
     ...over,
+  };
+}
+
+/**
+ * The envelope `EventBusService.publish` puts on the wire.
+ *
+ * The spec used to call handlers with the bare payload, which is exactly why a
+ * real defect survived: every handler read `payload.userId` from an envelope that
+ * had no such field, emitted to `user:undefined`, and no test noticed because the
+ * tests were passing the shape the handlers wrongly expected. A test double that
+ * disagrees with the producer is worse than no test.
+ */
+function envelope<T>(payload: T): DomainEvent<T> {
+  return {
+    id: "evt-1",
+    name: Events.PointsCredited,
+    occurredAt: "2026-08-24T00:00:00.000Z",
+    correlationId: undefined,
+    actorId: undefined,
+    payload,
   };
 }
 
@@ -116,7 +137,7 @@ describe("RealtimeGateway", () => {
 
   describe("addressing", () => {
     it("sends a member's event only to their room", () => {
-      gateway.onPointsCredited({ userId: "u1", amount: 40, source: "game", runningBalance: 140 });
+      gateway.onPointsCredited(envelope({ userId: "u1", amount: 40, source: "game", runningBalance: 140 }));
       expect(to).toHaveBeenCalledWith("user:u1");
       expect(emit).toHaveBeenCalledWith("points.credited", expect.objectContaining({ balance: 140 }));
     });
@@ -124,25 +145,25 @@ describe("RealtimeGateway", () => {
     it("REFUSES to emit an event that has no recipient, rather than broadcasting it", () => {
       /* A fallback broadcast here is how one member's balance appears on
        * another's screen. */
-      gateway.onPointsCredited({ userId: undefined as unknown as string, amount: 40, source: "x", runningBalance: 1 });
+      gateway.onPointsCredited(envelope({ userId: undefined as unknown as string, amount: 40, source: "x", runningBalance: 1 }));
       expect(to).not.toHaveBeenCalled();
     });
 
     it("routes a tournament settlement to STAFF, not to the winners' rooms", () => {
-      gateway.onTournamentSettled({ ref: "TRN-1", paidEntries: 3, totalPaid: "300" });
+      gateway.onTournamentSettled(envelope({ ref: "TRN-1", paidEntries: 3, totalPaid: "300" }));
       expect(to).toHaveBeenCalledWith("staff:ops");
     });
 
     it("routes fraud alerts and reorgs to staff only", () => {
-      gateway.onFraudAlert({ kind: "velocity", severity: "high" });
-      gateway.onReorg({ contract: "staking", rewoundTo: 100, orphanedProcessed: 2 });
+      gateway.onFraudAlert(envelope({ kind: "velocity", severity: "high" }));
+      gateway.onReorg(envelope({ contract: "staking", rewoundTo: 100, orphanedProcessed: 2 }));
       for (const call of to.mock.calls) expect(call[0]).toBe("staff:ops");
     });
 
     it("repeats penaltyAppliedTo on the wire so no UI shows a cut to principal", () => {
-      gateway.onUnstakeRecorded({
+      gateway.onUnstakeRecorded(envelope({
         userId: "u1", poolId: 1, principalMtt: "100", rewardsPaidMtt: "5", penaltyMtt: "2",
-      });
+      }));
       expect(emit).toHaveBeenCalledWith(
         "staking.unstaked",
         expect.objectContaining({ penaltyAppliedTo: "unclaimed_rewards" }),
@@ -150,14 +171,14 @@ describe("RealtimeGateway", () => {
     });
 
     it("stamps every push with a server timestamp", () => {
-      gateway.onKycApproved({ userId: "u1", tier: 2 });
+      gateway.onKycApproved(envelope({ userId: "u1", tier: 2 }));
       const [, body] = emit.mock.calls[0] as [string, { at: string }];
       expect(Date.parse(body.at)).not.toBeNaN();
     });
 
     it("survives an event arriving before the server is bound", () => {
       const early = new RealtimeGateway(jwt as never, redis as never);
-      expect(() => early.onKycApproved({ userId: "u1", tier: 1 })).not.toThrow();
+      expect(() => early.onKycApproved(envelope({ userId: "u1", tier: 1 }))).not.toThrow();
       expect(early.connectionCount()).toBe(0);
     });
   });

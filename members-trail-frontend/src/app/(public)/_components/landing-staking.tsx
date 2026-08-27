@@ -27,7 +27,17 @@ export function StakingTeaser() {
       <RevealGroup className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" stagger={0.06}>
         {active.map((p) => (
           <RevealItem key={p.poolId} className="h-full">
-            <div className="flex h-full flex-col rounded-[var(--radius-card)] border border-border-subtle bg-surface-1 p-5">
+            {/* Elevation and sheen, but no tilt: each pool card carries an
+                InfoHint explaining how the rate is derived, and a transform
+                would trap that tooltip inside the card. */}
+            <div className="h-full">
+              <div
+                className="holo flex h-full flex-col rounded-[var(--radius-card)] border border-border-subtle bg-surface-1 p-5
+                           [box-shadow:var(--shadow-e2),inset_0_1px_0_0_var(--rim-light)]
+                           transition-[border-color,box-shadow] duration-[var(--dur-base)] ease-[var(--ease-tide)]
+                           hover:border-[color-mix(in_oklab,var(--accent)_35%,var(--border-default))]
+                           hover:[box-shadow:var(--shadow-e4),inset_0_1px_0_0_var(--rim-light-strong)]"
+              >
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold text-text-primary">{p.name}</h3>
                 <Badge tone="neutral" icon={p.lockDays === 0 ? <Timer className="size-3" /> : <Lock className="size-3" />}>
@@ -36,7 +46,7 @@ export function StakingTeaser() {
               </div>
 
               <div className="mt-4 flex items-baseline gap-1.5">
-                <span className="font-display text-3xl font-semibold tracking-tight text-gradient-brand">
+                <span className="font-display text-3xl font-semibold tracking-tight text-gradient-sheen">
                   <AnimatedCounter value={p.currentApr} decimals={1} suffix="%" />
                 </span>
                 <InfoHint>
@@ -76,6 +86,7 @@ export function StakingTeaser() {
                   </div>
                 )}
               </dl>
+              </div>
             </div>
           </RevealItem>
         ))}

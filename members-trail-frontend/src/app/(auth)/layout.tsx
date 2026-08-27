@@ -36,7 +36,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       <aside className="relative hidden overflow-hidden border-l border-border-subtle bg-surface-inset lg:block">
         <AuroraBackground intensity={1.2} />
         <GridBackdrop />
-        <FloatingOrbs count={18} />
+        <FloatingOrbs count={9} />
         <NoiseOverlay />
         <div className="relative flex h-full flex-col justify-center px-14 py-16">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">

@@ -86,7 +86,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, x: 40, scale: 0.96 }}
                 transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-                className="pointer-events-auto relative overflow-hidden rounded-xl border border-border-default bg-surface-2 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.8)]"
+                className="pointer-events-auto relative overflow-hidden rounded-2xl border border-border-default glass-2
+                           [box-shadow:var(--shadow-e5),inset_0_1px_0_0_var(--rim-light-strong)]"
               >
                 <span className={cn("absolute inset-y-0 left-0 w-0.5", bars[t.tone])} />
                 <div className="flex items-start gap-3 p-3.5 pl-4">

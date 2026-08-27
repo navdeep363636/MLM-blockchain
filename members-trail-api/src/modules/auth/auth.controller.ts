@@ -1,6 +1,8 @@
 import {
-  Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Query, Headers,
+  Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Query, Headers, Req, Res,
+  UnauthorizedException,
 } from "@nestjs/common";
+import type { Request, Response } from "express";
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
 import {
@@ -17,6 +19,12 @@ import {
   TwoFaEnableResponse, TwoFaLoginDto, TwoFaSetupDto, TwoFaSetupResponse,
   VerifyOtpDto, VerifyOtpResponse,
 } from "./dto/auth.dto";
+
+/** Name of the httpOnly cookie carrying the refresh token for browser clients. */
+const REFRESH_COOKIE = "mt_rt";
+
+/** 30 days, matching the refresh token's own lifetime. */
+const REFRESH_COOKIE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 /* ============================================================================
  * Auth surface (FRD A-01 … A-04, D-03).
@@ -121,13 +129,15 @@ export class AuthController {
       "Returns a 2FA challenge instead of tokens when a second factor is enrolled.",
   })
   @ApiOkResponse({ type: LoginResponse })
-  login(
+  async login(
     @Body() dto: LoginDto,
     @ClientIp() ip: string,
     @UserAgent() userAgent: string,
     @Headers() headers: Record<string, string | undefined>,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<LoginResponse> {
-    return this.auth.login(dto, this.context(ip, userAgent, headers));
+    const result = await this.auth.login(dto, this.context(ip, userAgent, headers));
+    return this.withRefreshCookie(result, res);
   }
 
   @Public()
@@ -139,13 +149,15 @@ export class AuthController {
     description: "Accepts a TOTP/SMS code, or a single-use recovery code.",
   })
   @ApiOkResponse({ type: LoginResponse })
-  loginTwoFa(
+  async loginTwoFa(
     @Body() dto: TwoFaLoginDto,
     @ClientIp() ip: string,
     @UserAgent() userAgent: string,
     @Headers() headers: Record<string, string | undefined>,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<LoginResponse> {
-    return this.auth.loginTwoFa(dto, this.context(ip, userAgent, headers));
+    const result = await this.auth.loginTwoFa(dto, this.context(ip, userAgent, headers));
+    return this.withRefreshCookie(result, res);
   }
 
   /* -------------------------------- tokens --------------------------------- */
@@ -162,13 +174,35 @@ export class AuthController {
       "the session family and every other session for that user are destroyed.",
   })
   @ApiOkResponse({ type: LoginResponse })
-  refresh(
+  async refresh(
     @Body() dto: RefreshDto,
     @ClientIp() ip: string,
     @UserAgent() userAgent: string,
     @Headers() headers: Record<string, string | undefined>,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<LoginResponse> {
-    return this.auth.refresh(dto.refreshToken, this.context(ip, userAgent, headers));
+    /* Cookie first, body second. A browser should never have to hold the token
+     * in JavaScript, and a native client has no cookie jar — both work, and
+     * neither has to know about the other. */
+    const presented = this.refreshCookie(req) ?? dto.refreshToken;
+    if (!presented) {
+      throw new UnauthorizedException({
+        code: "NO_REFRESH_TOKEN",
+        message: "No refresh token was presented, in a cookie or in the body",
+      });
+    }
+    try {
+      const result = await this.auth.refresh(presented, this.context(ip, userAgent, headers));
+      return this.withRefreshCookie(result, res);
+    } catch (err) {
+      /* A rejected refresh means this browser is holding a dead token. Leaving
+       * the cookie in place would make every reload retry it, and a reused token
+       * is treated as a compromise — so the client would keep destroying its own
+       * new sessions. Clear it on the way out. */
+      this.clearRefreshCookie(res);
+      throw err;
+    }
   }
 
   @ApiBearerAuth()
@@ -179,13 +213,16 @@ export class AuthController {
     description: "Deletes the session key, so the outstanding access token stops working immediately.",
   })
   @ApiOkResponse({ type: OkResponse })
-  logout(
+  async logout(
     @CurrentUser() user: AuthUser,
     @ClientIp() ip: string,
     @UserAgent() userAgent: string,
     @Headers() headers: Record<string, string | undefined>,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<OkResponse> {
-    return this.auth.logout(user.sessionId, user.id, this.context(ip, userAgent, headers));
+    const result = await this.auth.logout(user.sessionId, user.id, this.context(ip, userAgent, headers));
+    this.clearRefreshCookie(res);
+    return result;
   }
 
   @ApiBearerAuth()
@@ -193,13 +230,16 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Sign out of every session on every device (D-03)" })
   @ApiOkResponse({ type: OkResponse })
-  logoutAll(
+  async logoutAll(
     @CurrentUser() user: AuthUser,
     @ClientIp() ip: string,
     @UserAgent() userAgent: string,
     @Headers() headers: Record<string, string | undefined>,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<OkResponse> {
-    return this.auth.logoutAll(user.id, this.context(ip, userAgent, headers));
+    const result = await this.auth.logoutAll(user.id, this.context(ip, userAgent, headers));
+    this.clearRefreshCookie(res);
+    return result;
   }
 
   /* ------------------------------- passwords ------------------------------- */
@@ -369,6 +409,61 @@ export class AuthController {
    * headers, which are hints only — nothing authorises on them, they feed risk
    * scoring and the jurisdiction cross-check.
    */
+  /* ==================================================================== *
+   * Refresh token transport
+   * ==================================================================== */
+
+  /**
+   * Puts the refresh token in an httpOnly cookie as well as the response body.
+   *
+   * The body is kept because native clients have no cookie jar and mobile is a
+   * first-class caller here. The cookie exists because a browser SPA has nowhere
+   * safe to put a long-lived token: `localStorage` is readable by any injected
+   * script, and an XSS on a platform that moves money should not also hand over
+   * a token that mints new sessions indefinitely. With the cookie, the browser
+   * keeps the access token in memory only, and a reload recovers a session
+   * through a credential JavaScript cannot read.
+   *
+   * `sameSite: "lax"` rather than "strict": strict would drop the cookie on a
+   * top-level navigation back from an email link, which is exactly the journey a
+   * password reset takes. The refresh endpoint is a POST with no side effect
+   * reachable by form submission, so lax is not a CSRF exposure here.
+   *
+   * Scoped to the auth path so it is not attached to every API call — a token
+   * that travels with two hundred unrelated requests has two hundred chances to
+   * end up in a log.
+   */
+  private withRefreshCookie(result: LoginResponse, res: Response): LoginResponse {
+    if (!result.tokens?.refreshToken) return result;
+
+    res.cookie(REFRESH_COOKIE, result.tokens.refreshToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      /* Set only over TLS in production. Setting it unconditionally would make
+       * the cookie invisible over plain http and break local development in a
+       * way that looks like a login bug. */
+      secure: process.env.NODE_ENV === "production",
+      path: `/${process.env.API_PREFIX ?? "api"}/v1/auth`,
+      maxAge: REFRESH_COOKIE_MAX_AGE_MS,
+    });
+    return result;
+  }
+
+  private refreshCookie(req: Request): string | undefined {
+    const jar = (req as Request & { cookies?: Record<string, string> }).cookies;
+    const value = jar?.[REFRESH_COOKIE];
+    return typeof value === "string" && value.length > 0 ? value : undefined;
+  }
+
+  private clearRefreshCookie(res: Response): void {
+    res.clearCookie(REFRESH_COOKIE, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: `/${process.env.API_PREFIX ?? "api"}/v1/auth`,
+    });
+  }
+
   private context(
     ip: string,
     userAgent: string,

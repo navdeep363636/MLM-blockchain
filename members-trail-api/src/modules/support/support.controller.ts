@@ -1,6 +1,8 @@
 import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { ClientIp, CurrentUser, RequirePermissions, StaffOnly, type AuthUser } from "@/common/decorators";
+import {
+  ClientIp, CurrentUser, Idempotent, RequirePermissions, StaffOnly, type AuthUser,
+} from "@/common/decorators";
 import type { Paginated } from "@/common/dto";
 import { SupportService } from "./support.service";
 import {
@@ -24,6 +26,7 @@ export class SupportController {
   constructor(private readonly support: SupportService) {}
 
   @Post("tickets")
+  @Idempotent("support")
   @HttpCode(201)
   @ApiOperation({
     summary: "Open a support ticket",
@@ -189,7 +192,7 @@ export class SupportAdminController {
   }
 
   @Post("escalate-breached")
-  @RequirePermissions("support:escalate")
+  @RequirePermissions("support:write")
   @ApiOperation({
     summary: "Escalate every ticket that breached its SLA with no response",
     description: "Normally driven by the cron; exposed for operations.",

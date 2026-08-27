@@ -224,7 +224,10 @@ function CompliancePanel() {
   const latest = series[series.length - 1];
   const ratio = latest?.ratio ?? 0;
   const tone = thresholdTone(ratio);
-  const peak = series.reduce((m, r) => Math.max(m, r.ratio), 0);
+  /* `ratio` is null for a month with no reconciled inflow — a ratio with no
+   * denominator, not a zero. Skipped rather than counted, so an empty month
+   * cannot drag the observed peak down. */
+  const peak = series.reduce((m, r) => (r.ratio === null ? m : Math.max(m, r.ratio)), 0);
 
   const chartData = series.map((r) => ({ ...r, ceiling: 100 }));
 

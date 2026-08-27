@@ -1,6 +1,12 @@
-// Auto-extracted from MLM-contracts/artifacts/contracts/MTTReferralDistributor.sol/MTTReferralDistributor.json
-// Solidity 0.8.24, optimizer runs=200, evmVersion=paris.
-// Regenerate after any contract change — do not hand-edit.
+// GENERATED FILE — do not hand-edit.
+//
+// Source : MLM-contracts/artifacts/contracts/MTTReferralDistributor.sol/MTTReferralDistributor.json
+// Build  : Solidity 0.8.24, optimizer runs=200, evmVersion=paris.
+// Command: npm run abi   (in MLM-contracts)
+//
+// Hand-editing an ABI is how the previous chain layer ended up matching no
+// events at all: a wrong event signature is a wrong topic0, and getLogs then
+// returns an empty array rather than an error.
 export const mttReferralDistributorAbi = [
   {
     "inputs": [
@@ -94,6 +100,12 @@ export const mttReferralDistributorAbi = [
         "internalType": "bytes32",
         "name": "sourceEventId",
         "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "reason",
+        "type": "string"
       }
     ],
     "name": "CommissionClawedBack",
@@ -343,6 +355,11 @@ export const mttReferralDistributorAbi = [
         "internalType": "bytes32",
         "name": "sourceEventId",
         "type": "bytes32"
+      },
+      {
+        "internalType": "string",
+        "name": "reason",
+        "type": "string"
       }
     ],
     "name": "clawback",
@@ -372,6 +389,54 @@ export const mttReferralDistributorAbi = [
   {
     "inputs": [
       {
+        "internalType": "address[]",
+        "name": "users",
+        "type": "address[]"
+      }
+    ],
+    "name": "commissionBalances",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "balances",
+        "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "recipient",
+        "type": "address"
+      },
+      {
+        "internalType": "uint8",
+        "name": "level",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "sourceEventId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "dedupeKeyFor",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "uint256",
         "name": "amount",
         "type": "uint256"
@@ -380,6 +445,35 @@ export const mttReferralDistributorAbi = [
     "name": "depositCommissionPool",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      }
+    ],
+    "name": "getAccount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "claimable",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "kyc",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "claimNow",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -433,6 +527,48 @@ export const mttReferralDistributorAbi = [
       }
     ],
     "name": "hasRole",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "recipient",
+        "type": "address"
+      },
+      {
+        "internalType": "uint8",
+        "name": "level",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "sourceEventId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "isRecorded",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "isSolvent",
     "outputs": [
       {
         "internalType": "bool",
@@ -525,6 +661,41 @@ export const mttReferralDistributorAbi = [
   {
     "inputs": [
       {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "recipient",
+            "type": "address"
+          },
+          {
+            "internalType": "uint8",
+            "name": "level",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "amount",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct MTTReferralDistributor.CommissionEntry[]",
+        "name": "entries",
+        "type": "tuple[]"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "sourceEventId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "recordCommissionBatch",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "bytes32",
         "name": "role",
         "type": "bytes32"
@@ -572,6 +743,24 @@ export const mttReferralDistributorAbi = [
       }
     ],
     "name": "setKycApproved",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address[]",
+        "name": "users",
+        "type": "address[]"
+      },
+      {
+        "internalType": "bool",
+        "name": "approved",
+        "type": "bool"
+      }
+    ],
+    "name": "setKycApprovedBatch",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
