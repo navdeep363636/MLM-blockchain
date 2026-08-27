@@ -349,10 +349,13 @@ export function AppShell({
 
         {/* `scene` here, once, gives every card on every dashboard route a
             shared vanishing point — which is why cards in a grid tilt as one
-            object rather than each about its own centre. `key={pathname}`
-            re-runs the page transition on navigation. */}
+            object rather than each about its own centre.
+
+            No `key={pathname}`: it remounted the whole page subtree on every
+            navigation, including same-page search-param changes where nothing
+            below needed rebuilding. See PageTransition. */}
         <main id="main" className="scene relative mx-auto w-full max-w-[100rem] px-4 py-6 sm:px-6 sm:py-8">
-          <PageTransition key={pathname}>{children}</PageTransition>
+          <PageTransition>{children}</PageTransition>
         </main>
       </div>
     </div>

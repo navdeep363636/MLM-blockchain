@@ -590,28 +590,33 @@ export function LiveDot({ className, label }: { className?: string; label?: stri
   );
 }
 
-/** Page-level fade/slide used by route layouts. */
+/**
+ * Wrapper for the content area of every route in the player and admin apps.
+ *
+ * It no longer animates, and that is the point.
+ *
+ * It used to be `<PageTransition key={pathname}>` around a `motion.div` with
+ * `initial={{ opacity: 0 }}`. Two costs, both paid on every single navigation:
+ *
+ *  - The key forced React to throw away and rebuild the entire page subtree.
+ *    On a route change the page component differs anyway, so most of that was
+ *    unavoidable — but a search-param change (`/admin/users?page=2`) is the
+ *    same page, and the key made it a full remount that re-ran every effect and
+ *    refired every data hook from scratch.
+ *  - `initial={{ opacity: 0 }}` meant the destination was invisible for the
+ *    first 150ms of its life. The content had arrived; it was being withheld.
+ *    On a fast navigation that fade WAS the perceived load time.
+ *
+ * An entrance animation is worth paying for when it covers a wait. It does not
+ * cover this one — route-progress.tsx acknowledges the click within a frame,
+ * and the route's `loading.tsx` covers the segment while it resolves. Adding a
+ * fade on top only delays the payoff those two are working towards.
+ *
+ * Kept as a component rather than inlined so the content area still has one
+ * named seam to hang a transition on if a future one earns its place.
+ */
 export function PageTransition({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    /* Opacity only, and short.
-     *
-     * This wraps the content area of every route in the player and admin apps,
-     * so its duration IS the perceived cost of a navigation. At 0.35s with a
-     * y-offset, every route change read as a slow page load — the content was
-     * there, it just was not shown yet. A translate also invalidates the
-     * paint of the whole content area on the first frame.
-     *
-     * `transform-gpu` is deliberately absent: promoting the entire page content
-     * to its own layer for 0.15s costs more than the fade saves. */
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.15, ease: "linear" }}
-      className={className}
-    >
-      {children}
-    </motion.div>
-  );
+  return <div className={className}>{children}</div>;
 }
 
 /** Number that flashes green/red when it changes — live balances, prices. */
