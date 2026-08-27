@@ -29,7 +29,7 @@
  * ========================================================================== */
 
 import { useMemo } from "react";
-import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, type UseQueryOptions } from "@tanstack/react-query";
 import { api, fetchAll, type Paginated } from "@/lib/api/client";
 import { qk } from "@/lib/api/keys";
 import {
@@ -140,8 +140,129 @@ function useAuthedResource<T>(
   };
 }
 
+/**
+ * For a hook whose key contains a control the reader can change — a leaderboard
+ * period, a chart's month window.
+ *
+ * Without it, switching the control unmounts the chart back to a skeleton and
+ * then re-mounts it, so the reader loses the thing they were comparing against
+ * at the exact moment they wanted to compare. With it, the previous series stays
+ * on screen until the new one lands and the swap is a redraw.
+ *
+ * Deliberately NOT the default in `useResource`. Most hooks here are keyed on
+ * nothing at all — this app filters and paginates already-fetched lists on the
+ * client — and for the few keyed on an identity rather than a control
+ * (`useLegalDocument(slug)`) holding the previous value would show one
+ * document's text under another's heading.
+ */
+const KEEP_PREVIOUS = { placeholderData: keepPreviousData } as const;
+
 const page = <T,>(res: Paginated<T> | T[] | null | undefined): T[] =>
   Array.isArray(res) ? res : (res?.data ?? []);
+
+/* ------------------------------ query specs -------------------------------
+ * A hook can only start its request once the component holding it has mounted,
+ * and that component only mounts once the router has committed the navigation.
+ * Measured on in-app navigations against a 120ms API, that put the FIRST byte of
+ * the destination's data ~105ms after the click — every time, before the network
+ * had even been asked for anything.
+ *
+ * So the fetcher and the cache key are declared here, as data, and the hook is a
+ * thin consumer of the same declaration. `route-prefetch.ts` maps routes to
+ * these and NavLink runs them on hover, which moves the request to the moment a
+ * click becomes likely rather than the moment it has already happened. One
+ * definition for both paths, so a prefetch cannot drift into fetching something
+ * subtly different from what the page then reads out of the cache.
+ *
+ * Only the queries on routes people actually navigate to under load are declared
+ * this way. For the rest the indirection would cost more than the wait it saves.
+ * ------------------------------------------------------------------------- */
+
+export interface QuerySpec<T> {
+  queryKey: readonly unknown[];
+  queryFn: () => Promise<T>;
+  staleTime?: number;
+  /** Skipped when there is no session, exactly as `useAuthedResource` would. */
+  authed: boolean;
+}
+
+const q = <T,>(
+  queryKey: readonly unknown[],
+  queryFn: () => Promise<T>,
+  /* Defaulted, not left undefined. A spec carries its freshness to BOTH callers
+   * — the hook and the prefetch — and an undefined staleTime is not "use the
+   * default", it is react-query's 0, which marks the value stale the instant it
+   * lands. That made every prefetch worthless: the data arrived, the component
+   * mounted, saw stale data and immediately fetched it again. Measured as the
+   * request count going UP on hover rather than the wait going down. */
+  { staleTime = FRESH.ledger, authed = true }: { staleTime?: number; authed?: boolean } = {},
+): QuerySpec<T> => ({ queryKey, queryFn, staleTime, authed });
+
+export const Q = {
+  balance: q(qk.balance(), () => api.get<BalanceResponse | null>("/wallet/balance"),
+    { staleTime: FRESH.money }),
+  pointsSummary: q(qk.pointsSummary(), () => api.get<PointsSummary | null>("/points/summary"),
+    { staleTime: FRESH.money }),
+  transactions: q(qk.transactions(), async () =>
+    page(await api.get<Paginated<TransactionResponse>>("/wallet/transactions", { query: { limit: 100 } }))
+      .map(toTransaction)),
+  pointsHistory: q(qk.pointsHistory(), async () =>
+    page(await api.get<Paginated<PointsEntryResponse>>("/points/history", { query: { limit: 100 } }))),
+  games: q(qk.games(), async () =>
+    page(await api.get<Paginated<GameResponse>>("/games", { query: { limit: 100 } })).map(toGame),
+    { staleTime: FRESH.config, authed: false }),
+  tournaments: q(qk.tournaments(), async () =>
+    page(await api.get<Paginated<TournamentResponse>>("/tournaments", { query: { limit: 100 } }))
+      .map(toTournament),
+    { staleTime: FRESH.config, authed: false }),
+  stakingPools: q(qk.stakingPools(), async () =>
+    page(await api.get<Paginated<StakingPoolResponse>>("/staking/pools")).map(toStakingPool),
+    { staleTime: FRESH.config, authed: false }),
+  stakePositions: q(qk.stakePositions(), async () =>
+    ((await api.get<StakePositionsResponse>("/staking/positions"))?.positions ?? []).map(toStakePosition),
+    { staleTime: FRESH.money }),
+  stakingRewards: q(qk.stakingRewards(), async () =>
+    page(await api.get<Paginated<StakingRewardResponse>>("/staking/rewards", { query: { limit: 100 } }))),
+  referralStats: q(qk.referralStats(), () => api.get<ReferralStats | null>("/referral/stats")),
+  referralCap: q(qk.referralCap(), () => api.get<ReferralCap | null>("/referral/cap")),
+  commissions: q(qk.commissions(), async () =>
+    page(await api.get<Paginated<CommissionResponse>>("/referral/commissions", { query: { limit: 100 } }))
+      .map(toCommissionEntry)),
+  referralDownline: q(qk.referralDownline(), async () =>
+    page(await api.get<Paginated<DownlineNode> | DownlineNode[]>("/referral/downline", { query: { limit: 200 } }))
+      .map((n, i) => toReferralNode(n, i))),
+  notifications: q(qk.notifications(), async () =>
+    page(await api.get<Paginated<NotificationResponse>>("/notifications", { query: { limit: 50 } }))
+      .map(toNotification)),
+  adminKpis: q(qk.adminKpis(), () => api.get<PlatformKpis | null>("/admin/kpis"),
+    { staleTime: FRESH.money }),
+  adminMembers: q(qk.adminMembers(), async () =>
+    (await fetchAll<MemberSummary>("/admin/members", {}, 100, 5)).map(toAdminUser)),
+  adminKycQueue: q(qk.adminKycQueue(), async () =>
+    page(await api.get<Paginated<KycQueueItem>>("/kyc/admin/queue", { query: { limit: 100 } }))
+      .map(toKycSubmission)),
+  adminStaff: q(qk.adminStaff(), async () =>
+    (await api.get<StaffMemberResponse[]>("/admin/staff")).map(toStaffMember),
+    { staleTime: FRESH.config }),
+} as const;
+
+/**
+ * Runs a spec through the same cache, fallback and auth gate the hooks use, so
+ * a hook built on a spec behaves identically to one written out longhand.
+ */
+function useSpec<T>(spec: QuerySpec<T>, fallback: T, opts: Opts<T> = {}): Resource<T> {
+  const { phase } = useAuth();
+  const signedIn = phase === "authenticated";
+  const res = useResource(spec.queryKey, spec.queryFn, fallback, {
+    ...(spec.staleTime === undefined ? {} : { staleTime: spec.staleTime }),
+    ...opts,
+    enabled: (!spec.authed || signedIn) && opts.enabled !== false,
+  });
+  if (!spec.authed) return res;
+  /* While the session is still resolving, report loading rather than "empty" —
+     otherwise every authenticated screen flashes its empty state on load. */
+  return { ...res, isLoading: phase === "loading" || (signedIn && res.isLoading) };
+}
 
 /* ================================ Player scope ============================ */
 
@@ -179,18 +300,8 @@ export const useCurrentUser = (): Resource<User> => {
  * two comfortably can be.
  */
 export function useBalances(): Resource<Balances> {
-  const balance = useAuthedResource(
-    qk.balance(),
-    () => api.get<BalanceResponse>("/wallet/balance"),
-    null as BalanceResponse | null,
-    { staleTime: FRESH.money },
-  );
-  const points = useAuthedResource(
-    qk.pointsSummary(),
-    () => api.get<PointsSummary>("/points/summary"),
-    null as PointsSummary | null,
-    { staleTime: FRESH.money },
-  );
+  const balance = useSpec(Q.balance, null as BalanceResponse | null);
+  const points = useSpec(Q.pointsSummary, null as PointsSummary | null);
   const rate = useMttPrice();
 
   const data = useMemo(
@@ -226,22 +337,10 @@ export function useMttPrice(): Resource<number> {
 }
 
 export const useGames = (): Resource<Game[]> =>
-  useResource(
-    qk.games(),
-    async () =>
-      page(await api.get<Paginated<GameResponse>>("/games", { query: { limit: 100 } })).map(toGame),
-    [],
-    { staleTime: FRESH.config },
-  );
+  useSpec(Q.games, [] as Game[]);
 
 export const useTournaments = (): Resource<Tournament[]> =>
-  useResource(
-    qk.tournaments(),
-    async () =>
-      page(await api.get<Paginated<TournamentResponse>>("/tournaments", { query: { limit: 100 } }))
-        .map(toTournament),
-    [],
-  );
+  useSpec(Q.tournaments, [] as Tournament[]);
 
 /**
  * A leaderboard.
@@ -272,6 +371,7 @@ export const useLeaderboard = (
           : rows;
       })(),
     [],
+    KEEP_PREVIOUS,
   );
 
 export const useQuests = (): Resource<Quest[]> =>
@@ -301,53 +401,25 @@ export const useAchievements = (): Resource<Achievement[]> =>
 export const usePointsHistory = (): Resource<PointsEntry[]> => {
   const games = useGames();
   const titles = useMemo(() => new Map(games.data.map((g) => [g.id, g.title])), [games.data]);
-  const res = useAuthedResource(
-    qk.pointsHistory(),
-    async () =>
-      page(await api.get<Paginated<PointsEntryResponse>>("/points/history", { query: { limit: 100 } })),
-    [] as PointsEntryResponse[],
-  );
+  const res = useSpec(Q.pointsHistory, [] as PointsEntryResponse[]);
   const data = useMemo(() => res.data.map((r) => toPointsEntry(r, titles)), [res.data, titles]);
   return { data, isLoading: res.isLoading, error: res.error, refetch: res.refetch };
 };
 
 export const useTransactions = (): Resource<Transaction[]> =>
-  useAuthedResource(
-    qk.transactions(),
-    async () =>
-      page(await api.get<Paginated<TransactionResponse>>("/wallet/transactions", { query: { limit: 100 } }))
-        .map(toTransaction),
-    [],
-  );
+  useSpec(Q.transactions, [] as Transaction[]);
 
 export const useStakingPools = (): Resource<StakingPool[]> =>
-  useResource(
-    qk.stakingPools(),
-    async () => page(await api.get<Paginated<StakingPoolResponse>>("/staking/pools")).map(toStakingPool),
-    [],
-    { staleTime: FRESH.config },
-  );
+  useSpec(Q.stakingPools, [] as StakingPool[]);
 
 export const useStakePositions = (): Resource<StakePosition[]> =>
-  useAuthedResource(
-    qk.stakePositions(),
-    async () =>
-      ((await api.get<StakePositionsResponse>("/staking/positions"))?.positions ?? [])
-        .map(toStakePosition),
-    [],
-    { staleTime: FRESH.money },
-  );
+  useSpec(Q.stakePositions, [] as StakePosition[]);
 
 /** Reward rows carry a pool id; the name comes from the pool list. */
 export const useRewardHistory = (): Resource<RewardEntry[]> => {
   const pools = useStakingPools();
   const names = useMemo(() => new Map(pools.data.map((p) => [p.poolId, p.name])), [pools.data]);
-  const res = useAuthedResource(
-    qk.stakingRewards(),
-    async () =>
-      page(await api.get<Paginated<StakingRewardResponse>>("/staking/rewards", { query: { limit: 100 } })),
-    [] as StakingRewardResponse[],
-  );
+  const res = useSpec(Q.stakingRewards, [] as StakingRewardResponse[]);
   const data = useMemo(() => res.data.map((r) => toRewardEntry(r, names)), [res.data, names]);
   return { data, isLoading: res.isLoading, error: res.error, refetch: res.refetch };
 };
@@ -364,16 +436,8 @@ const EMPTY_REFERRAL_SUMMARY: ReferralSummary = {
 
 /** Stats and the monthly cap, composed. The cap is why a member is told they stopped earning. */
 export function useReferralSummary(): Resource<ReferralSummary> {
-  const stats = useAuthedResource(
-    qk.referralStats(),
-    () => api.get<ReferralStats>("/referral/stats"),
-    null as ReferralStats | null,
-  );
-  const cap = useAuthedResource(
-    qk.referralCap(),
-    () => api.get<ReferralCap>("/referral/cap"),
-    null as ReferralCap | null,
-  );
+  const stats = useSpec(Q.referralStats, null as ReferralStats | null);
+  const cap = useSpec(Q.referralCap, null as ReferralCap | null);
 
   /* Built from the running origin rather than a configured base URL: a referral
    * link that points at production while you are testing on staging is a bug only
@@ -398,34 +462,13 @@ export function useReferralSummary(): Resource<ReferralSummary> {
 }
 
 export const useReferralTree = (): Resource<ReferralNode[]> =>
-  useAuthedResource(
-    qk.referralDownline(),
-    async () => {
-      const res = await api.get<Paginated<DownlineNode> | DownlineNode[]>("/referral/downline", {
-        query: { limit: 200 },
-      });
-      return page(res).map((n, i) => toReferralNode(n, i));
-    },
-    [],
-  );
+  useSpec(Q.referralDownline, [] as ReferralNode[]);
 
 export const useCommissionHistory = (): Resource<CommissionEntry[]> =>
-  useAuthedResource(
-    qk.commissions(),
-    async () =>
-      page(await api.get<Paginated<CommissionResponse>>("/referral/commissions", { query: { limit: 100 } }))
-        .map(toCommissionEntry),
-    [],
-  );
+  useSpec(Q.commissions, [] as CommissionEntry[]);
 
 export const useNotifications = (): Resource<AppNotification[]> =>
-  useAuthedResource(
-    qk.notifications(),
-    async () =>
-      page(await api.get<Paginated<NotificationResponse>>("/notifications", { query: { limit: 50 } }))
-        .map(toNotification),
-    [],
-  );
+  useSpec(Q.notifications, [] as AppNotification[]);
 
 export const useTickets = (): Resource<Ticket[]> =>
   useAuthedResource(
@@ -637,31 +680,16 @@ function toKpiView(k: PlatformKpis | null): AdminKpiView {
 }
 
 export const useAdminKpis = (): Resource<AdminKpiView> => {
-  const res = useAuthedResource(
-    qk.adminKpis(),
-    () => api.get<PlatformKpis>("/admin/kpis"),
-    null as PlatformKpis | null,
-    { staleTime: FRESH.money },
-  );
+  const res = useSpec(Q.adminKpis, null as PlatformKpis | null);
   const data = useMemo(() => toKpiView(res.data), [res.data]);
   return { data, isLoading: res.isLoading, error: res.error, refetch: res.refetch };
 };
 
 export const useAdminUsers = (): Resource<User[]> =>
-  useAuthedResource(
-    qk.adminMembers(),
-    async () => (await fetchAll<MemberSummary>("/admin/members", {}, 100, 5)).map(toAdminUser),
-    [],
-  );
+  useSpec(Q.adminMembers, [] as User[]);
 
 export const useKycQueue = (): Resource<KycSubmission[]> =>
-  useAuthedResource(
-    qk.adminKycQueue(),
-    async () =>
-      page(await api.get<Paginated<KycQueueItem>>("/kyc/admin/queue", { query: { limit: 100 } }))
-        .map(toKycSubmission),
-    [],
-  );
+  useSpec(Q.adminKycQueue, [] as KycSubmission[]);
 
 export const useTreasuryInflows = (): Resource<TreasuryInflow[]> =>
   useAuthedResource(
@@ -759,12 +787,7 @@ export const useFraudAlerts = (): Resource<FraudAlert[]> =>
   );
 
 export const useStaff = (): Resource<StaffMember[]> =>
-  useAuthedResource(
-    qk.adminStaff(),
-    async () => (await api.get<StaffMemberResponse[]>("/admin/staff")).map(toStaffMember),
-    [],
-    { staleTime: FRESH.config },
-  );
+  useSpec(Q.adminStaff, [] as StaffMember[]);
 
 /**
  * Staff id → display name.
@@ -1036,7 +1059,7 @@ export const useRevenueByStream = (months = 12) =>
       }));
     },
     [],
-    { staleTime: FRESH.series },
+    { staleTime: FRESH.series, ...KEEP_PREVIOUS },
   );
 
 export const usePayoutVsInflow = (months = 12) =>
@@ -1060,7 +1083,7 @@ export const usePayoutVsInflow = (months = 12) =>
       }));
     },
     [],
-    { staleTime: FRESH.series },
+    { staleTime: FRESH.series, ...KEEP_PREVIOUS },
   );
 
 export const useStakingTvlTrend = (months = 12) =>
@@ -1080,7 +1103,7 @@ export const useStakingTvlTrend = (months = 12) =>
       }));
     },
     [],
-    { staleTime: FRESH.series },
+    { staleTime: FRESH.series, ...KEEP_PREVIOUS },
   );
 
 export const useKycFunnel = () =>
@@ -1112,7 +1135,7 @@ export const useCohortRetention = (months = 6) =>
       }));
     },
     [],
-    { staleTime: FRESH.series },
+    { staleTime: FRESH.series, ...KEEP_PREVIOUS },
   );
 
 /* -------------------------- Public / landing page ------------------------- */

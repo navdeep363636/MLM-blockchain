@@ -5,6 +5,7 @@ import { Suspense, useState } from "react";
 
 import { ToastProvider } from "@/components/ui";
 import { RouteProgress } from "@/components/layout/route-progress";
+import { RoutePrefetcher } from "@/components/layout/route-prefetcher";
 import { ThemeProvider } from "@/lib/hooks/use-theme";
 import { AuthProvider } from "@/lib/auth/auth-context";
 import { RealtimeProvider } from "@/lib/realtime/socket";
@@ -67,6 +68,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
               <Suspense fallback={null}>
                 <RouteProgress />
               </Suspense>
+              {/* Starts a route's data fetch on hover/focus/touch rather than
+                  on mount. See route-prefetcher.tsx. */}
+              <RoutePrefetcher />
               {children}
             </ToastProvider>
           </RealtimeProvider>
