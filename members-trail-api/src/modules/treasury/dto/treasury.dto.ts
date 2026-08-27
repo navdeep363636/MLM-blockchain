@@ -103,6 +103,57 @@ export class ApproveOutflowDto {
 
 /* ------------------------------- responses -------------------------------- */
 
+/* ============================================================================
+ * Ledger rows.
+ *
+ * These exist because the list endpoints used to return the ENTITIES, which is a
+ * different contract from the one every other endpoint here publishes and leaked
+ * internal column names (`allocationBps`, `amountToTreasury`, `amount`) plus
+ * columns no client should see (`reconciledById`, `reconciliationNote`,
+ * `budgetAtApproval`). A client written against the documented names read
+ * `undefined` for the date and every amount, and rendered zeroes.
+ * ========================================================================== */
+
+export class TreasuryInflowResponse {
+  @ApiProperty() ref!: string;
+  @ApiProperty({
+    description:
+      "When the Treasury recognised this allocation. Named for what it is: the " +
+      "processor's own event time lives on the revenue event, and reporting that " +
+      "here would claim a precision this row does not have.",
+  })
+  recognisedAt!: string;
+  @ApiProperty({ enum: REVENUE_STREAMS }) stream!: RevenueStream;
+  @ApiProperty({ description: "Gross amount charged, fiat" }) grossRevenue!: string;
+  @ApiProperty({ description: "Basis points of net revenue allocated to the Treasury" })
+  treasuryAllocationBps!: number;
+  @ApiProperty({ description: "Allocation in fiat" }) amountToTreasury!: string;
+  @ApiProperty({ description: "Allocation in MTT at the rate in force when recorded" })
+  amountToTreasuryMtt!: string;
+  @ApiPropertyOptional({ nullable: true }) processorRef!: string | null;
+  @ApiProperty() reconciled!: boolean;
+  @ApiPropertyOptional({ nullable: true }) reconciledAt!: string | null;
+  @ApiProperty({ example: "2026-08" }) periodKey!: string;
+}
+
+export class TreasuryOutflowResponse {
+  @ApiProperty() ref!: string;
+  @ApiProperty() createdAt!: string;
+  @ApiProperty({ enum: ["staking_pool", "commission_pool"] })
+  destination!: "staking_pool" | "commission_pool";
+  @ApiPropertyOptional({ nullable: true }) poolId!: number | null;
+  @ApiProperty({ description: "MTT moved" }) amountMtt!: string;
+  @ApiProperty() status!: string;
+  @ApiPropertyOptional({ nullable: true }) txHash!: string | null;
+  @ApiPropertyOptional({
+    nullable: true, isArray: true, type: String,
+    description: "Ids of the approvers. Four-eyes means more than one.",
+  })
+  approvedByIds!: string[] | null;
+  @ApiPropertyOptional({ nullable: true }) approvedAt!: string | null;
+  @ApiProperty({ example: "2026-08" }) periodKey!: string;
+}
+
 export class HeadroomResponse {
   @ApiProperty() periodKey!: string;
   @ApiProperty() reconciledInflow!: string;

@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 import {
   IsInt, IsISO8601, IsOptional, IsPositive, IsString, Max, MaxLength, Min, MinLength,
 } from "class-validator";
@@ -16,7 +17,12 @@ export const RATE_MAX = 10_000_000;
 
 export class ConversionQuoteQuery {
   @ApiProperty({ minimum: 1, description: "Points the player intends to spend" })
-  @IsInt() @IsPositive() @Max(1_000_000_000)
+  /* `@Type` is load-bearing on a QUERY dto: the global pipe runs with
+   * `enableImplicitConversion: false`, so `?points=500` arrives as the string
+   * "500" and `@IsInt` rejects it. Without this the endpoint answered 400 to
+   * every well-formed request. Every other numeric query dto does the same —
+   * see PaginationQuery and MonthsQuery. */
+  @Type(() => Number) @IsInt() @IsPositive() @Max(1_000_000_000)
   points!: number;
 }
 

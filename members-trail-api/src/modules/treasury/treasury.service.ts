@@ -20,6 +20,7 @@ import { paginate, type Paginated } from "@/common/dto";
 import type {
   ApproveOutflowDto, HeadroomResponse, InflowQuery, OutflowQuery, ProposeOutflowDto,
   ReconcileBatchDto, RecogniseRevenueDto, TreasuryDashboardResponse,
+  TreasuryInflowResponse, TreasuryOutflowResponse,
 } from "./dto/treasury.dto";
 
 /* ============================================================================
@@ -509,7 +510,15 @@ export class TreasuryService {
    * Lists
    * ------------------------------------------------------------------ */
 
-  async listInflows(q: InflowQuery): Promise<Paginated<TreasuryInflow>> {
+  /**
+   * The inflow ledger.
+   *
+   * Returns a RESPONSE, not the entity. Handing back the entity published the
+   * internal column names and the reconciliation notes with them, and it meant
+   * the documented field names — the ones a client is written against — were not
+   * the ones on the wire.
+   */
+  async listInflows(q: InflowQuery): Promise<Paginated<TreasuryInflowResponse>> {
     const qb = this.inflows.createQueryBuilder("i");
     if (q.stream) qb.andWhere("i.stream = :stream", { stream: q.stream });
     if (q.periodKey) qb.andWhere("i.periodKey = :period", { period: q.periodKey });
@@ -517,17 +526,17 @@ export class TreasuryService {
     if (q.from && q.to) qb.andWhere("i.createdAt BETWEEN :from AND :to", { from: q.from, to: q.to });
     qb.orderBy("i.createdAt", q.sortDir).skip(q.skip).take(q.limit);
     const [data, total] = await qb.getManyAndCount();
-    return paginate(data, total, q);
+    return paginate(data.map(toInflowView), total, q);
   }
 
-  async listOutflows(q: OutflowQuery): Promise<Paginated<TreasuryOutflow>> {
+  async listOutflows(q: OutflowQuery): Promise<Paginated<TreasuryOutflowResponse>> {
     const qb = this.outflows.createQueryBuilder("o");
     if (q.destination) qb.andWhere("o.destination = :d", { d: q.destination });
     if (q.status) qb.andWhere("o.status = :s", { s: q.status });
     if (q.periodKey) qb.andWhere("o.periodKey = :p", { p: q.periodKey });
     qb.orderBy("o.createdAt", q.sortDir).skip(q.skip).take(q.limit);
     const [data, total] = await qb.getManyAndCount();
-    return paginate(data, total, q);
+    return paginate(data.map(toOutflowView), total, q);
   }
 
   /* ------------------------------------------------------------------ *
@@ -561,4 +570,48 @@ export class TreasuryService {
    * columns of v_treasury_period — deleted rather than left in place, because a
    * second implementation of a total nobody calls is the one that gets edited by
    * mistake later. */
+}
+
+/* ============================================================================
+ * Entity → response mappers.
+ *
+ * Module-level rather than methods: they hold no state and it keeps the shape of
+ * the wire contract readable in one place next to the service that serves it.
+ * ========================================================================== */
+
+const iso = (d: Date | null | undefined): string | null => (d ? d.toISOString() : null);
+
+function toInflowView(i: TreasuryInflow): TreasuryInflowResponse {
+  return {
+    ref: i.ref,
+    recognisedAt: i.createdAt.toISOString(),
+    stream: i.stream,
+    grossRevenue: i.grossRevenue,
+    treasuryAllocationBps: i.allocationBps,
+    amountToTreasury: i.amountToTreasury,
+    amountToTreasuryMtt: i.amountMtt,
+    processorRef: i.processorRef ?? null,
+    reconciled: i.reconciled,
+    reconciledAt: iso(i.reconciledAt),
+    periodKey: i.periodKey,
+  };
+}
+
+function toOutflowView(o: TreasuryOutflow): TreasuryOutflowResponse {
+  return {
+    ref: o.ref,
+    createdAt: o.createdAt.toISOString(),
+    destination: o.destination,
+    poolId: o.poolId ?? null,
+    /* The column is `amount`; the wire calls it `amountMtt` because that is what
+     * it is, and because a bare `amount` next to a fiat `amountToTreasury` on the
+     * inflow row is exactly the ambiguity that gets a figure rendered in the
+     * wrong currency. */
+    amountMtt: o.amount,
+    status: o.status,
+    txHash: o.txHash ?? null,
+    approvedByIds: o.approvedByIds ?? null,
+    approvedAt: iso(o.approvedAt),
+    periodKey: o.periodKey,
+  };
 }

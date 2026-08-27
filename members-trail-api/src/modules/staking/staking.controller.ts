@@ -5,8 +5,8 @@ import type { Paginated } from "@/common/dto";
 import { StakingService } from "./staking.service";
 import {
   AprPointResponse, ClaimRewardsRequest, RewardHistoryQuery, StakeRequest, StakingIntentResponse,
-  StakingPoolResponse, StakingRewardResponse, StakingSummaryResponse, UnstakePreviewResponse,
-  UnstakeRequest,
+  StakingPoolResponse, StakingRewardResponse, StakingSummaryResponse, UnstakePreviewQuery,
+  UnstakePreviewResponse, UnstakeRequest,
 } from "./dto/staking.dto";
 
 /* ============================================================================
@@ -66,8 +66,9 @@ export class StakingController {
   preview(
     @CurrentUser() user: AuthUser,
     @Param("poolId", ParseIntPipe) poolId: number,
+    @Query() q: UnstakePreviewQuery,
   ): Promise<UnstakePreviewResponse> {
-    return this.staking.previewUnstake(user.id, poolId);
+    return this.staking.previewUnstake(user.id, poolId, q.amountMtt);
   }
 
   @Post("stake")
