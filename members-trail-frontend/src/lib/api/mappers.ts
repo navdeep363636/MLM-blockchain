@@ -309,7 +309,10 @@ export function toGame(g: GameResponse): Game {
     entryType: g.entryType as Game["entryType"],
     entryFee: g.entryFee === null ? undefined : num(g.entryFee),
     players30d: g.players30d,
-    rating: g.rating,
+    /* A decimal string on the wire, like every other decimal here. It used to be
+     * typed `number` and passed straight through, which put a string into a field
+     * the UI sorts and compares numerically. */
+    rating: num(g.rating),
     active: g.active,
     dailyPointsCap: g.dailyPointsCap,
   };
@@ -560,21 +563,30 @@ export function toTicket(t: TicketResponse): Ticket {
     status: t.status as Ticket["status"],
     priority: t.priority as Ticket["priority"],
     /* The member's own ticket list does not carry their id or name — it is their
-     * list. The staff view supplies `userRef`. */
-    userId: "",
-    userName: t.userRef ?? "",
-    assignee: t.assigneeName ?? undefined,
+     * list. The ADMIN list adds `userId`, and that is all it adds: there is no
+     * `userRef` or `assigneeName` on this contract, and reading them left the
+     * staff table's member and assignee columns permanently blank. Resolving a
+     * name from the id is the caller's job, where the directory is available. */
+    userId: t.userId ?? "",
+    userName: "",
+    assignee: undefined,
     createdAt: t.createdAt,
-    /* No `updatedAt` on the list row; the SLA clock is what the UI sorts by. */
-    updatedAt: t.updatedAt ?? t.createdAt,
+    /* No `updatedAt` on the contract either; the SLA clock is what the UI sorts
+     * by, and the created instant is the honest fallback. */
+    updatedAt: t.createdAt,
     slaDueAt: t.slaDueAt,
     messages: (t.messages ?? []).map((m) => ({
       id: m.id,
-      author: m.authorName,
+      /* `authorLabel` — "You", "Support" or "System". Agent identities are not
+       * exposed, so there is no name to show and `authorName` was always
+       * undefined, which rendered every message as being from nobody. */
+      author: m.authorLabel,
       authorRole: m.authorRole as Ticket["messages"][number]["authorRole"],
       body: m.body,
       createdAt: m.createdAt,
-      internal: m.internal,
+      /* Internal notes never reach the player-facing endpoint, so anything here
+       * is meant to be read. There is no flag on the wire to carry. */
+      internal: false,
     })),
     financialDispute: t.financialDispute,
   };
@@ -646,11 +658,12 @@ export function toKycSubmission(k: KycQueueItem): KycSubmission {
        * needs to know before opening it. */
       filename: d.kind,
     })),
-    /* Neither the provider score nor the country is on the queue row; both are on
-     * the individual submission, where reading them is attributable. */
-    providerConfidence: 0,
-    country: "",
-    notes: undefined,
+    /* The queue row DOES carry these two. They were hard-coded to 0 and "" here,
+     * which showed every submission as having no provider confidence — a figure a
+     * reviewer triages on. Absent stays absent rather than becoming zero. */
+    providerConfidence: k.providerConfidence ?? 0,
+    country: k.country ?? "",
+    notes: k.reviewerNotes ?? undefined,
   };
 }
 
@@ -661,10 +674,20 @@ function normaliseKycStatus(status: string): KycSubmission["status"] {
   return "pending";
 }
 
+/**
+ * A Treasury inflow row.
+ *
+ * These endpoints used to hand back the raw entity, whose column names differ
+ * from the documented ones — so the date, the allocation percentage and the
+ * amount all read `undefined` and rendered as blank and zero. The API now serves
+ * a response DTO; `recognisedAt` is its name for the row's own timestamp, which
+ * is honest about being the Treasury's recognition instant rather than the
+ * processor's event time.
+ */
 export function toTreasuryInflow(i: TreasuryInflowResponse): TreasuryInflow {
   return {
     id: i.ref,
-    date: i.occurredAt,
+    date: i.recognisedAt,
     stream: i.stream as TreasuryInflow["stream"],
     grossRevenue: num(i.grossRevenue),
     treasuryAllocationPct: bpsToPct(i.treasuryAllocationBps),
@@ -686,32 +709,61 @@ export function toTreasuryOutflow(o: TreasuryOutflowResponse): TreasuryOutflow {
   };
 }
 
+/**
+ * A fraud alert.
+ *
+ * `createdAt` is when it was raised — there is no `raisedAt` on the wire, so the
+ * queue used to show a blank timestamp on every alert.
+ *
+ * Affected members arrive as IDS only, and that is deliberate on the server's
+ * part: an alert is not a place to denormalise member names. The id is carried
+ * through as the name too, so a screen that renders the label still shows
+ * something identifying; the fraud queue itself joins the member directory it
+ * already loads to show the real account. Fetching that directory HERE would put
+ * five paginated member requests behind every screen that shows an alert count,
+ * including the dashboard, for a name most of them never render.
+ */
 export function toFraudAlert(a: FraudAlertResponse): FraudAlert {
   return {
     id: a.ref,
-    raisedAt: a.raisedAt,
+    raisedAt: a.createdAt,
     kind: a.kind as FraudAlert["kind"],
     severity: a.severity as FraudAlert["severity"],
     riskScore: a.riskScore,
-    affectedUsers: a.affectedUsers ?? [],
+    affectedUsers: (a.affectedUserIds ?? []).map((id) => ({ id, name: id })),
     summary: a.summary,
     status: a.status as FraudAlert["status"],
     signals: a.signals ?? [],
   };
 }
 
-export function toAuditEntry(a: AuditEntryResponse): AuditLogEntry {
+/**
+ * One audit row.
+ *
+ * Three field names here were wrong and each failed silently:
+ *   - the identifier is `ref`, not `id`, so every row had an undefined React key;
+ *   - there is no `actorName` on the contract, so the actor always fell through
+ *     to the raw id — `staffNames` resolves it properly now;
+ *   - the four-eyes flag is `requiredSecondApproval` (past tense: it records what
+ *     was required at the time), so reading `requiresSecondApproval` rendered
+ *     EVERY entry as not needing a second approver. On an append-only compliance
+ *     record that is the worst of the three.
+ */
+export function toAuditEntry(
+  a: AuditEntryResponse,
+  staffNames?: Map<string, string>,
+): AuditLogEntry {
   return {
-    id: a.id,
+    id: a.ref,
     timestamp: a.createdAt,
-    actor: a.actorName ?? a.actorId ?? "system",
+    actor: (a.actorId ? staffNames?.get(a.actorId) : undefined) ?? a.actorId ?? "system",
     actorRole: (a.actorRole as AuditLogEntry["actorRole"]) ?? "support",
     action: a.action,
     target: [a.targetType, a.targetId].filter(Boolean).join(" "),
     before: a.before === null || a.before === undefined ? undefined : stringifyDiff(a.before),
     after: a.after === null || a.after === undefined ? undefined : stringifyDiff(a.after),
     ip: a.ip ?? "",
-    requiresSecondApproval: a.requiresSecondApproval ?? false,
+    requiresSecondApproval: a.requiredSecondApproval,
     approvedBy: a.approvedById ?? undefined,
   };
 }

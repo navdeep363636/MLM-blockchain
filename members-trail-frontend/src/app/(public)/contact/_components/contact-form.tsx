@@ -83,7 +83,9 @@ export function ContactForm() {
           "",
           `— submitted via the contact form as ${form.name.trim()} <${form.email.trim()}>`,
         ].join("\n"),
-        financialDispute: FINANCIAL.has(form.category),
+        /* No `financialDispute`: the server classifies the ticket from its
+         * category and refuses the field. `FINANCIAL` is still used below to set
+         * the member's expectation about routing. */
       });
       setSent(true);
       toast.success("Ticket opened", `Reference ${ticket.ref}. You can follow it in Support.`);

@@ -243,11 +243,19 @@ export const useTournaments = (): Resource<Tournament[]> =>
     [],
   );
 
+/**
+ * A leaderboard.
+ *
+ * AUTHENTICATED, not public. A board shows other members' chosen display names,
+ * and `you` is the caller's own standing — both of which need a caller. The
+ * endpoint requires a session, so firing this for a signed-out visitor was a
+ * guaranteed 401 rather than a public page.
+ */
 export const useLeaderboard = (
   metric = "points",
   period = "weekly",
 ): Resource<LeaderboardEntry[]> =>
-  useResource(
+  useAuthedResource(
     qk.leaderboard(metric, period),
     async () =>
       /* The response is an object with `rows` plus the caller's own standing — not
@@ -438,8 +446,16 @@ export const useStoreItems = (): Resource<StoreItem[]> =>
     { staleTime: FRESH.config },
   );
 
+/**
+ * The P2P marketplace.
+ *
+ * AUTHENTICATED: every listing carries `isYours`, which only means something for
+ * a known caller, and the endpoint requires a session. `useStoreItems` above is
+ * the public one — the catalogue is browsable without an account, the
+ * member-to-member market is not.
+ */
 export const useMarketListings = (): Resource<MarketListing[]> =>
-  useResource(
+  useAuthedResource(
     qk.market(),
     async () =>
       page(await api.get<Paginated<MarketListingResponse>>("/store/market", { query: { limit: 100 } }))
@@ -704,20 +720,29 @@ export const useTreasuryTotals = (): Resource<TreasuryTotalsView> => {
   const data = useMemo<TreasuryTotalsView>(() => {
     const d = res.data;
     if (!d) return EMPTY_TREASURY_TOTALS;
+    /* Field names are the server's: `commissionOutflow` / `stakingOutflow` /
+     * `totalOutflow`. This used to read `commissionPoolOut` / `stakingPoolOut` /
+     * `reserveOut`, none of which exist on the contract, so every outflow figure
+     * and the utilisation gauge read zero — on the one screen whose job is to
+     * show whether payouts are outrunning revenue. */
     const reconciled = num(d.reconciledInflow);
-    const commission = num(d.commissionPoolOut);
-    const staking = num(d.stakingPoolOut);
-    const reserve = num(d.reserveOut);
-    const outflow = commission + staking + reserve;
+    const commission = num(d.commissionOutflow);
+    const staking = num(d.stakingOutflow);
     return {
       reconciledInflow: reconciled,
       unreconciledInflow: num(d.unreconciledInflow),
-      totalOutflow: outflow,
+      /* The server totals this itself, including anything the two named pools do
+       * not cover. Re-deriving it from the parts would drift the moment a third
+       * destination is added. */
+      totalOutflow: num(d.totalOutflow),
       commissionOutflow: commission,
       stakingOutflow: staking,
-      headroom:
-        d.headroom === undefined ? reconciled - outflow : num(d.headroom as string),
-      utilisationPct: reconciled > 0 ? Number(((outflow / reconciled) * 100).toFixed(1)) : 0,
+      headroom: num(d.headroom),
+      /* The server publishes this ratio in bps and it is the figure the payout
+       * ceiling is enforced on, so it is read rather than recomputed — a second
+       * implementation of the number a compliance gate depends on is one that can
+       * disagree with the gate. */
+      utilisationPct: Number((d.payoutRatioBps / 100).toFixed(1)),
     };
   }, [res.data]);
 
@@ -741,37 +766,77 @@ export const useStaff = (): Resource<StaffMember[]> =>
     { staleTime: FRESH.config },
   );
 
-export const useAuditLog = (): Resource<AuditLogEntry[]> =>
-  useAuthedResource(
+/**
+ * Staff id → display name.
+ *
+ * Several back-office contracts identify an actor by id and nothing else — the
+ * audit trail, the conversion-rate proposals, the treasury approvals. None of
+ * them embed a name, on purpose: a name copied onto an append-only row is a name
+ * that goes stale. The staff directory is one cached read shared across every
+ * screen that needs to put a person against an id.
+ */
+function useStaffNames(): Map<string, string> {
+  const staff = useStaff();
+  return useMemo(() => new Map(staff.data.map((s) => [s.id, s.name])), [staff.data]);
+}
+
+/**
+ * The audit trail.
+ *
+ * The actor is an ID on this contract, so the name is resolved here. Falling back
+ * to the raw id matters: "who did this" must never render as blank on an
+ * append-only compliance record, even for a staff account that has since been
+ * removed from the directory.
+ */
+export const useAuditLog = (): Resource<AuditLogEntry[]> => {
+  const staffNames = useStaffNames();
+  const res = useAuthedResource(
     qk.adminAudit(),
     async () =>
-      page(await api.get<Paginated<AuditEntryResponse>>("/admin/audit", { query: { limit: 100 } }))
-        .map(toAuditEntry),
-    [],
+      page(await api.get<Paginated<AuditEntryResponse>>("/admin/audit", { query: { limit: 100 } })),
+    [] as AuditEntryResponse[],
   );
+  const data = useMemo(() => res.data.map((a) => toAuditEntry(a, staffNames)), [res.data, staffNames]);
+  return { data, isLoading: res.isLoading, error: res.error, refetch: res.refetch };
+};
 
 function normaliseRateStatus(status: string): ConversionRateConfig["status"] {
   if (status === "active" || status === "scheduled" || status === "superseded") return status;
   return "pending_approval";
 }
 
-export const useConversionRates = (): Resource<ConversionRateConfig[]> =>
-  useAuthedResource(
+export const useConversionRates = (): Resource<ConversionRateConfig[]> => {
+  const staffNames = useStaffNames();
+  const res = useAuthedResource(
     qk.adminConversionRates(),
-    async () => {
-      const rows = page(
+    async () =>
+      page(
         await api.get<Paginated<ConversionRateRow>>("/admin/conversion/rates", { query: { limit: 50 } }),
-      );
-      return rows.map<ConversionRateConfig>((r) => ({
+      ),
+    [] as ConversionRateRow[],
+  );
+
+  /* Proposer and approver are IDS on this contract, not names — the rate row does
+   * not carry staff names, and reading `proposedByName` left both columns
+   * permanently blank. Resolved against the staff directory the screen already
+   * loads. The join is a memo rather than part of the fetcher so the rate list is
+   * not refetched every time the directory settles. */
+  const data = useMemo<ConversionRateConfig[]>(
+    () =>
+      res.data.map((r) => ({
         pointsPerMtt: r.pointsPerMtt,
         effectiveFrom: r.effectiveFrom,
-        proposedBy: r.proposedByName ?? undefined,
-        approvedBy: r.approvedByName ?? undefined,
+        proposedBy: staffNames.get(r.proposedById) ?? r.proposedById,
+        approvedBy: r.approvedById
+          ? staffNames.get(r.approvedById) ?? r.approvedById
+          : undefined,
         status: normaliseRateStatus(r.status),
-      }));
-    },
-    [],
+      })),
+    [res.data, staffNames],
   );
+
+  return { data, isLoading: res.isLoading, error: res.error, refetch: res.refetch };
+};
 
 const EMPTY_COMMISSION_CONFIG: CommissionConfig = {
   levels: [], eligibleTypes: [], monthlyCapAbsolute: 0, monthlyCapMultiplier: 0,
@@ -800,15 +865,25 @@ export const useCommissionConfig = (): Resource<CommissionConfig> => {
   const data = useMemo<CommissionConfig>(() => {
     const active = res.data.find((p) => p.status === "active") ?? res.data[0];
     if (!active) return EMPTY_COMMISSION_CONFIG;
+    /* The plan's rates are FLAT fields on the wire — l1Bps, l2Bps, l3Bps — not a
+     * `levels` array. Reading `active.levels.map(...)` threw a TypeError inside
+     * this memo, which is to say during render, which is to say the whole admin
+     * commission route rendered nothing at all.
+     *
+     * `maxDepth` decides how many of the three are in force: a plan capped at two
+     * levels must not advertise a level-3 rate it will never pay. */
+    const rates = [active.l1Bps, active.l2Bps, active.l3Bps];
     return {
-      levels: active.levels.map((l) => ({
-        level: (l.level === 2 ? 2 : l.level === 3 ? 3 : 1) as 1 | 2 | 3,
-        ratePct: l.rateBps / 100,
+      levels: rates.slice(0, Math.max(0, Math.min(3, active.maxDepth))).map((bps, i) => ({
+        level: (i + 1) as 1 | 2 | 3,
+        ratePct: bps / 100,
       })),
-      eligibleTypes: active.eligibleTypes as CommissionConfig["eligibleTypes"],
-      monthlyCapAbsolute: num(active.monthlyCapAbsoluteMtt),
-      monthlyCapMultiplier: active.monthlyCapMultiplier,
-      monthlyCapBase: num(active.monthlyCapBaseMtt),
+      /* `eligibleTriggers` server-side. Same values, different name. */
+      eligibleTypes: active.eligibleTriggers as CommissionConfig["eligibleTypes"],
+      /* The cap fields are fiat-denominated and are NOT suffixed `Mtt`. */
+      monthlyCapAbsolute: num(active.monthlyCapAbsolute),
+      monthlyCapMultiplier: num(active.capMultiplier),
+      monthlyCapBase: num(active.capBase),
       maxDepth: active.maxDepth,
       minAccountAgeDays: active.minAccountAgeDays,
       minGameplaySessions: active.minGameplaySessions,
@@ -891,25 +966,45 @@ export const useRolePermissions = () => {
   return { data, isLoading: res.isLoading, error: res.error, refetch: res.refetch };
 };
 
-export const usePointsRules = (): Resource<PointsRule[]> =>
-  useAuthedResource(
+/**
+ * The points rules, per game and action.
+ *
+ * The rule carries a `gameId` and no title — same as the points ledger — so the
+ * catalogue is joined here. It used to read a `gameTitle` field that does not
+ * exist on the contract and fell back to the id, which rendered a raw UUID in the
+ * title column of the operator's own configuration screen.
+ *
+ * A rule with a null `gameId` is a PLATFORM-WIDE rule, not a missing join, and it
+ * is labelled as such rather than shown as an empty cell.
+ */
+export const usePointsRules = (): Resource<PointsRule[]> => {
+  const games = useGames();
+  const titles = useMemo(() => new Map(games.data.map((g) => [g.id, g.title])), [games.data]);
+  const res = useAuthedResource(
     qk.adminPointsRules(),
-    async () => {
-      const rows = page(
+    async () =>
+      page(
         await api.get<Paginated<PointsRuleResponse>>("/admin/games/points-rules", { query: { limit: 200 } }),
-      );
-      return rows.map<PointsRule>((r) => ({
-        gameId: r.gameId,
-        gameTitle: r.gameTitle ?? r.gameId,
+      ),
+    [] as PointsRuleResponse[],
+    { staleTime: FRESH.config },
+  );
+
+  const data = useMemo<PointsRule[]>(
+    () =>
+      res.data.map((r) => ({
+        gameId: r.gameId ?? "",
+        gameTitle: r.gameId ? titles.get(r.gameId) ?? r.gameId : "All games",
         action: r.action,
         points: r.points,
         dailyCapPerUser: r.dailyCapPerUser,
         enabled: r.enabled,
-      }));
-    },
-    [],
-    { staleTime: FRESH.config },
+      })),
+    [res.data, titles],
   );
+
+  return { data, isLoading: res.isLoading, error: res.error, refetch: res.refetch };
+};
 
 /* ---------------------------- Analytics series ---------------------------- */
 

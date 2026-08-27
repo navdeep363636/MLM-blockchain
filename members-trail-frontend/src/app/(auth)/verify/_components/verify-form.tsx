@@ -51,6 +51,17 @@ export function VerifyForm() {
   const lockedOut = attempts >= MAX_ATTEMPTS;
   const both = done.email && done.phone;
 
+  /**
+   * The address or number the code went to, as the API's `identifier`.
+   *
+   * `channel` is already the API's own vocabulary — "email" or "phone" — so it
+   * goes across as-is. It used to be translated to "sms", which is the transport
+   * rather than the channel and failed the server's enum on every phone
+   * verification.
+   */
+  const identifierFor = (c: Channel): string =>
+    (c === "phone" ? contact.phone : contact.email).trim();
+
   const verify = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -59,8 +70,8 @@ export function VerifyForm() {
     setBusy(true);
     try {
       await verifyOtp.mutateAsync({
-        channel: channel === "phone" ? "sms" : "email",
-        target: channel === "phone" ? contact.phone || undefined : contact.email || undefined,
+        channel,
+        identifier: identifierFor(channel) || undefined,
         code,
       });
     } catch (err) {
@@ -90,11 +101,21 @@ export function VerifyForm() {
 
   const resend = async () => {
     setError(null);
+    /* The API requires the identifier on a resend — there is no session yet to
+     * infer it from. Saying so is better than sending an empty string and
+     * reporting the server's rejection as though the code had failed to send. */
+    const identifier = identifierFor(channel);
+    if (!identifier) {
+      setError(
+        channel === "phone"
+          ? "We need your phone number to resend the code. Add it below."
+          : "We need your email address to resend the code. Add it below.",
+      );
+      setEditing(true);
+      return;
+    }
     try {
-      const res = await resendOtp.mutateAsync({
-        channel: channel === "phone" ? "sms" : "email",
-        target: channel === "phone" ? contact.phone || undefined : contact.email || undefined,
-      });
+      const res = await resendOtp.mutateAsync({ channel, identifier });
       /* The server owns the cooldown and tells us how long it is. Using our own
        * constant would show "resend in 60s" while the API refuses for 90. */
       setCooldown(res?.resendAfter ?? RESEND_COOLDOWN);

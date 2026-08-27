@@ -121,13 +121,14 @@ export function ConvertView() {
   const convert = async () => {
     setBusy(true);
     try {
-      await convertPoints.mutateAsync({
-        points: amount,
-        /* Sent so the server can refuse if the rate moved between the quote and
-         * this confirmation. Without it a scheduled change landing mid-flow gives
-         * the member a different amount than the one they just agreed to. */
-        expectedPointsPerMtt: activeRate.pointsPerMtt,
-      });
+      /* Just `points`. This used to also send `expectedPointsPerMtt` as a guard
+       * against the rate moving between the quote and this confirmation — a good
+       * idea, but not one the API supports: it refuses unknown fields, so the
+       * guard turned every conversion into a 400. Re-adding it needs the server
+       * to accept AND enforce it; a field the server ignores would look like
+       * protection without being any. Until then the confirmation dialog showing
+       * the rate is what the member is agreeing to. */
+      await convertPoints.mutateAsync({ points: amount });
       setDoneAmount(amount);
       setConfirmOpen(false);
       setAck(false);
