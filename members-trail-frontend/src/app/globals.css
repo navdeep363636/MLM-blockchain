@@ -863,3 +863,32 @@
   .holo::after, .ring-gradient::before, .beam::before, .mesh-haze, .grid-floor { display: none; }
   .text-gradient-sheen, .text-gradient-brand { -webkit-text-fill-color: currentColor; color: CanvasText; }
 }
+
+/* ---------------------------------------------------------------------------
+ * Per-link pending spinner.
+ *
+ * Driven by an attribute the click handler writes directly (nav-link.tsx), not
+ * by React state: the App Router runs navigation in a transition and defers
+ * every other render until it commits, so a state-driven indicator appears at
+ * the same moment the destination does. CSS reacts on the next frame instead.
+ *
+ * The 120ms delay is what stops a warm, prefetched navigation — which lands in
+ * well under that — from flashing a spinner nobody asked to see.
+ * ------------------------------------------------------------------------- */
+.nav-pending-dot { display: none; }
+
+[data-nav-pending] .nav-pending-dot {
+  display: block;
+  width: 0.75rem;
+  height: 0.75rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  opacity: 0;
+  animation: nav-spin 0.6s linear infinite, fade-in 120ms ease-out 120ms forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-nav-pending] .nav-pending-dot { animation: fade-in 120ms ease-out 120ms forwards; }
+}

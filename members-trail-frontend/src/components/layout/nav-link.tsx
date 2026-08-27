@@ -3,50 +3,35 @@
 /* ============================================================================
  * A Link that shows its own pending state.
  *
- * The global progress bar (route-progress.tsx) says "something is happening";
- * this says "the thing you clicked is what's happening". On a sidebar of a dozen
+ * The global indicator (route-progress.tsx) says "something is happening"; this
+ * says "the thing you clicked is what's happening". On a sidebar of a dozen
  * items that distinction is the whole difference between a UI that feels
  * responsive and one that feels ignored — the reader needs to know their click
  * landed on the item they aimed at.
  *
- * `useLinkStatus` is Next's own hook for this (15.3+). It only works in a
- * component rendered as a descendant of the `<Link>`, which is why the spinner
- * lives in its own tiny component rather than being computed in the parent.
+ * WHY THE CLICK HANDLER WRITES TO THE DOM DIRECTLY
+ * ------------------------------------------------
+ * The obvious implementation is `useState` for an optimistic "claimed" flag, or
+ * Next's own `useLinkStatus()`. Both were tried and both are invisible in the
+ * case that matters. The App Router runs navigation inside `startTransition`,
+ * and React defers every other re-render until that transition commits — so a
+ * state-driven highlight paints at the same instant the new page does, which is
+ * the one moment it is no longer needed. route-progress.tsx has the measured
+ * numbers.
  *
- * Two things this deliberately does NOT do:
+ * Writing the class and the attribute straight onto the anchor sidesteps
+ * React's scheduler entirely: the highlight moves with the pointer. The
+ * teardown lives in route-progress.tsx (`clearLinkClaims`), which sweeps every
+ * `[data-nav-pending]` when the navigation completes — imperative state needs
+ * imperative cleanup, on the same frame the indicator itself is dismissed.
  *
- *  - It does not delay the active/selected styling until the route commits. The
- *    clicked item takes the active treatment optimistically, on the click, so
- *    the highlight moves with the pointer instead of trailing the network.
- *  - It does not render a spinner for fast navigations. `useLinkStatus` flips
- *    pending immediately, and a spinner that appears and vanishes inside 100ms
- *    is a flicker, so the indicator fades in over a short delay via CSS.
+ * `active` (the real, committed route match) is still React-driven, because by
+ * the time it changes the render is already happening anyway.
  * ========================================================================== */
 
 import Link from "next/link";
-import { useLinkStatus } from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { cn } from "@/lib/utils";
-
-/** Rendered inside the Link, which is what `useLinkStatus` requires. */
-function PendingDot({ className }: { className?: string }) {
-  const { pending } = useLinkStatus();
-  if (!pending) return null;
-  return (
-    <span
-      aria-hidden
-      className={cn("size-3 shrink-0 rounded-full border-[1.5px] border-current border-t-transparent", className)}
-      /* Inline rather than a Tailwind arbitrary value: this needs two comma-
-       * separated animations, and a comma inside `[...]` is ambiguous to the
-       * class parser. The 120ms delay on the fade is what stops a warm,
-       * prefetched navigation from flashing a spinner nobody asked to see. */
-      style={{
-        opacity: 0,
-        animation: "nav-spin 0.6s linear infinite, fade-in 120ms ease-out 120ms forwards",
-      }}
-    />
-  );
-}
 
 export interface NavLinkProps {
   href: string;
@@ -66,27 +51,36 @@ export function NavLink({
   href, children, className, activeClassName, active, title,
   onNavigate, indicatorClassName, showIndicator = true,
 }: NavLinkProps) {
-  /* Optimistic selection. Cleared implicitly when `active` catches up, because
-   * the parent re-renders with the new pathname and we OR the two together. */
-  const [claimed, setClaimed] = useState(false);
-
-  const handleClick = useCallback(() => {
-    setClaimed(true);
-    onNavigate?.();
-  }, [onNavigate]);
-
-  const isActive = active || claimed;
+  const handleClick = useCallback(
+    (e: React.MouseEvent<HTMLAnchorElement>) => {
+      const el = e.currentTarget;
+      /* Modified clicks open a new tab; this link is not becoming current. */
+      if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+        if (showIndicator) el.setAttribute("data-nav-pending", "");
+        if (activeClassName && !active) {
+          const tokens = activeClassName.split(" ").filter(Boolean);
+          el.classList.add(...tokens);
+          /* Recorded so the sweep removes exactly what was added and nothing
+             the component legitimately owns. */
+          el.dataset.navClaimed = tokens.join(" ");
+        }
+      }
+      onNavigate?.();
+    },
+    [onNavigate, activeClassName, active, showIndicator],
+  );
 
   return (
     <Link
       href={href}
       title={title}
       onClick={handleClick}
-      data-active={isActive || undefined}
-      className={cn(className, isActive && activeClassName)}
+      data-active={active || undefined}
+      className={cn("nav-link", className, active && activeClassName)}
+      /* The spinner is a ::after on [data-nav-pending] (globals.css) rather than
+         a child element, so appearing costs no React render at all. */
     >
       {children}
-      {showIndicator && <PendingDot className={indicatorClassName} />}
     </Link>
   );
 }
