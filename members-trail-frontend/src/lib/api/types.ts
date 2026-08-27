@@ -142,21 +142,39 @@ export interface WithdrawalLimits {
 export interface WalletAddressResponse {
   id: string;
   address: string;
-  chainId: number;
-  label?: string | null;
+  type: "external" | "custodial";
   isPrimary: boolean;
+  label?: string | null;
   verifiedAt?: string | null;
-  createdAt: string;
+  /** When the anti-fraud cooling-off clock started on this address. */
+  whitelistedAt?: string | null;
+  /** False while the cooling-off window is still open. A new address cannot be paid to. */
+  withdrawable: boolean;
+  /** The instant it becomes withdrawable. Null when it already is. */
+  withdrawableAt?: string | null;
+}
+
+/** The nonce-bearing message to sign. Note the seconds suffix — there is no `nonce` field. */
+export interface LinkChallengeResponse {
+  message: string;
+  expiresInSeconds: number;
 }
 
 /* --------------------------------- points --------------------------------- */
 
+/**
+ * A Points ledger row.
+ *
+ * `amount` and `runningBalance` are NUMBERS here, not strings, and that is not an
+ * inconsistency with the money fields elsewhere: Points are an integral count, so
+ * the server sends them as JSON numbers. MTT is DECIMAL(36,18) and stays a string.
+ */
 export interface PointsEntryResponse {
   ref: string;
   createdAt: string;
   source: string;
-  amount: string;
-  runningBalance: string;
+  amount: number;
+  runningBalance: number;
   gameId: string | null;
   gameSessionId: string | null;
   note: string | null;
@@ -168,7 +186,8 @@ export interface PointsSummary {
   net: number;
   currentBalance: number;
   earnedToday: number;
-  bestDay: { day: string; amount: number } | null;
+  /** The server names the figure `earned`, not `amount`. */
+  bestDay: { day: string; earned: number } | null;
   firstEntryAt: string | null;
 }
 
@@ -178,7 +197,15 @@ export interface PointsCaps {
   globalIssued: number;
   globalRemaining: number;
   resetsInSeconds: number;
-  games: { gameId: string; title?: string; cap: number; issued: number; remaining: number }[];
+  games: {
+    gameId: string;
+    gameTitle: string;
+    cap: number;
+    issued: number;
+    remaining: number;
+    /** Ceiling for one session, distinct from the daily cap. */
+    sessionCap: number;
+  }[];
 }
 
 /* ---------------------------------- games --------------------------------- */
@@ -196,7 +223,12 @@ export interface GameResponse {
   entryType: string;
   entryFee: string | null;
   players30d: number;
-  rating: number;
+  /**
+   * A DECIMAL on the wire, so a string — like every other decimal in this API.
+   * It was typed `number` here and passed straight through the mapper, which put
+   * a string in a field the UI does arithmetic and comparisons on.
+   */
+  rating: string;
   active: boolean;
   dailyPointsCap: number;
   sessionPointsCap?: number;
@@ -227,7 +259,8 @@ export interface TournamentResponse {
 export interface LeaderboardRow {
   rank: number;
   displayName: string;
-  score: string;
+  /** A score, not money: a JSON number, and the server sends it as one. */
+  score: number;
   /**
    * The caller's own row. Note there is no `userId` on the wire: a leaderboard
    * that published member ids would let anyone build a directory of accounts
@@ -440,13 +473,20 @@ export interface NotificationPreferences {
 
 /* --------------------------------- support -------------------------------- */
 
+/**
+ * One message on a ticket.
+ *
+ * `authorLabel` is "You", "Support" or "System" — agent identities are
+ * deliberately not exposed, so there is no name here to render. There is also no
+ * `internal` flag: internal notes are filtered out server-side before the
+ * player-facing endpoint answers, so anything that arrives is meant to be read.
+ */
 export interface TicketMessageResponse {
   id: string;
-  authorName: string;
-  authorRole: string;
+  authorLabel: string;
+  authorRole: "user" | "agent" | "system";
   body: string;
   createdAt: string;
-  internal?: boolean;
 }
 
 export interface TicketResponse {
@@ -466,10 +506,13 @@ export interface TicketResponse {
   messageCount: number;
   /** Present on the detail endpoint only — the list does not carry the thread. */
   messages?: TicketMessageResponse[] | null;
-  /** Staff view only. */
-  userRef?: string | null;
-  assigneeName?: string | null;
-  updatedAt?: string;
+  /**
+   * Staff view only, and only on the ADMIN list endpoint, which returns
+   * `TicketResponse & { userId }`. There is no `userRef`, `assigneeName` or
+   * `updatedAt` on this contract — the mapper used to read all three and got
+   * `undefined` every time.
+   */
+  userId?: string | null;
 }
 
 /* ---------------------------------- store --------------------------------- */
@@ -516,12 +559,53 @@ export interface ConversionRateInfo {
   nextEffectiveFrom: string | null;
 }
 
+/** One cap window's meter, as the quote reports it. */
+export interface ConversionCapMeter {
+  window: "day" | "month";
+  periodKey: string;
+  limitPoints: number;
+  usedPoints: number;
+  remainingPoints: number;
+  resetsInSeconds: number;
+}
+
+/**
+ * What a conversion WOULD do, before the member commits.
+ *
+ * Field names are the server's: `pointsRequested` versus `pointsConvertible` is
+ * the whole point of a quote — a cap or the balance can make them differ — and
+ * `mttOut` is truncated, never rounded up.
+ */
 export interface ConversionQuote {
-  points: number;
-  mtt: string;
+  pointsRequested: number;
+  pointsConvertible: number;
   pointsPerMtt: number;
-  feeMtt?: string | null;
-  capRemainingPoints?: string | null;
+  mttOut: string;
+  remainderPoints: number;
+  pointsBalance: number;
+  caps: ConversionCapMeter[];
+  executable: boolean;
+  /** INSUFFICIENT_POINTS, DAILY_CAP, MONTHLY_CAP, RATE_GRANULARITY, BELOW_MINIMUM, or null. */
+  blockedBy: string | null;
+}
+
+/**
+ * The result of an executed conversion.
+ *
+ * NOT a `TransactionResponse` — this endpoint reports the conversion, so it
+ * carries the points spent and the rate applied rather than a signed ledger
+ * amount. `replayed` is true when an idempotent retry returned the original.
+ */
+export interface ConversionResponse {
+  ref: string;
+  createdAt: string;
+  pointsSpent: number;
+  rateApplied: number;
+  mttCredited: string;
+  status: string;
+  txHash: string | null;
+  pointsBalanceAfter: number;
+  replayed: boolean;
 }
 
 export interface ConversionCapsOverview {
@@ -544,7 +628,8 @@ export interface ConversionSummary {
   totalConversions: number;
   pointsSpentLifetime: number;
   mttReceivedLifetime: string;
-  averageRate: number | null;
+  /** Weighted average Points paid per MTT. Always present — 0 when nothing converted. */
+  averageRate: number;
   lastConvertedAt: string | null;
 }
 
@@ -689,19 +774,35 @@ export interface KycQueueItem {
   status: string;
   riskScore: number;
   createdAt: string;
-  documents: { documentId: string; kind: string; mimeType?: string; sizeBytes?: number }[];
+  providerConfidence?: number | null;
+  country?: string | null;
+  reviewerNotes?: string | null;
+  /** The document id field is `id`, which is what the document-read route takes. */
+  documents: {
+    id: string;
+    kind: string;
+    mimeType: string;
+    sizeBytes: number;
+    sha256: string;
+    purgedAt: string | null;
+  }[];
 }
 
 export interface TreasuryInflowResponse {
   ref: string;
-  occurredAt: string;
+  /** When the Treasury recognised the allocation. Not the processor's event time. */
+  recognisedAt: string;
   stream: string;
   grossRevenue: string;
-  netRevenue?: string | null;
-  treasuryAllocationBps?: number | null;
-  amountToTreasuryMtt?: string | null;
+  treasuryAllocationBps: number;
+  /** Fiat-denominated allocation. */
+  amountToTreasury: string;
+  /** The same allocation in MTT, at the rate in force when it was recorded. */
+  amountToTreasuryMtt: string;
   processorRef?: string | null;
   reconciled: boolean;
+  reconciledAt?: string | null;
+  periodKey: string;
 }
 
 export interface TreasuryOutflowResponse {
@@ -713,75 +814,134 @@ export interface TreasuryOutflowResponse {
   status: string;
   txHash?: string | null;
   approvedByIds?: string[] | null;
+  approvedAt?: string | null;
+  periodKey: string;
 }
 
+/**
+ * The Treasury period dashboard.
+ *
+ * Field names are the server's. The `*PoolOut` / `reserveOut` names this used to
+ * declare do not exist on the contract, so every outflow figure and the whole
+ * utilisation gauge read zero — on the screen whose job is to show whether
+ * payouts are outrunning revenue.
+ */
 export interface TreasuryDashboard {
   periodKey: string;
   reconciledInflow: string;
   unreconciledInflow: string;
-  grossRevenue: string;
-  commissionPoolOut: string;
-  stakingPoolOut: string;
-  reserveOut: string;
-  headroom?: string;
-  [key: string]: unknown;
+  commissionOutflow: string;
+  stakingOutflow: string;
+  totalOutflow: string;
+  reserveFunded: string;
+  headroom: string;
+  /** (commission + staking) / reconciled inflow, in bps. Must stay below 10000. */
+  payoutRatioBps: number;
+  /** Share of payouts funded by real revenue rather than the reserve, in bps. */
+  realRevenueFundedBps: number;
+  ratioBand: "safe" | "watch" | "escalate" | "breach";
+  byStream: { stream: string; gross: string; toTreasury: string }[];
+  unreconciledCount: number;
+  mismatchCount: number;
 }
 
+/**
+ * A fraud alert.
+ *
+ * `createdAt`, not `raisedAt`, and `affectedUserIds` — ids only. The alert does
+ * not carry member names, so the queue resolves them from the member directory
+ * it already has rather than expecting them inline.
+ */
 export interface FraudAlertResponse {
   ref: string;
-  raisedAt: string;
+  createdAt: string;
   kind: string;
   severity: string;
   riskScore: number;
-  affectedUsers?: { id: string; name: string }[] | null;
+  affectedUserIds: string[];
   summary: string;
+  signals: string[];
+  evidence?: Record<string, unknown> | null;
   status: string;
-  signals?: string[] | null;
+  assigneeId?: string | null;
+  resolutionNote?: string | null;
+  resolvedAt?: string | null;
 }
 
+/**
+ * One append-only audit row.
+ *
+ * The identifier is `ref` and the four-eyes flag is `requiredSecondApproval`
+ * (past tense — it records what was required at the time). There is no
+ * `actorName`: the audit trail stores the actor's id, and a name is resolved from
+ * the staff directory when one is needed.
+ */
 export interface AuditEntryResponse {
-  id: string;
+  ref: string;
   createdAt: string;
   actorId?: string | null;
-  actorName?: string | null;
   actorRole?: string | null;
   action: string;
   targetType?: string | null;
   targetId?: string | null;
-  before?: unknown;
-  after?: unknown;
-  ip?: string | null;
-  requiresSecondApproval?: boolean;
+  before?: Record<string, unknown> | null;
+  after?: Record<string, unknown> | null;
+  reason?: string | null;
+  requiredSecondApproval: boolean;
   approvedById?: string | null;
+  ip?: string | null;
 }
 
+/** A proposed or active conversion rate. Proposer and approver are ids, not names. */
 export interface ConversionRateRow {
   id: string;
   pointsPerMtt: number;
   effectiveFrom: string;
   status: string;
-  proposedByName?: string | null;
-  approvedByName?: string | null;
+  proposedById: string;
+  approvedById?: string | null;
+  approvedAt?: string | null;
+  rationale?: string | null;
+  rejectionReason?: string | null;
+  createdAt: string;
 }
 
+/**
+ * One version of the commission plan.
+ *
+ * The rates are FLAT fields — `l1Bps`, `l2Bps`, `l3Bps` — not a `levels` array,
+ * and the cap fields are fiat-denominated (`monthlyCapAbsolute`, not
+ * `…AbsoluteMtt`). Reading a `levels` array off this response is what crashed
+ * the admin commission screen: `undefined.map` during render.
+ */
 export interface CommissionPlanResponse {
   id: string;
   version: number;
-  status: string;
-  levels: { level: number; rateBps: number }[];
-  eligibleTypes: string[];
-  monthlyCapAbsoluteMtt: string;
-  monthlyCapMultiplier: number;
-  monthlyCapBaseMtt: string;
+  l1Bps: number;
+  l2Bps: number;
+  l3Bps: number;
   maxDepth: number;
+  eligibleTriggers: string[];
+  monthlyCapAbsolute: string;
+  capMultiplier: string;
+  capBase: string;
   minAccountAgeDays: number;
   minGameplaySessions: number;
+  status: string;
+  effectiveFrom: string;
+  proposedById: string;
+  approvedById?: string | null;
 }
 
+/**
+ * A points rule.
+ *
+ * No `gameTitle` on the wire — the rule carries `gameId` and the caller joins the
+ * catalogue, the same way the points ledger does.
+ */
 export interface PointsRuleResponse {
   id?: string;
-  gameId: string;
-  gameTitle?: string | null;
+  gameId: string | null;
   action: string;
   points: number;
   dailyCapPerUser: number;

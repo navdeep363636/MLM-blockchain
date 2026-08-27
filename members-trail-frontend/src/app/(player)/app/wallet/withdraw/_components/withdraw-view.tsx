@@ -10,7 +10,7 @@ import {
   KycBadge, Modal, SegmentedControl, Select, StatusPill, useToast, type Column,
 } from "@/components/ui";
 import { useBalances, useCurrentUser, useTransactions, useWithdrawalLimits } from "@/lib/hooks/use-data";
-import { useRequestWithdrawal } from "@/lib/hooks/use-mutations";
+import { useRequestWithdrawal, type SourceTag } from "@/lib/hooks/use-mutations";
 import { humanMessage, isApiError } from "@/lib/api/errors";
 import { useMttBalance } from "@/lib/hooks/use-web3";
 import { MTT_SYMBOL, txUrl } from "@/lib/web3";
@@ -161,13 +161,21 @@ export function WithdrawView() {
     setBusy(true);
     try {
       await requestWithdrawal.mutateAsync({
+        /* Which rail, from the selector the member already used. The server
+         * requires it and validates the destination against it. */
+        kind,
         /* The amount as a STRING, from the input, not re-serialised from a float.
          * `String(amount)` on a slider value is exact; the moment this becomes
          * arithmetic on a Number the figure the member confirmed and the figure
          * that settles can differ in the eighteenth decimal place. */
         amountMtt: String(amount),
-        destination: kind === "fiat" ? undefined : destination.trim(),
-        sourceTag: source as "gameplay" | "staking" | "referral",
+        /* `destinationAddress` is the field name the API declares, and it is for
+         * the on-chain rail only. A fiat payout carries a payout-method
+         * reference instead, which this screen does not collect yet — so the
+         * fiat branch sends neither and the server applies the member's
+         * default. */
+        ...(kind === "mtt" ? { destinationAddress: destination.trim() } : {}),
+        sourceTag: source as SourceTag,
       });
       setConfirmOpen(false);
       setSubmitted(true);
