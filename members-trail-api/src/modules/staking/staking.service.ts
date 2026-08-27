@@ -124,27 +124,74 @@ export class StakingService {
    * only to the latter. A single "you'll get X" number would hide exactly the
    * distinction the member needs to make the decision.
    */
-  async previewUnstake(userId: string, poolId: number): Promise<UnstakePreviewResponse> {
+  /**
+   * What an unstake right now would return.
+   *
+   * `amountMtt` makes this a preview of a PARTIAL exit. It used to be ignored —
+   * the caller sent it, the endpoint did not declare it, and the answer always
+   * described a full exit — so a member asking about a slice of their position
+   * was quoted the penalty on all of it.
+   *
+   * Pending rewards are apportioned pro rata to the fraction of principal being
+   * withdrawn, because that is what the withdrawal settles: taking out a tenth of
+   * the stake realises a tenth of the accrued yield and leaves the rest accruing.
+   * The penalty then applies to that share only — never to principal, which comes
+   * back whole in every case.
+   */
+  async previewUnstake(
+    userId: string,
+    poolId: number,
+    amountMtt?: string,
+  ): Promise<UnstakePreviewResponse> {
     const { pool, position } = await this.requirePosition(userId, poolId);
+
+    /* Clamp rather than reject: a slider that lands a hair above the position
+     * because of display rounding should preview a full exit, not 400. A request
+     * for nothing is a mistake worth naming, though. */
+    const requested = amountMtt ?? position.amount;
+    /* Only an amount the CALLER asked for can be an invalid amount.
+     *
+     * When `amountMtt` is omitted this previews a full exit, so `requested` is
+     * whatever is staked — and an empty position is not a malformed request, it
+     * is an empty position. Rejecting it here shadowed `requestUnstake`'s own
+     * NO_POSITION conflict, which is the answer a caller can actually act on. */
+    if (amountMtt !== undefined && dec(amountMtt).lte(0)) {
+      throw new BadRequestException({
+        code: "INVALID_AMOUNT",
+        message: "The amount to unstake must be greater than zero",
+      });
+    }
+    const principal = gt(requested, position.amount) ? position.amount : requested;
+    const partial = dec(principal).lt(dec(position.amount));
+
+    /* Pro-rata share of the accrued rewards. Guarded against a zero-principal
+     * position so this is never a divide by zero. */
+    const share = dec(position.amount).isZero()
+      ? dec(0)
+      : dec(principal).div(dec(position.amount));
+    const rewardsRealised = toDbAmount(dec(position.pendingRewards).mul(share));
 
     const early = Boolean(position.lockEnd && position.lockEnd.getTime() > Date.now());
     const penaltyBps = early ? pool.earlyPenaltyBps : 0;
 
-    /* The penalty base is pendingRewards. Principal is never an input to this
-     * calculation — see rule 3 in the header. */
-    const penalty = penaltyBps > 0 ? applyBps(position.pendingRewards, penaltyBps) : toDbAmount(0);
-    const rewardsPayable = sub(position.pendingRewards, penalty);
+    /* The penalty base is the realised rewards. Principal is never an input to
+     * this calculation — see rule 3 in the header. */
+    const penalty = penaltyBps > 0 ? applyBps(rewardsRealised, penaltyBps) : toDbAmount(0);
+    const rewardsPayable = sub(rewardsRealised, penalty);
 
     return {
       poolId,
-      principal: toDbAmount(position.amount),
-      pendingRewards: toDbAmount(position.pendingRewards),
+      principal: toDbAmount(principal),
+      pendingRewards: toDbAmount(rewardsRealised),
       early,
       penaltyBps,
       penaltyMtt: penalty,
       rewardsPayable,
-      totalReceived: add(position.amount, rewardsPayable),
+      totalReceived: add(principal, rewardsPayable),
       penaltyFreeAt: early && position.lockEnd ? position.lockEnd.toISOString() : null,
+      partial,
+      positionAmount: toDbAmount(position.amount),
+      positionPendingRewards: toDbAmount(position.pendingRewards),
     };
   }
 
