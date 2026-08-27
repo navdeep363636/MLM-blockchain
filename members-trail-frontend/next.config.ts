@@ -4,6 +4,22 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   images: { remotePatterns: [{ protocol: "https", hostname: "**" }] },
 
+  /* Turbopack does not read the `webpack` function below, so every stub has to
+   * be declared here as well or `next dev --turbopack` fails to resolve them.
+   * Keep the two lists in step. */
+  turbopack: {
+    resolveAlias: {
+      "@x402/core/client": "./stubs/empty.js",
+      "@x402/evm": "./stubs/empty.js",
+      "@x402/evm/exact/client": "./stubs/empty.js",
+      "@x402/evm/upto/client": "./stubs/empty.js",
+      "@x402/svm/exact/client": "./stubs/empty.js",
+      "pino-pretty": "./stubs/empty.js",
+      lokijs: "./stubs/empty.js",
+      encoding: "./stubs/empty.js",
+    },
+  },
+
   experimental: {
     /*
      * Client router cache lifetimes.
