@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/layout";
+import { Web3Provider } from "@/components/web3/web3-provider";
 import { playerNav } from "@/lib/nav";
 import { RequireAuth } from "@/lib/auth/guard";
 
@@ -16,8 +17,10 @@ import { RequireAuth } from "@/lib/auth/guard";
  */
 export default function PlayerLayout({ children }: { children: React.ReactNode }) {
   return (
-    <AppShell nav={playerNav} variant="player">
-      <RequireAuth>{children}</RequireAuth>
-    </AppShell>
+    <Web3Provider>
+      <AppShell nav={playerNav} variant="player">
+        <RequireAuth>{children}</RequireAuth>
+      </AppShell>
+    </Web3Provider>
   );
 }

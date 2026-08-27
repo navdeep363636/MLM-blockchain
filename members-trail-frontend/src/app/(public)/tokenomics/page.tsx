@@ -8,7 +8,8 @@ import {
 import { Badge, Button, Callout, DetailRow } from "@/components/ui";
 import { CtaBand, PageHero, Section, SectionHead } from "../_components/shell";
 import { FactCard, FeatureCard, IconTile } from "../_components/feature-card";
-import { AllocationChart, RateHistory } from "./_components/allocation";
+import { RateHistory } from "./_components/allocation";
+import { AllocationChartLazy } from "./_components/allocation-lazy";
 import { RateHistoryPanel } from "./_components/rate-history-panel";
 import { CHAIN_ID, IS_TESTNET, contracts, isDeployed, addressUrl, tokenUrl } from "@/lib/web3";
 import { shortenAddress } from "@/lib/utils";
@@ -163,7 +164,10 @@ export default function TokenomicsPage() {
           description="Six buckets, minted once, each to a designated wallet. Team and advisor allocations are held by on-chain vesting contracts rather than simple time-locked transfers."
         />
         <div className="mt-10">
-          <AllocationChart />
+          {/* The only wallet-stack consumer on a public route, and it is below
+              the fold — so it arrives in its own chunk after hydration rather
+              than in this page's first load. */}
+          <AllocationChartLazy />
         </div>
 
         <Callout tone="warning" title="On the 15% Treasury Reserve" icon={<AlertTriangle />} className="mt-8">
