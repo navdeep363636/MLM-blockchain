@@ -15,6 +15,7 @@ import { Avatar, Badge, Dropdown, KycBadge } from "@/components/ui";
 import { WalletConnectButton, MockDataBanner, NetworkGuard } from "@/components/web3";
 import { useCurrentUser, useNotifications } from "@/lib/hooks/use-data";
 import { MeshHaze, PageTransition } from "@/components/fx";
+import { NavLink } from "./nav-link";
 import { Logo } from "./logo";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -42,28 +43,34 @@ function NavSection({
     const it = group.items[0];
     const active = pathname === it.href;
     return (
-      <Link
+      <NavLink
         href={it.href}
-        onClick={onNavigate}
+        active={active}
+        onNavigate={onNavigate}
         title={collapsed ? it.label : undefined}
         className={cn(
           "group relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium",
           "transition-[background-color,color,box-shadow,transform] duration-[var(--dur-quick)] ease-[var(--ease-tide)]",
-          active
-            ? "bg-accent-soft text-[var(--accent-hover)] ring-1 ring-inset ring-[var(--accent-ring)] [box-shadow:inset_0_1px_0_0_var(--rim-light)]"
-            : "text-text-muted hover:translate-x-0.5 hover:bg-surface-2 hover:text-text-primary",
+          "text-text-muted hover:translate-x-0.5 hover:bg-surface-2 hover:text-text-primary",
           collapsed && "justify-center px-0",
         )}
-      >
-        {active && (
-          <span
-            aria-hidden
-            className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-[var(--accent)] shadow-[0_0_10px_1px_var(--accent-ring)]"
-          />
+        activeClassName={cn(
+          "bg-accent-soft text-[var(--accent-hover)] ring-1 ring-inset ring-[var(--accent-ring)]",
+          "[box-shadow:inset_0_1px_0_0_var(--rim-light)] hover:translate-x-0",
         )}
+        indicatorClassName="ml-auto"
+      >
+        <span
+          aria-hidden
+          className={cn(
+            "absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-[var(--accent)]",
+            "opacity-0 shadow-[0_0_10px_1px_var(--accent-ring)] transition-opacity duration-[var(--dur-quick)]",
+            "group-data-[active]:opacity-100",
+          )}
+        />
         <Icon className="size-4 shrink-0" />
         {!collapsed && it.label}
-      </Link>
+      </NavLink>
     );
   }
 
@@ -73,18 +80,18 @@ function NavSection({
         {group.items.map((it) => {
           const active = pathname === it.href;
           return (
-            <Link
+            <NavLink
               key={it.href}
               href={it.href}
+              active={active}
               title={it.label}
-              onClick={onNavigate}
-              className={cn(
-                "flex items-center justify-center rounded-xl py-2.5 transition-colors",
-                active ? "bg-accent-soft text-[var(--accent-hover)]" : "text-text-muted hover:bg-surface-2",
-              )}
+              onNavigate={onNavigate}
+              showIndicator={false}
+              className="flex items-center justify-center rounded-xl py-2.5 text-text-muted transition-colors hover:bg-surface-2"
+              activeClassName="bg-accent-soft text-[var(--accent-hover)]"
             >
               <Icon className="size-4" />
-            </Link>
+            </NavLink>
           );
         })}
       </div>
@@ -119,25 +126,31 @@ function NavSection({
                 const active = pathname === it.href;
                 return (
                   <li key={it.href}>
-                    <Link
+                    {/* NavLink takes the active treatment on click rather than
+                        when the route commits, so the highlight tracks the
+                        pointer instead of the network. */}
+                    <NavLink
                       href={it.href}
-                      onClick={onNavigate}
+                      active={active}
+                      onNavigate={onNavigate}
                       className={cn(
-                        "relative block rounded-lg px-2.5 py-2 text-sm",
+                        "group relative flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm",
                         "transition-[background-color,color,transform] duration-[var(--dur-quick)] ease-[var(--ease-tide)]",
-                        active
-                          ? "bg-accent-soft font-medium text-[var(--accent-hover)]"
-                          : "text-text-muted hover:translate-x-0.5 hover:bg-surface-2 hover:text-text-secondary",
+                        "text-text-muted hover:translate-x-0.5 hover:bg-surface-2 hover:text-text-secondary",
                       )}
+                      activeClassName="bg-accent-soft font-medium text-[var(--accent-hover)] hover:translate-x-0"
+                      indicatorClassName="ml-auto"
                     >
-                      {active && (
-                        <span
-                          aria-hidden
-                          className="absolute -left-[calc(0.75rem+1px)] top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-[var(--accent)] shadow-[0_0_8px_1px_var(--accent-ring)]"
-                        />
-                      )}
-                      {it.label}
-                    </Link>
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "absolute -left-[calc(0.75rem+1px)] top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-[var(--accent)]",
+                          "opacity-0 shadow-[0_0_8px_1px_var(--accent-ring)] transition-opacity duration-[var(--dur-quick)]",
+                          "group-data-[active]:opacity-100",
+                        )}
+                      />
+                      <span className="min-w-0 flex-1 truncate">{it.label}</span>
+                    </NavLink>
                   </li>
                 );
               })}
