@@ -10,8 +10,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import {
-  Badge, Button, Callout, Checkbox, ConfirmDialog, DetailRow, Modal, SearchInput, Steps,
-  Switch, Textarea, useToast, type Column,
+  Badge, Button, Callout, Checkbox, ConfirmDialog, DetailRow, EmptyState, Modal, SearchInput,
+  SkeletonCard, Steps, Switch, Textarea, useToast, type Column,
 } from "@/components/ui";
 import { useAuditLog } from "@/lib/hooks/use-data";
 import { useAdminLegalDocuments } from "@/lib/hooks/use-data";
@@ -27,6 +27,13 @@ const STATUS_META: Record<LegalDocument["status"], { label: string; tone: "neutr
   legal_review: { label: "In legal review", tone: "warning", Icon: Scale, step: 1 },
   published: { label: "Published", tone: "good", Icon: CheckCircle2, step: 2 },
 };
+
+/* Indexed through here, never directly. `status` is whatever the API said, and a
+ * value this map does not know threw on `.step` — taking the whole CMS route to
+ * its error boundary over a badge. An unrecognised status reads as a draft,
+ * which is the safe end of this workflow: it never claims a document is
+ * published. */
+const statusMeta = (s: LegalDocument["status"]) => STATUS_META[s] ?? STATUS_META.draft;
 
 /** Documents serialise to a simple marked-up text form for the editor. */
 function serialise(doc: LegalDocument) {
@@ -167,13 +174,52 @@ function Editor({
 
 /* ---------------------------------- view --------------------------------- */
 
+/**
+ * The editor needs a document to exist before it can hold one in state, so the
+ * fetch and the gate live out here.
+ *
+ * This used to be one component that did `docs.find(...) ?? docs[0]` and then
+ * `serialise(doc)` in a `useState` initialiser. On the very first render `docs`
+ * is its empty fallback, so `doc` was undefined and the initialiser threw on
+ * `doc.sections` — meaning /admin/cms went to its error boundary on every visit
+ * where the document list was not already cached, which is most of them. A
+ * guard could not simply be added inside, because the crash happens in a hook
+ * initialiser that has to run before any early return could.
+ */
 export function CmsView() {
+  const { data: docs, isLoading } = useAdminLegalDocuments();
+
+  if (isLoading) {
+    return (
+      <div className="grid gap-4 xl:grid-cols-2">
+        <SkeletonCard />
+        <SkeletonCard />
+      </div>
+    );
+  }
+
+  if (docs.length === 0) {
+    return (
+      <EmptyState
+        className="mt-6 rounded-[var(--radius-card)] border border-border-subtle bg-surface-1"
+        icon={<FileText />}
+        title="No legal documents yet"
+        description="Documents appear here once Compliance has drafted them. Nothing to edit until then."
+      />
+    );
+  }
+
+  return <CmsEditor docs={docs} />;
+}
+
+function CmsEditor({ docs }: { docs: LegalDocument[] }) {
   const { data: audit } = useAuditLog();
   const toast = useToast();
 
-  const { data: docs } = useAdminLegalDocuments();
   const [slug, setSlug] = useState(docs[0]?.slug ?? "terms");
   const [query, setQuery] = useState("");
+  /* `docs` is guaranteed non-empty by the gate above, so `docs[0]` is a real
+     document and `doc` is never undefined. */
   const doc = docs.find((d) => d.slug === slug) ?? docs[0];
 
   const [body, setBody] = useState(() => serialise(doc));
@@ -195,7 +241,7 @@ export function CmsView() {
   }, [publish]);
 
   const dirty = body !== serialise(doc) || material !== doc.materialChange;
-  const step = STATUS_META[doc.status].step;
+  const step = statusMeta(doc.status).step;
 
   const filteredDocs = docs.filter((d) =>
     d.title.toLowerCase().includes(query.trim().toLowerCase()) ||
@@ -299,7 +345,7 @@ export function CmsView() {
           <ul className="divide-y divide-border-subtle">
             {filteredDocs.map((d) => {
               const on = d.slug === doc.slug;
-              const m = STATUS_META[d.status];
+              const m = statusMeta(d.status);
               return (
                 <li key={d.slug}>
                   <button

@@ -156,7 +156,11 @@ export function StoreView() {
         ) : (
           <RevealGroup className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {shown.map((i) => {
-              const r = RARITY[i.rarity];
+              /* Falls back rather than indexing blind: a rarity the API adds
+                 before this map knows about it left `r` undefined and threw on
+                 `r.ring`, blanking the whole catalogue. An unfamiliar rarity
+                 should render as an ordinary item, not as no items at all. */
+              const r = RARITY[i.rarity] ?? RARITY.common;
               const mine = isOwned(i);
               const affordable = canAfford(i);
               return (
