@@ -4,6 +4,21 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   images: { remotePatterns: [{ protocol: "https", hostname: "**" }] },
 
+  experimental: {
+    /*
+     * Client router cache lifetimes.
+     *
+     * Next 15 ships `dynamic: 0`, which means a segment rendered dynamically is
+     * dropped from the client cache the moment you navigate away — so going
+     * Wallet -> Staking -> Wallet refetches Wallet from the server, and pressing
+     * Back is a network round trip rather than an instant restore. 30s is long
+     * enough that moving between pages in one sitting is instant and short
+     * enough that nobody is looking at minute-old balances; anything that must
+     * be fresher is invalidated by the socket already.
+     */
+    staleTimes: { dynamic: 30, static: 300 },
+  },
+
   webpack: (config) => {
     /* RainbowKit pulls in the Coinbase Base-Account connector, which lazily
      * requires the optional @x402/* payment SDKs. They are not installed and
