@@ -47,8 +47,24 @@ export function shortenHash(h?: string) {
 
 /* --------------------------------- dates --------------------------------- */
 
-export function formatDate(d: Date | string, withTime = false) {
+export function formatDate(d: Date | string | null | undefined, withTime = false) {
+  /* Two failures this used to have, both silent in their own way.
+   *
+   * An unparseable string made Intl throw RangeError, and this helper is called
+   * from ~90 places — so one bad timestamp from the API took a whole route to
+   * its error boundary rather than spoiling one cell. Observed on
+   * /app/wallet/convert.
+   *
+   * A missing date was worse than a crash: `Intl.format(undefined)` formats the
+   * CURRENT date, so a field the API had not sent rendered as today —
+   * confidently, and wrongly. On a ledger screen that is a fabricated date
+   * presented as a real one.
+   *
+   * Both now render as an em dash, which is what a gap in the data actually
+   * looks like. A caller wanting a different placeholder can branch first. */
+  if (d === null || d === undefined) return "—";
   const date = typeof d === "string" ? new Date(d) : d;
+  if (Number.isNaN(date.getTime())) return "—";
   return new Intl.DateTimeFormat("en-GB", {
     day: "2-digit",
     month: "short",
