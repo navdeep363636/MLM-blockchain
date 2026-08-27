@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils";
 import type { AppNotification, NotificationKind } from "@/types";
 import { RelativeTime } from "../../_components/time";
 
+/* Indexed with `kindMeta()`, never directly: a kind the server introduces
+ * before this map does must not take the page down. */
 const KIND_META: Record<NotificationKind, { label: string; icon: React.ReactNode; tone: string }> = {
   transaction: { label: "Transactions", icon: <Receipt className="size-4" />, tone: "bg-surface-3 text-text-secondary" },
   security: { label: "Security", icon: <ShieldCheck className="size-4" />, tone: "bg-critical-500/12 text-critical-400" },
@@ -24,6 +26,8 @@ const KIND_META: Record<NotificationKind, { label: string; icon: React.ReactNode
   system: { label: "System", icon: <Bell className="size-4" />, tone: "bg-surface-3 text-text-secondary" },
   promo: { label: "Offers", icon: <Megaphone className="size-4" />, tone: "bg-surface-3 text-text-muted" },
 };
+
+const kindMeta = (k: NotificationKind) => KIND_META[k] ?? KIND_META.system;
 
 export function NotificationsView() {
   const { data: notifications, isLoading } = useNotifications();
@@ -71,7 +75,7 @@ export function NotificationsView() {
             { value: "unread", label: "Unread", count: unread.length },
             ...kinds.map((k) => ({
               value: k,
-              label: KIND_META[k].label,
+              label: kindMeta(k).label,
               count: notifications.filter((n) => n.kind === k).length,
             })),
           ]}
@@ -111,7 +115,7 @@ export function NotificationsView() {
       ) : (
         <ul className="mt-4 space-y-2">
           {shown.map((n) => {
-            const meta = KIND_META[n.kind];
+            const meta = kindMeta(n.kind);
             const read = isRead(n);
             return (
               <li key={n.id}>

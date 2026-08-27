@@ -60,7 +60,15 @@ export function LegalDoc({
 }) {
   const { prev, next } = neighbours(doc.slug);
   const meta = legalDocs.find((d) => d.href === `/legal/${doc.slug}`);
-  const status = STATUS[doc.status];
+  /* Falls back rather than indexing blind.
+   *
+   * `doc.status` is whatever the API said. A value outside this map — a status
+   * added server-side, a mapper that let an unknown string through — made
+   * `status` undefined and threw on `status.tone` during render, which for a
+   * statically-generated public policy page means the BUILD fails, not one
+   * request. A legal page must render whatever else is wrong with it; the
+   * status badge is the least important thing on it. */
+  const status = STATUS[doc.status] ?? STATUS.draft;
 
   const toc = doc.sections.map((s) => ({ id: sectionId(s.heading), heading: s.heading }));
 
