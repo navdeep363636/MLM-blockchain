@@ -298,8 +298,43 @@ export async function fetchAll<T>(
   limit = 100,
   maxPages = 25,
 ): Promise<T[]> {
-  const out: T[] = [];
-  for (let page = 1; page <= maxPages; page += 1) {
+  const first = await api.get<Paginated<T>>(path, {
+    ...opts,
+    query: { ...opts.query, page: 1, limit },
+  });
+  const out: T[] = [...(first?.data ?? [])];
+  if (!first?.meta?.hasNext) return out;
+
+  /* Page 1 tells us how many there are, so pages 2..n go out together.
+   *
+   * This used to be a `for` loop that awaited each page before asking for the
+   * next, which made the wait the SUM of the round trips. /admin/users needs
+   * five pages: against a 400ms API that was five round trips end to end, and
+   * the members table could not render until the last one landed — measured at
+   * 2174ms to content. Fanned out, the wait is the slowest single page instead
+   * of all of them in a queue.
+   *
+   * `maxPages` still bounds it, so a server that always says `hasNext` costs a
+   * known number of requests rather than hanging the tab — the difference is
+   * that the bound is now on how many are IN FLIGHT, not how long they queue. */
+  const totalPages = first.meta.pages;
+  if (Number.isFinite(totalPages) && totalPages > 1) {
+    const last = Math.min(totalPages, maxPages);
+    const rest = await Promise.all(
+      Array.from({ length: last - 1 }, (_, i) =>
+        api.get<Paginated<T>>(path, { ...opts, query: { ...opts.query, page: i + 2, limit } }),
+      ),
+    );
+    /* Concatenated in page order, not completion order: several of these lists
+       are rendered as-is, and a table whose rows reorder by network timing is a
+       different list on every load. */
+    for (const res of rest) out.push(...(res?.data ?? []));
+    return out;
+  }
+
+  /* No page count in the envelope — a cursor-ish server, or an older endpoint.
+     Fall back to walking, which is slow but correct. */
+  for (let page = 2; page <= maxPages; page += 1) {
     const res = await api.get<Paginated<T>>(path, {
       ...opts,
       query: { ...opts.query, page, limit },
