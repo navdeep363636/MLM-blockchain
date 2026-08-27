@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Headers, HttpCode, Post, Query } from "@nestjs/common";
 import { ApiBearerAuth, ApiHeader, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { CurrentUser, Idempotent, RequireKyc, type AuthUser } from "@/common/decorators";
+import { CurrentUser, Idempotent, Public, RequireKyc, type AuthUser } from "@/common/decorators";
 import type { Paginated } from "@/common/dto";
 import { ConversionService } from "./conversion.service";
 import {
@@ -23,14 +23,21 @@ export class ConversionController {
   constructor(private readonly conversion: ConversionService) {}
 
   @Get("rate")
+  @Public()
   @ApiOperation({
     summary: "The approved conversion rate in force, plus the next scheduled one",
     description:
       "Rates are approved by a second staff member before they can take effect, and are " +
-      "snapshotted onto each conversion — a later change never reprices past conversions.",
+      "snapshotted onto each conversion — a later change never reprices past conversions. " +
+      "Unauthenticated: the rate is a platform-wide published figure, not member data.",
   })
   @ApiOkResponse({ type: ConversionRateResponse })
   rate(): Promise<ConversionRateResponse> {
+    /* Public, deliberately. The same `pointsPerMtt` is already served to anyone
+     * on `/public/config` and `/public/stats`; this endpoint adds the NEXT
+     * scheduled rate, which is exactly what the tokenomics page exists to
+     * publish. The method it calls is named `ratePublic` for the same reason.
+     * Nothing here is scoped to a member — no balance, no cap, no identity. */
     return this.conversion.ratePublic();
   }
 
