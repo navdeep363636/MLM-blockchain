@@ -5,8 +5,9 @@ import type { Paginated } from "@/common/dto";
 import { AdminService } from "./admin.service";
 import {
   ApprovalQuery, ApprovalResponse, AuditEntryResponse, AuditQuery, ChangeUserStatusRequest,
-  CreateApprovalRequest, DecideApprovalRequest, PlatformKpisResponse, RolePermissionResponse,
-  SetRolePermissionRequest,
+  CreateApprovalRequest, DecideApprovalRequest, MemberQuery, MemberSummaryResponse,
+  PlatformKpisResponse, RolePermissionResponse, SetRolePermissionRequest, StaffIdentityResponse,
+  StaffMemberResponse,
 } from "./dto/admin.dto";
 
 /* ============================================================================
@@ -68,7 +69,7 @@ export class AdminController {
   }
 
   @Patch("approvals/:ref/decide")
-  @RequirePermissions("approval:decide")
+  @RequirePermissions("approvals:approve")
   @ApiOperation({
     summary: "Approve or reject a request",
     description:
@@ -86,7 +87,7 @@ export class AdminController {
   }
 
   @Patch("approvals/:ref/applied")
-  @RequirePermissions("approval:decide")
+  @RequirePermissions("approvals:approve")
   @ApiOperation({
     summary: "Record that an approved change actually took effect",
     description: "Approving and applying are different acts — the record needs to show which happened.",
@@ -100,16 +101,57 @@ export class AdminController {
   }
 
   @Post("approvals/expire-stale")
-  @RequirePermissions("approval:decide")
+  @RequirePermissions("approvals:approve")
   @ApiOperation({ summary: "Sweep requests past their deadline" })
   expireStale(): Promise<number> {
     return this.admin.expireStaleApprovals();
   }
 
+  /* -------------------------------- identity ------------------------------ */
+
+  @Get("me")
+  @ApiOperation({
+    summary: "The operator's own staff record, permissions and eligible second approvers",
+    description:
+      "The approver list is computed server-side. The client asking who may " +
+      "second-approve and the server deciding whether an approval is valid have " +
+      "to agree, so only one of them gets to decide — and a UI that offered the " +
+      "requester themselves would be a control failure, not a display bug.",
+  })
+  @ApiOkResponse({ type: StaffIdentityResponse })
+  me(@CurrentUser() actor: AuthUser): Promise<StaffIdentityResponse> {
+    return this.admin.staffIdentity(actor.id);
+  }
+
+  @Get("staff")
+  @RequirePermissions("config:read")
+  @ApiOperation({ summary: "The staff directory" })
+  @ApiOkResponse({ type: StaffMemberResponse, isArray: true })
+  staff(): Promise<StaffMemberResponse[]> {
+    return this.admin.listStaff();
+  }
+
+  /* ------------------------------- directory ------------------------------ */
+
+  @Get("members")
+  @RequirePermissions("members:read")
+  @ApiOperation({
+    summary: "Member directory",
+    description:
+      "Contact details are masked and no balances are included. Search covers the " +
+      "reference, display name and referral code — not email or phone, which are " +
+      "stored hashed precisely so that a LIKE over every member's contact details " +
+      "is not a query an operator can run casually.",
+  })
+  @ApiOkResponse({ type: MemberSummaryResponse, isArray: true })
+  members(@Query() q: MemberQuery): Promise<Paginated<MemberSummaryResponse>> {
+    return this.admin.listMembers(q);
+  }
+
   /* ------------------------------ member state ---------------------------- */
 
   @Patch("members/:userId/status")
-  @RequirePermissions("member:status:write")
+  @RequirePermissions("members:write")
   @ApiOperation({
     summary: "Change a member's account status",
     description:
@@ -136,7 +178,7 @@ export class AdminController {
 
   @Put("permissions")
   @StaffOnly("super_admin")
-  @RequirePermissions("rbac:write")
+  @RequirePermissions("config:write")
   @ApiOperation({
     summary: "Set one cell of the permission matrix",
     description: "Granting canApprove decides who can be the second pair of eyes, and is audited as such.",

@@ -1,6 +1,5 @@
 /* L-03 · Risk Disclosure Statement — FRD 11.3 */
-import { LegalDoc } from "../_components/legal-doc";
-import { legalDocuments } from "@/lib/mock/legal";
+import { LegalDocFromApi } from "../_components/fetch-doc";
 
 export const metadata = {
   title: "Risk Disclosure Statement",
@@ -9,5 +8,5 @@ export const metadata = {
 };
 
 export default function RiskDisclosurePage() {
-  return <LegalDoc doc={legalDocuments["risk-disclosure"]} />;
+  return <LegalDocFromApi slug="risk-disclosure" />;
 }

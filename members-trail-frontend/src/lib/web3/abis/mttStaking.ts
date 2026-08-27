@@ -1,6 +1,12 @@
-// Auto-extracted from MLM-contracts/artifacts/contracts/MTTStaking.sol/MTTStaking.json
-// Solidity 0.8.24, optimizer runs=200, evmVersion=paris.
-// Regenerate after any contract change — do not hand-edit.
+// GENERATED FILE — do not hand-edit.
+//
+// Source : MLM-contracts/artifacts/contracts/MTTStaking.sol/MTTStaking.json
+// Build  : Solidity 0.8.24, optimizer runs=200, evmVersion=paris.
+// Command: npm run abi   (in MLM-contracts)
+//
+// Hand-editing an ABI is how the previous chain layer ended up matching no
+// events at all: a wrong event signature is a wrong topic0, and getLogs then
+// returns an empty array rather than an error.
 export const mttStakingAbi = [
   {
     "inputs": [
@@ -435,6 +441,239 @@ export const mttStakingAbi = [
   {
     "inputs": [
       {
+        "internalType": "uint256",
+        "name": "poolId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getPool",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "bool",
+            "name": "active",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint64",
+            "name": "lockDuration",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "rewardsDuration",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "periodFinish",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "lastUpdateTime",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint256",
+            "name": "rewardRate",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "rewardPerTokenStored",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "totalStaked",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint16",
+            "name": "earlyUnstakePenaltyBps",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint256",
+            "name": "totalRewardsFunded",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "totalRewardsPaid",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct MTTStaking.Pool",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getPools",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "bool",
+            "name": "active",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint64",
+            "name": "lockDuration",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "rewardsDuration",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "periodFinish",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "lastUpdateTime",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint256",
+            "name": "rewardRate",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "rewardPerTokenStored",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "totalStaked",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint16",
+            "name": "earlyUnstakePenaltyBps",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint256",
+            "name": "totalRewardsFunded",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "totalRewardsPaid",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct MTTStaking.Pool[]",
+        "name": "list",
+        "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "poolId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "getPosition",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "amount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint64",
+            "name": "lockEnd",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint256",
+            "name": "pendingRewards",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "locked",
+            "type": "bool"
+          }
+        ],
+        "internalType": "struct MTTStaking.Position",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "getPositions",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "amount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint64",
+            "name": "lockEnd",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint256",
+            "name": "pendingRewards",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "locked",
+            "type": "bool"
+          }
+        ],
+        "internalType": "struct MTTStaking.Position[]",
+        "name": "list",
+        "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "bytes32",
         "name": "role",
         "type": "bytes32"
@@ -483,6 +722,19 @@ export const mttStakingAbi = [
       }
     ],
     "name": "hasRole",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "isSolvent",
     "outputs": [
       {
         "internalType": "bool",
@@ -638,6 +890,19 @@ export const mttStakingAbi = [
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "rewardFloat",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
         "internalType": "uint256",
@@ -719,6 +984,19 @@ export const mttStakingAbi = [
         "internalType": "bool",
         "name": "",
         "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "totalStakedAllPools",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",

@@ -62,15 +62,39 @@
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   --animate-marquee: marquee 40s linear infinite;
-  --animate-shimmer: shimmer 2.4s linear infinite;
+  --animate-shimmer: shimmer-sweep 1.6s linear infinite;
   --animate-float: float 7s ease-in-out infinite;
   --animate-pulse-ring: pulse-ring 2.4s var(--ease-out-expo) infinite;
   --animate-aurora: aurora 22s ease-in-out infinite alternate;
   --animate-ticker: ticker 0.6s var(--ease-out-expo);
 }
 
+/* Route feedback -------------------------------------------------------------
+   `route-progress` eases toward a ceiling it never reaches. A bar that animates
+   to 100% while work is still outstanding has told the reader it is finished,
+   and then has to sit there contradicting itself; stopping short of the edge is
+   honest about not knowing how long is left. Completion is a separate, fast
+   state driven from JS when the URL actually changes.                        */
+@keyframes route-progress {
+  0%   { width: 0%;  opacity: 1 }
+  35%  { width: 42% }
+  70%  { width: 68% }
+  100% { width: 86%; opacity: 1 }
+}
+@keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes nav-spin { to { transform: rotate(360deg) } }
+
 @keyframes marquee { from { transform: translateX(0) } to { transform: translateX(-50%) } }
-@keyframes shimmer { from { background-position: -200% 0 } to { background-position: 200% 0 } }
+/* A sweeping highlight, driven by `transform` on a pseudo-element.
+ *
+ * This animated `background-position` on the skeleton itself, which is a paint
+ * of the element on every frame. A loading dashboard has dozens of skeletons on
+ * screen at once — measured at 49 on the landing page — so the browser was
+ * repainting 49 elements per frame for as long as the data was in flight, which
+ * is exactly the moment it has the least headroom to spare. A translated
+ * pseudo-element composites instead, and costs the same whether there is one
+ * skeleton or fifty. */
+@keyframes shimmer-sweep { from { transform: translateX(-100%) } to { transform: translateX(100%) } }
 @keyframes float { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-10px) } }
 @keyframes pulse-ring {
   0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-brand-500) 55%, transparent) }
@@ -284,8 +308,8 @@
   /* Glass panel */
   .glass {
     background: color-mix(in oklab, var(--surface-1) 72%, transparent);
-    backdrop-filter: blur(14px) saturate(140%);
-    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    backdrop-filter: blur(10px) saturate(140%);
+    -webkit-backdrop-filter: blur(10px) saturate(140%);
   }
 
   /* Brand glow, for hero CTAs and active nav */
@@ -306,10 +330,22 @@
 
   /* Shimmer skeleton */
   .shimmer {
-    background: linear-gradient(90deg,
-      var(--surface-2) 25%, var(--surface-3) 37%, var(--surface-2) 63%);
-    background-size: 200% 100%;
+    position: relative;
+    overflow: hidden;
+    background: var(--surface-2);
+  }
+  .shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, var(--surface-3), transparent);
+    /* No `will-change`: fifty skeletons would mean fifty permanent compositor
+       layers, which trades one problem for another. A transform animation is
+       promoted for its duration anyway. */
     animation: var(--animate-shimmer);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .shimmer::after { animation: none; }
   }
 
   /* Dotted / grid backdrops */
@@ -332,3 +368,498 @@
 
 /* RainbowKit modal — align to our tokens */
 [data-rk] { --rk-radii-modal: 20px; --rk-radii-menuButton: 12px; }
+
+/* ============================================================================
+   ═══ DEPTH SYSTEM ═══  (theme v2 — "Helix")
+
+   Everything below is presentation only. It adds a third axis to a design
+   system that was previously flat: a shared perspective, a fixed ladder of
+   z-offsets, and light that behaves consistently as things come toward the
+   viewer. The rules it follows:
+
+   1. One perspective per scene, declared on the container. Nested elements
+      inherit the vanishing point, so cards in a grid tilt toward the SAME
+      point rather than each spinning about its own centre — that is the
+      difference between a page with depth and a page of independent gimmicks.
+   2. Depth is a ladder, not a free number. --z-1 .. --z-5. A surface that
+      rises also gets brighter, gains a rim light, and casts a longer shadow,
+      because those three cues together are what the eye reads as "closer".
+   3. Motion is scroll-driven where the browser can do it without JavaScript
+      (animation-timeline: view()), and framer-motion only where it cannot.
+   4. Every effect has a reduced-motion resting state that is a legible,
+      finished-looking design — never a blank or half-transformed element.
+   ========================================================================== */
+
+@theme {
+  /* --- Perspective & depth ladder --- */
+  --perspective-near: 640px;
+  --perspective-scene: 1200px;
+  --perspective-far: 2200px;
+
+  --z-1: 6px;
+  --z-2: 14px;
+  --z-3: 28px;
+  --z-4: 48px;
+  --z-5: 80px;
+
+  /* --- Easing --- */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out-quart: cubic-bezier(0.76, 0, 0.24, 1);
+  --ease-tide: cubic-bezier(0.32, 0.72, 0, 1);   /* the house curve */
+
+  /* --- Durations, so timing is consistent across 171 components --- */
+  /* Interaction budget.
+   *
+   * These were 120/220/380/640/1100. --dur-quick and --dur-base drive hover
+   * and press feedback on every button, nav item, row and card in the app, and
+   * at 220ms/380ms the UI felt like it was catching up with the pointer rather
+   * than tracking it. Anything a user initiates now resolves inside ~160ms,
+   * which is about the threshold where a response stops being perceived as a
+   * transition and starts being perceived as immediate. The two long values are
+   * kept for deliberate set-piece motion and are no longer used for feedback. */
+  --dur-instant: 90ms;
+  --dur-quick: 130ms;
+  --dur-base: 190ms;
+  --dur-slow: 420ms;
+  --dur-cinema: 900ms;
+
+  /* --- Named animations --- */
+  --animate-helix: helix-spin 34s linear infinite;
+  --animate-orbit: orbit-y 22s linear infinite;
+  --animate-breathe: breathe 6s var(--ease-in-out-quart) infinite;
+  --animate-drift: drift-3d 18s ease-in-out infinite alternate;
+  --animate-beam: beam-sweep 7s var(--ease-tide) infinite;
+  --animate-scan: scanline 9s linear infinite;
+  --animate-pan: gradient-pan 18s linear infinite;
+  --animate-coin: coin-flip 9s var(--ease-in-out-quart) infinite;
+  --animate-rim: rim-sweep 3.2s var(--ease-tide) infinite;
+}
+
+/* Interpolatable custom properties — these let a *hover* transition a
+   gradient position or an angle, which plain custom properties cannot do. */
+@property --sheen-x { syntax: "<percentage>"; initial-value: 0%; inherits: false; }
+@property --depth   { syntax: "<number>";     initial-value: 0;  inherits: false; }
+@property --rim     { syntax: "<number>";     initial-value: 0;  inherits: false; }
+
+@keyframes helix-spin { to { transform: rotateY(360deg) } }
+@keyframes orbit-y    { to { transform: rotate(360deg) } }
+@keyframes breathe {
+  0%, 100% { transform: scale(1);    opacity: 0.85 }
+  50%      { transform: scale(1.06); opacity: 1 }
+}
+@keyframes drift-3d {
+  0%   { transform: translate3d(0, 0, 0) rotateX(0deg) rotateY(0deg) }
+  50%  { transform: translate3d(1.5%, -2.5%, 24px) rotateX(3deg) rotateY(-4deg) }
+  100% { transform: translate3d(-1.5%, 1.5%, 8px) rotateX(-2deg) rotateY(3deg) }
+}
+@keyframes beam-sweep {
+  0%        { opacity: 0; transform: translateX(-120%) skewX(-14deg) }
+  35%, 45%  { opacity: 0.55 }
+  100%      { opacity: 0; transform: translateX(220%) skewX(-14deg) }
+}
+@keyframes scanline { to { transform: translateY(100%) } }
+@keyframes gradient-pan { to { background-position: 200% 50% } }
+@keyframes coin-flip {
+  0%, 12%   { transform: rotateY(0deg) }
+  50%, 62%  { transform: rotateY(180deg) }
+  100%      { transform: rotateY(360deg) }
+}
+@keyframes rim-sweep {
+  0%, 100% { --rim: 0 }
+  50%      { --rim: 1 }
+}
+@keyframes fade-rise-3d {
+  from { opacity: 0; transform: perspective(1000px) translate3d(0, 26px, -70px) rotateX(7deg) }
+  to   { opacity: 1; transform: none }
+}
+@keyframes mask-up {
+  from { opacity: 0; transform: translateY(105%) rotateX(-42deg) }
+  to   { opacity: 1; transform: none }
+}
+
+/* ============================================================================
+   Depth-aware semantic roles. Added, not substituted — every pre-existing
+   variable keeps its value, so nothing that already referenced them moves.
+   ========================================================================== */
+:root {
+  /* Elevation. Warm-tinted, because a neutral black shadow over a warm
+     surface reads as dirt rather than as distance. */
+  --shadow-e1: 0 1px 2px -1px rgb(12 6 2 / 0.55);
+  --shadow-e2: 0 4px 12px -4px rgb(12 6 2 / 0.6), 0 1px 2px -1px rgb(12 6 2 / 0.5);
+  --shadow-e3: 0 12px 32px -12px rgb(12 6 2 / 0.7), 0 2px 6px -2px rgb(12 6 2 / 0.5);
+  --shadow-e4: 0 28px 64px -20px rgb(9 4 1 / 0.78), 0 6px 16px -8px rgb(12 6 2 / 0.55);
+  --shadow-e5: 0 48px 110px -32px rgb(6 3 1 / 0.85), 0 12px 28px -14px rgb(12 6 2 / 0.6);
+
+  /* The line of light along a raised edge. This single cue does most of the
+     work of making a flat div feel like a physical panel. */
+  --rim-light: rgb(255 255 255 / 0.09);
+  --rim-light-strong: rgb(255 255 255 / 0.16);
+  --rim-accent: color-mix(in oklab, var(--accent) 55%, transparent);
+
+  /* Glass tiers */
+  --glass-tint: color-mix(in oklab, var(--surface-1) 62%, transparent);
+  --glass-tint-strong: color-mix(in oklab, var(--surface-1) 82%, transparent);
+  --glass-blur: 18px;
+
+  /* Atmosphere — the colours the background haze is built from */
+  --haze-1: color-mix(in oklab, var(--accent) 20%, transparent);
+  --haze-2: color-mix(in oklab, var(--color-brand-700) 16%, transparent);
+  --haze-3: color-mix(in oklab, var(--series-2) 8%, transparent);
+  --haze-4: color-mix(in oklab, var(--color-brand-300) 10%, transparent);
+
+  /* Depth-tinted surfaces: a panel that has risen off the page is lighter. */
+  --surface-raised: color-mix(in oklab, var(--surface-1) 88%, var(--color-brand-200) 4%);
+}
+
+:root[data-theme="light"] {
+  --shadow-e1: 0 1px 2px -1px rgb(64 38 20 / 0.1);
+  --shadow-e2: 0 4px 12px -4px rgb(64 38 20 / 0.14), 0 1px 2px -1px rgb(64 38 20 / 0.08);
+  --shadow-e3: 0 12px 32px -12px rgb(64 38 20 / 0.18), 0 2px 6px -2px rgb(64 38 20 / 0.1);
+  --shadow-e4: 0 28px 64px -20px rgb(64 38 20 / 0.22), 0 6px 16px -8px rgb(64 38 20 / 0.12);
+  --shadow-e5: 0 48px 110px -32px rgb(64 38 20 / 0.26), 0 12px 28px -14px rgb(64 38 20 / 0.14);
+
+  --rim-light: rgb(255 255 255 / 0.9);
+  --rim-light-strong: rgb(255 255 255 / 1);
+  --rim-accent: color-mix(in oklab, var(--accent) 40%, transparent);
+
+  --glass-tint: color-mix(in oklab, #ffffff 68%, transparent);
+  --glass-tint-strong: color-mix(in oklab, #ffffff 88%, transparent);
+
+  --haze-1: color-mix(in oklab, var(--accent) 12%, transparent);
+  --haze-2: color-mix(in oklab, var(--color-brand-300) 14%, transparent);
+  --haze-3: color-mix(in oklab, var(--series-2) 6%, transparent);
+  --haze-4: color-mix(in oklab, var(--color-brand-100) 22%, transparent);
+
+  --surface-raised: #ffffff;
+}
+
+@theme inline {
+  --color-surface-raised: var(--surface-raised);
+  --shadow-e1: var(--shadow-e1);
+  --shadow-e2: var(--shadow-e2);
+  --shadow-e3: var(--shadow-e3);
+  --shadow-e4: var(--shadow-e4);
+  --shadow-e5: var(--shadow-e5);
+}
+
+/* ============================================================================
+   ═══ DEPTH UTILITIES ═══
+   ========================================================================== */
+@layer utilities {
+
+  /* --- Scenes -------------------------------------------------------------
+     A scene declares the vanishing point. Put it on a section or a grid, not
+     on each card: children then share one perspective and tilt coherently.  */
+  .scene       { perspective: var(--perspective-scene); perspective-origin: 50% 45%; }
+  .scene-near  { perspective: var(--perspective-near);  perspective-origin: 50% 50%; }
+  .scene-far   { perspective: var(--perspective-far);   perspective-origin: 50% 40%; }
+  .flat-3d     { transform-style: preserve-3d; }
+  .no-3d       { transform-style: flat; }
+
+  /* --- Depth ladder ------------------------------------------------------ */
+  .z-lift-1 { transform: translateZ(var(--z-1)); }
+  .z-lift-2 { transform: translateZ(var(--z-2)); }
+  .z-lift-3 { transform: translateZ(var(--z-3)); }
+  .z-lift-4 { transform: translateZ(var(--z-4)); }
+  .z-lift-5 { transform: translateZ(var(--z-5)); }
+
+  /* --- Rim light ---------------------------------------------------------
+     One inset hairline along the top edge, one faint one around the whole
+     shape. Reads as a light source above the page. Cheap, and it is the
+     single biggest contributor to surfaces looking solid.                  */
+  .rim {
+    box-shadow:
+      inset 0 1px 0 0 var(--rim-light),
+      inset 0 0 0 1px rgb(255 255 255 / 0.03);
+  }
+  .rim-strong {
+    box-shadow:
+      inset 0 1px 0 0 var(--rim-light-strong),
+      inset 0 0 0 1px rgb(255 255 255 / 0.05);
+  }
+  .rim-accent { box-shadow: inset 0 1px 0 0 var(--rim-accent), 0 0 0 1px var(--accent-ring); }
+
+  /* --- Panels ------------------------------------------------------------ */
+  .panel {
+    background: var(--surface-1);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--shadow-e2), inset 0 1px 0 0 var(--rim-light);
+  }
+  .panel-raised {
+    background:
+      linear-gradient(180deg, color-mix(in oklab, var(--surface-2) 70%, transparent), transparent 42%),
+      var(--surface-raised);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--shadow-e4), inset 0 1px 0 0 var(--rim-light-strong);
+  }
+  .panel-inset {
+    background: var(--surface-inset);
+    border-radius: var(--radius-card);
+    box-shadow: inset 0 2px 8px -2px rgb(0 0 0 / 0.35), inset 0 0 0 1px var(--border-subtle);
+  }
+
+  /* --- Glass tiers ------------------------------------------------------- */
+  .glass-1 {
+    background: var(--glass-tint);
+    backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+    box-shadow: inset 0 1px 0 0 var(--rim-light);
+  }
+  .glass-2 {
+    background: var(--glass-tint-strong);
+    backdrop-filter: blur(16px) saturate(165%);
+    -webkit-backdrop-filter: blur(16px) saturate(165%);
+    box-shadow: var(--shadow-e3), inset 0 1px 0 0 var(--rim-light-strong);
+  }
+
+  /* --- Off-screen animation pause -------------------------------------
+     A CSS animation keeps running when its element scrolls out of view, and
+     `[data-anim-paused]` is how a component says "nobody can see this".
+     TokenHelix sets it from an IntersectionObserver: a 10-node double helix is
+     20 concurrent infinite compositor animations, and before this they ran for
+     the whole session however far down the page the reader had scrolled.
+     Paused, not removed — scrolling back resumes mid-revolution.            */
+  [data-anim-paused],
+  [data-anim-paused] * {
+    animation-play-state: paused !important;
+  }
+
+  /* --- Hover: lift -------------------------------------------------------
+     Translate on Z rather than Y so a card inside a .scene actually moves
+     toward the viewer — it grows very slightly and its shadow spreads,
+     which a translateY can only imitate.                                   */
+  .lift {
+    transition:
+      transform var(--dur-quick) var(--ease-tide),
+      box-shadow var(--dur-quick) var(--ease-tide),
+      border-color var(--dur-quick) var(--ease-tide),
+      background-color var(--dur-quick) var(--ease-tide);
+    /* `will-change: transform` was declared unconditionally, which holds a
+       compositor layer for every .lift element on the page permanently — on a
+       grid of thirty cards that is thirty layers sitting idle. Promote on hover
+       intent instead, which is early enough to matter and released afterwards. */
+  }
+  .lift:hover,
+  .lift:focus-visible {
+    will-change: transform;
+  }
+  .lift:hover {
+    transform: translateZ(var(--z-3)) translateY(-2px);
+    box-shadow: var(--shadow-e4), inset 0 1px 0 0 var(--rim-light-strong);
+    border-color: color-mix(in oklab, var(--accent) 42%, var(--border-default));
+  }
+  .lift-sm:hover { transform: translateZ(var(--z-1)) translateY(-1px); }
+  .lift-lg:hover { transform: translateZ(var(--z-5)) translateY(-4px); box-shadow: var(--shadow-e5); }
+
+  /* Press feedback — pushes back INTO the page. */
+  .press:active { transform: translateZ(-2px) scale(0.988); }
+
+  /* --- Hover: holographic sheen -----------------------------------------
+     A diagonal band of light that crosses the surface once on hover. It is
+     a transition on an @property percentage, not an animation, so it tracks
+     enter/leave instead of looping and drawing the eye forever.            */
+  /* Deliberately NO `isolation: isolate` and NO `z-index` here.
+
+     Both were in the first draft and both were wrong. `.holo` is applied to
+     ordinary cards, and cards contain tooltips and popovers that position
+     themselves at `z-50` expecting to escape the card. A stacking context on
+     the card makes that z-index local, so the next card in the grid — a later
+     sibling — paints straight over the tooltip. Without isolation the ::after
+     still paints above the card's own content (it is the last child, and it is
+     positioned) while anything at a real z-index continues to escape. */
+  .holo { position: relative; }
+  .holo::after {
+    content: "";
+    position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    background: linear-gradient(
+      104deg,
+      transparent calc(var(--sheen-x) - 26%),
+      color-mix(in oklab, var(--accent) 12%, rgb(255 255 255 / 0.1)) var(--sheen-x),
+      transparent calc(var(--sheen-x) + 26%)
+    );
+    opacity: 0;
+    transition: opacity var(--dur-quick) linear, --sheen-x var(--dur-slow) var(--ease-tide);
+  }
+  .holo:hover::after { opacity: 1; --sheen-x: 130%; }
+
+  /* --- Hover: gradient ring --------------------------------------------
+     A 1px border that is a gradient, done with a mask so the fill stays
+     transparent. Used for the "premium" surfaces (hero cards, active tier). */
+  .ring-gradient { position: relative; }
+  .ring-gradient::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
+    background: linear-gradient(140deg,
+      color-mix(in oklab, var(--accent) 70%, transparent),
+      color-mix(in oklab, var(--accent) 8%, transparent) 42%,
+      transparent 62%,
+      color-mix(in oklab, var(--series-2) 26%, transparent));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    pointer-events: none;
+    opacity: 0.7;
+    transition: opacity var(--dur-base) var(--ease-tide);
+  }
+  .ring-gradient:hover::before { opacity: 1; }
+
+  /* --- Light beam ------------------------------------------------------- */
+  .beam { position: relative; overflow: hidden; }
+  .beam::before {
+    content: ""; position: absolute; top: 0; bottom: 0; width: 45%;
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.07), transparent);
+    animation: var(--animate-beam);
+    pointer-events: none;
+  }
+
+  /* --- Backgrounds ------------------------------------------------------ */
+  /* Mesh haze — four soft lights at different depths. The hero's atmosphere. */
+  .mesh-haze {
+    background-image:
+      radial-gradient(58rem 34rem at 12% -8%,  var(--haze-1), transparent 62%),
+      radial-gradient(46rem 30rem at 92% 6%,   var(--haze-2), transparent 60%),
+      radial-gradient(52rem 36rem at 50% 108%, var(--haze-3), transparent 64%),
+      radial-gradient(30rem 22rem at 78% 78%,  var(--haze-4), transparent 66%);
+  }
+  /* Perspective floor — a grid receding to a horizon. Pure CSS, no canvas. */
+  .grid-floor {
+    background-image:
+      linear-gradient(to right, var(--border-default) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--border-default) 1px, transparent 1px);
+    background-size: 72px 72px;
+    transform: perspective(320px) rotateX(62deg) scale(2.4);
+    transform-origin: 50% 100%;
+    opacity: 0.28;
+    mask-image: radial-gradient(70% 70% at 50% 100%, #000, transparent 78%);
+  }
+  .scanlines {
+    background-image: repeating-linear-gradient(
+      to bottom, rgb(255 255 255 / 0.028) 0 1px, transparent 1px 3px);
+  }
+  .vignette {
+    background: radial-gradient(120% 90% at 50% 0%, transparent 42%,
+      color-mix(in oklab, var(--surface-0) 78%, transparent) 100%);
+  }
+  .divider-glow {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border-strong) 18%,
+      color-mix(in oklab, var(--accent) 55%, transparent) 50%, var(--border-strong) 82%, transparent);
+  }
+
+  /* --- Text ------------------------------------------------------------- */
+  .text-gradient-sheen {
+    background-image: linear-gradient(100deg,
+      var(--text-primary) 18%, var(--color-brand-300) 42%, var(--accent) 52%,
+      var(--text-primary) 76%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: var(--animate-pan);
+  }
+  /* Per-line mask reveal. Applied by WordReveal / LineReveal in fx. */
+  .clip-line { display: block; overflow: hidden; }
+
+  /* --- Scroll-driven, no JavaScript -------------------------------------
+     animation-timeline: view() ties an animation's progress to an element's
+     own passage through the viewport. Where it is supported this replaces an
+     IntersectionObserver and a React re-render with a compositor-thread
+     animation. Where it is not, the element simply renders in its final
+     state — which is why every one of these keyframes ENDS at the resting
+     design and the un-animated element is already correct.                 */
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      .s-rise, .s-tilt, .s-fade, .s-scale, .s-blur {
+        animation-timeline: view();
+        animation-fill-mode: both;
+        animation-duration: auto; /* a view() timeline supplies its own progress */
+      }
+      .s-rise  { animation-name: fade-rise-3d; animation-range: entry 8% cover 34%; }
+      .s-tilt  { animation-name: s-tilt-kf;    animation-range: entry 0% cover 40%; }
+      .s-fade  { animation-name: s-fade-kf;    animation-range: entry 12% cover 30%; }
+      .s-scale { animation-name: s-scale-kf;   animation-range: entry 5% cover 38%; }
+      .s-blur  { animation-name: s-blur-kf;    animation-range: entry 10% cover 32%; }
+
+      /* Parallax on a sticky layer — depth without a scroll listener. */
+      .s-parallax {
+        animation: s-parallax-kf linear both;
+        animation-timeline: view();
+        animation-range: cover 0% cover 100%;
+      }
+      /* Section that recedes as it leaves — the "tide" going out. */
+      .s-recede {
+        animation: s-recede-kf linear both;
+        animation-timeline: view();
+        animation-range: exit 0% exit 100%;
+      }
+    }
+  }
+  @keyframes s-tilt-kf {
+    from { opacity: 0; transform: perspective(1100px) rotateX(11deg) translate3d(0, 34px, -90px) }
+    to   { opacity: 1; transform: none }
+  }
+  @keyframes s-fade-kf  { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes s-scale-kf { from { opacity: 0; transform: scale(0.94) } to { opacity: 1; transform: none } }
+  @keyframes s-blur-kf  { from { opacity: 0; filter: blur(12px) } to { opacity: 1; filter: blur(0) } }
+  @keyframes s-parallax-kf { from { transform: translate3d(0, -6%, 0) } to { transform: translate3d(0, 6%, 0) } }
+  @keyframes s-recede-kf {
+    from { opacity: 1; transform: none }
+    to   { opacity: 0.25; transform: perspective(1200px) scale(0.93) translateY(-4%) rotateX(-6deg) }
+  }
+
+  /* --- Interactive text link ------------------------------------------- */
+  .link-slide {
+    position: relative;
+    background-image: linear-gradient(var(--accent), var(--accent));
+    background-size: 0% 1px; background-position: 0 100%; background-repeat: no-repeat;
+    transition: background-size var(--dur-base) var(--ease-tide), color var(--dur-quick) linear;
+  }
+  .link-slide:hover { background-size: 100% 1px; }
+
+  /* --- Numeric ticker slot -------------------------------------------- */
+  .digit-slot { display: inline-block; overflow: hidden; vertical-align: bottom; }
+}
+
+/* ============================================================================
+   Reduced motion — the resting state must be a finished design.
+
+   Note this deliberately does NOT blanket-disable transforms: a card that has
+   already been tilted by a pointer must still be able to return to flat. What
+   it removes is anything that moves on its own, unprompted.
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .beam::before,
+  .text-gradient-sheen { animation: none !important; }
+  .text-gradient-sheen { background-position: 0 50%; }
+  .holo::after { display: none; }
+  .lift:hover, .lift-sm:hover, .lift-lg:hover { transform: none; }
+  .grid-floor { animation: none; }
+  .s-rise, .s-tilt, .s-fade, .s-scale, .s-blur, .s-parallax, .s-recede {
+    animation: none !important; opacity: 1 !important; transform: none !important; filter: none !important;
+  }
+}
+
+/* ============================================================================
+   Light-theme corrections for the gradient text.
+
+   Both gradients start at --color-brand-300 (#feac88), which is a 1.9:1
+   contrast against the light surface — fine as the bright end of a ramp on a
+   dark page, unreadable as the START of one on a white page. In light mode the
+   ramps therefore run from the mid step downward instead of from the light step
+   up. Same gesture, legible either way.
+   ========================================================================== */
+:root[data-theme="light"] .text-gradient-brand {
+  background-image: linear-gradient(100deg,
+    var(--color-brand-600), var(--color-brand-500) 45%, var(--color-brand-800));
+}
+:root[data-theme="light"] .text-gradient-sheen {
+  background-image: linear-gradient(100deg,
+    var(--text-primary) 18%, var(--color-brand-600) 42%, var(--color-brand-500) 52%,
+    var(--text-primary) 76%);
+  background-size: 200% 100%;
+}
+
+/* Forced-colors: strip decoration so the OS palette wins outright. */
+@media (forced-colors: active) {
+  .rim, .rim-strong, .panel, .panel-raised, .glass-1, .glass-2 { box-shadow: none; }
+  .holo::after, .ring-gradient::before, .beam::before, .mesh-haze, .grid-floor { display: none; }
+  .text-gradient-sheen, .text-gradient-brand { -webkit-text-fill-color: currentColor; color: CanvasText; }
+}

@@ -1,6 +1,5 @@
 /* L-05 · Referral / Affiliate Program Terms — FRD 11.5 */
-import { LegalDoc } from "../_components/legal-doc";
-import { legalDocuments } from "@/lib/mock/legal";
+import { LegalDocFromApi } from "../_components/fetch-doc";
 
 export const metadata = {
   title: "Referral / Affiliate Program Terms",
@@ -9,5 +8,5 @@ export const metadata = {
 };
 
 export default function ReferralTermsPage() {
-  return <LegalDoc doc={legalDocuments["referral-terms"]} />;
+  return <LegalDocFromApi slug="referral-terms" />;
 }

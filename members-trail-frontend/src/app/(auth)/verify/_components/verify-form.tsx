@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { CheckCircle2, Mail, PencilLine, RefreshCw, Smartphone, TriangleAlert } from "lucide-react";
 import { Badge, Button, Callout, Input, Steps, useToast } from "@/components/ui";
+import { useResendOtp, useVerifyOtp } from "@/lib/hooks/use-mutations";
+import { humanMessage, isApiError } from "@/lib/api/errors";
 import { OtpInput } from "./otp-input";
 
 const RESEND_COOLDOWN = 60;   // FRD A-02
@@ -13,6 +16,9 @@ type Channel = "email" | "phone";
 
 export function VerifyForm() {
   const toast = useToast();
+  const params = useSearchParams();
+  const verifyOtp = useVerifyOtp();
+  const resendOtp = useResendOtp();
   const [channel, setChannel] = useState<Channel>("email");
   const [done, setDone] = useState<Record<Channel, boolean>>({ email: false, phone: false });
   const [code, setCode] = useState("");
@@ -22,7 +28,13 @@ export function VerifyForm() {
   const [cooldown, setCooldown] = useState(0);
   const [expiresIn, setExpiresIn] = useState(EXPIRY_SECONDS);
   const [editing, setEditing] = useState(false);
-  const [contact, setContact] = useState({ email: "navdeep@example.com", phone: "+91 98765 43210" });
+  /* Carried from the signup step in the URL. There is no session yet — the
+   * account is unverified — so there is no profile to read it from, and inventing
+   * a plausible address would tell someone their code went somewhere it did not. */
+  const [contact, setContact] = useState({
+    email: params.get("email") ?? "",
+    phone: params.get("phone") ?? "",
+  });
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -45,13 +57,24 @@ export function VerifyForm() {
     if (code.length !== 6) { setError("Enter all six digits."); return; }
     if (expired) { setError("This code has expired. Request a new one."); return; }
     setBusy(true);
-    await new Promise((r) => setTimeout(r, 750));
-    setBusy(false);
-
-    if (code === "000000") {
-      setAttempts((a) => a + 1);
-      setError(`Incorrect code. ${MAX_ATTEMPTS - attempts - 1} attempt(s) left.`);
+    try {
+      await verifyOtp.mutateAsync({
+        channel: channel === "phone" ? "sms" : "email",
+        target: channel === "phone" ? contact.phone || undefined : contact.email || undefined,
+        code,
+      });
+    } catch (err) {
+      /* The server counts attempts, not this component: a local counter resets on
+       * reload, which makes the limit meaningless. `attemptsRemaining` comes back
+       * on the failure when there is one to report. */
+      const remaining = isApiError(err)
+        ? (err.details as { attemptsRemaining?: number } | undefined)?.attemptsRemaining
+        : undefined;
+      setAttempts((a) => (typeof remaining === "number" ? MAX_ATTEMPTS - remaining : a + 1));
+      setError(humanMessage(err));
       return;
+    } finally {
+      setBusy(false);
     }
 
     const next = { ...done, [channel]: true };
@@ -65,12 +88,24 @@ export function VerifyForm() {
     else if (!next.email) setChannel("email");
   };
 
-  const resend = () => {
-    setCooldown(RESEND_COOLDOWN);
-    setExpiresIn(EXPIRY_SECONDS);
-    setCode("");
+  const resend = async () => {
     setError(null);
-    toast.info("Code sent", `A new code is on its way to your ${channel}.`);
+    try {
+      const res = await resendOtp.mutateAsync({
+        channel: channel === "phone" ? "sms" : "email",
+        target: channel === "phone" ? contact.phone || undefined : contact.email || undefined,
+      });
+      /* The server owns the cooldown and tells us how long it is. Using our own
+       * constant would show "resend in 60s" while the API refuses for 90. */
+      setCooldown(res?.resendAfter ?? RESEND_COOLDOWN);
+      setExpiresIn(EXPIRY_SECONDS);
+      setCode("");
+      toast.info("Code sent", `A new code is on its way to your ${channel}.`);
+    } catch (err) {
+      const retryAfter = isApiError(err) ? err.retryAfter : undefined;
+      if (retryAfter) setCooldown(retryAfter);
+      setError(humanMessage(err));
+    }
   };
 
   if (both) {

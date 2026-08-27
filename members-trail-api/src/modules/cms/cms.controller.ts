@@ -112,7 +112,7 @@ export class CmsAdminController {
   }
 
   @Patch("documents/:id/publish")
-  @RequirePermissions("legal:publish")
+  @RequirePermissions("legal:approve")
   @ApiOperation({
     summary: "Publish a reviewed version",
     description:

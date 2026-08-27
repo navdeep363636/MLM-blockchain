@@ -62,12 +62,50 @@ contract MTTVesting {
         return (total * (timestamp - start)) / vestingDuration;
     }
 
+    /**
+     * @notice Vested-and-unreleased tokens right now.
+     *
+     * Added because the only way to ask this question used to be
+     * `vestedAmount(timestamp) - released()`, with the caller supplying the
+     * timestamp. A frontend does not know the chain's clock — it knows the
+     * browser's, which is wrong by anything from milliseconds to minutes, and a
+     * clock that is a few seconds ahead makes `release()` revert with "nothing
+     * to release" on a number the UI just displayed as available.
+     */
+    function releasable() public view returns (uint256) {
+        return vestedAmount(uint64(block.timestamp)) - released;
+    }
+
+    /// The whole schedule, for a UI that would otherwise make six calls.
+    struct Schedule {
+        address beneficiary;
+        uint64 start;
+        uint64 cliffEnd;
+        uint64 vestingEnd;
+        uint256 total;
+        uint256 released;
+        uint256 releasable;
+    }
+
+    /// @notice Everything a vesting screen needs, in one call.
+    function schedule() external view returns (Schedule memory) {
+        return Schedule({
+            beneficiary: beneficiary,
+            start: start,
+            cliffEnd: start + cliffDuration,
+            vestingEnd: start + vestingDuration,
+            total: totalAllocation(),
+            released: released,
+            releasable: releasable()
+        });
+    }
+
     /// @notice Releases the currently vested-and-unreleased tokens to the beneficiary.
     function release() external {
-        uint256 releasable = vestedAmount(uint64(block.timestamp)) - released;
-        require(releasable > 0, "nothing to release");
-        released += releasable;
-        emit TokensReleased(releasable, beneficiary);
-        token.safeTransfer(beneficiary, releasable);
+        uint256 amount = releasable();
+        require(amount > 0, "nothing to release");
+        released += amount;
+        emit TokensReleased(amount, beneficiary);
+        token.safeTransfer(beneficiary, amount);
     }
 }

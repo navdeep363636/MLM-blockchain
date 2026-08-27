@@ -10,6 +10,8 @@ import {
 } from "@/components/ui";
 import { RevealGroup, RevealItem, SpotlightCard } from "@/components/fx";
 import { useAchievements, useBalances, useGames, useQuests } from "@/lib/hooks/use-data";
+import { useClaimQuest } from "@/lib/hooks/use-mutations";
+import { humanMessage, isApiError } from "@/lib/api/errors";
 import { cn, formatNumber } from "@/lib/utils";
 import type { Achievement, Quest } from "@/types";
 import { Countdown } from "../../../_components/time";
@@ -24,6 +26,7 @@ const TIER_STYLE: Record<Achievement["tier"], { ring: string; text: string; labe
 
 export function QuestsView() {
   const { data: quests, isLoading } = useQuests();
+  const claimQuest = useClaimQuest();
   const { data: achievements } = useAchievements();
   const { data: balances } = useBalances();
   const { data: games } = useGames();
@@ -49,8 +52,24 @@ export function QuestsView() {
   const confirmClaim = async () => {
     if (!claiming) return;
     setBusy(true);
-    await new Promise((r) => setTimeout(r, 800));
+    try {
+      await claimQuest.mutateAsync({ id: claiming.id });
+    } catch (err) {
+      /* The daily cap is the interesting failure: the reward is not lost, it is
+       * simply not creditable today, and saying so is the difference between a
+       * bug report and an understood limit. */
+      toast.error(
+        isApiError(err) && err.code === "POINTS_CAP_REACHED"
+          ? "Daily Points cap reached"
+          : "Couldn't claim that reward",
+        humanMessage(err),
+      );
+      setBusy(false);
+      return;
+    }
     setBusy(false);
+    /* Local flag purely to stop the button flickering back to "Claim" for the one
+     * refetch the mutation triggers; the server's answer is what decides. */
     setClaimed((m) => ({ ...m, [claiming.id]: true }));
     toast.success(
       "Reward claimed",

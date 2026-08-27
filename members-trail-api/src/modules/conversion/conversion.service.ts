@@ -25,7 +25,7 @@ import {
   RATE_MAX, RATE_MIN, type AdminConversionQuery, type ConversionCapMeter,
   type ConversionHistoryQuery, type ConversionQuoteResponse, type ConversionRateResponse,
   type ConversionResponse, type ConversionSummaryResponse, type ProposeRateRequest,
-  type RateResponse, type UpdateConversionCapsRequest,
+  type ConversionCapsOverview, type RateResponse, type UpdateConversionCapsRequest,
 } from "./dto/conversion.dto";
 
 /* ============================================================================
@@ -661,6 +661,38 @@ export class ConversionService {
   }
 
   /** Cap changes are versioned in platform_config and audited, never overwritten. */
+  /**
+   * The ceilings in force, plus today's platform-wide usage.
+   *
+   * Usage is summed from `conversions` over the UTC day rather than kept as a
+   * counter, because a counter and a ledger disagree the first time a conversion
+   * fails after the counter was incremented — and the ledger is the one an
+   * auditor reads.
+   */
+  async capsOverview(): Promise<ConversionCapsOverview> {
+    const dayStart = new Date();
+    dayStart.setUTCHours(0, 0, 0, 0);
+
+    const [caps, global, used] = await Promise.all([
+      this.config.conversionCaps(),
+      this.config.read<{ dailyPoints?: number }>(ConfigKeys.conversionGlobalCaps, {}),
+      this.conversions.createQueryBuilder("c")
+        .select("SUM(c.pointsSpent)", "points")
+        .addSelect("COUNT(*)", "count")
+        .where("c.createdAt >= :from", { from: dayStart })
+        .andWhere("c.status IN (:...statuses)", { statuses: CAP_CONSUMING_STATUSES })
+        .getRawOne<{ points: string | null; count: string }>(),
+    ]);
+
+    return {
+      perUserDailyPoints: caps.dailyPoints,
+      perUserMonthlyPoints: caps.monthlyPoints,
+      globalDailyPoints: global?.dailyPoints ?? null,
+      globalDailyUsedPoints: String(used?.points ?? "0"),
+      globalDailyConversions: Number(used?.count ?? 0),
+    };
+  }
+
   async updateCaps(
     dto: UpdateConversionCapsRequest,
     actorId: string,

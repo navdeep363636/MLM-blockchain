@@ -61,7 +61,7 @@ export class ReferralAdminController {
   }
 
   @Post("plans")
-  @RequirePermissions("commission:plan:propose")
+  @RequirePermissions("commission:write")
   @ApiOperation({
     summary: "Propose a new plan version — inert until a second approver signs off",
     description: "The simulation is computed and stored at proposal time so the approver reviews the same numbers.",
@@ -76,7 +76,7 @@ export class ReferralAdminController {
   }
 
   @Patch("plans/:id/approve")
-  @RequirePermissions("commission:plan:approve")
+  @RequirePermissions("commission:approve")
   @ApiOperation({
     summary: "Approve a proposed plan",
     description:
@@ -94,7 +94,7 @@ export class ReferralAdminController {
   }
 
   @Patch("plans/:id/reject")
-  @RequirePermissions("commission:plan:approve")
+  @RequirePermissions("commission:approve")
   @ApiOperation({ summary: "Reject a proposed plan with a recorded reason" })
   @ApiOkResponse({ type: PlanResponse })
   reject(
@@ -130,7 +130,7 @@ export class ReferralAdminController {
   }
 
   @Post("release-queued")
-  @RequirePermissions("commission:release")
+  @RequirePermissions("commission:write")
   @ApiOperation({
     summary: "Release queued commission, oldest first, up to the pool's available funding",
     description: "Normally driven by the queue after a funding transfer confirms; exposed here for operations.",
@@ -140,7 +140,7 @@ export class ReferralAdminController {
   }
 
   @Post("events/:revenueEventId/process")
-  @RequirePermissions("commission:release")
+  @RequirePermissions("commission:write")
   @ApiOperation({
     summary: "Fan a settled revenue event out to its upline",
     description:
@@ -152,7 +152,7 @@ export class ReferralAdminController {
   }
 
   @Patch("commissions/:id/clawback")
-  @RequirePermissions("commission:clawback")
+  @RequirePermissions("commission:approve")
   @ApiOperation({
     summary: "Reverse one commission after a fraud finding",
     description:

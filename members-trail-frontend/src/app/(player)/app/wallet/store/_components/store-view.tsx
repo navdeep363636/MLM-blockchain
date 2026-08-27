@@ -10,6 +10,8 @@ import {
 } from "@/components/ui";
 import { RevealGroup, RevealItem, SpotlightCard } from "@/components/fx";
 import { useBalances, useMarketListings, useStoreItems } from "@/lib/hooks/use-data";
+import { usePurchaseStoreItem } from "@/lib/hooks/use-mutations";
+import { humanMessage, isApiError } from "@/lib/api/errors";
 import { MTT_SYMBOL } from "@/lib/web3";
 import { cn, formatNumber, formatToken } from "@/lib/utils";
 import type { MarketListing, StoreItem } from "@/types";
@@ -55,6 +57,7 @@ export function StoreView() {
   const { data: listings } = useMarketListings();
   const { data: balances } = useBalances();
   const toast = useToast();
+  const purchase = usePurchaseStoreItem();
 
   const [surface, setSurface] = useState<"store" | "market">("store");
   const [category, setCategory] = useState("all");
@@ -77,11 +80,27 @@ export function StoreView() {
   const buy = async () => {
     if (!buying) return;
     setBusy(true);
-    await new Promise((r) => setTimeout(r, 900));
-    setBusy(false);
-    setOwned((o) => ({ ...o, [buying.id]: true }));
-    toast.success("Purchase complete", `${buying.name} added to your inventory.`);
-    setBuying(null);
+    try {
+      await purchase.mutateAsync({
+        itemId: buying.id,
+        /* Which balance to spend. An item can be priced in both, and letting the
+         * server choose would sometimes spend MTT when the member expected to
+         * spend Points. */
+        payWith: buying.priceMtt != null ? "mtt" : "points",
+      });
+      setOwned((o) => ({ ...o, [buying.id]: true }));
+      toast.success("Purchase complete", `${buying.name} added to your inventory.`);
+      setBuying(null);
+    } catch (err) {
+      toast.error(
+        isApiError(err) && err.code === "INSUFFICIENT_BALANCE"
+          ? "Not enough balance"
+          : "Purchase failed",
+        humanMessage(err),
+      );
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (

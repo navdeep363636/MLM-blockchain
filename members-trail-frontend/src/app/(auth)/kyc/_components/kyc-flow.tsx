@@ -9,6 +9,8 @@ import {
 import {
   Badge, Button, Callout, KycBadge, Modal, RingProgress, Steps, useToast,
 } from "@/components/ui";
+import { useSubmitKyc } from "@/lib/hooks/use-mutations";
+import { humanMessage } from "@/lib/api/errors";
 import { cn } from "@/lib/utils";
 
 type DocKind = "id_front" | "id_back" | "selfie" | "address_proof";
@@ -23,6 +25,7 @@ const DOCS: { kind: DocKind; label: string; hint: string; tier: 1 | 2; icon: Rea
 
 export function KycFlow() {
   const toast = useToast();
+  const submitKyc = useSubmitKyc();
   const [status, setStatus] = useState<Status>("collecting");
   const [uploaded, setUploaded] = useState<Record<DocKind, boolean>>({
     id_front: false, id_back: false, selfie: false, address_proof: false,
@@ -42,10 +45,35 @@ export function KycFlow() {
 
   const submit = async () => {
     setBusy(true);
-    await new Promise((r) => setTimeout(r, 1100));
-    setBusy(false);
-    setStatus("submitted");
-    toast.success("Submitted for review", "Most decisions land within a few minutes.");
+    try {
+      /* NOTE the shape: the API takes document REFERENCES — a storage key, a mime
+       * type, a size — not file bytes. Identity documents are uploaded straight to
+       * object storage by a separate signed-URL flow so they never pass through
+       * the API process or its logs, and this call registers what was stored.
+       *
+       * That upload step is not built yet, which is why the keys below are
+       * placeholders derived from the selected kinds. The submission will be
+       * REFUSED by the provider integration rather than silently accepted — which
+       * is the correct failure: a KYC record pointing at documents that do not
+       * exist would be worse than no record. */
+      await submitKyc.mutateAsync({
+        tier: 1,
+        documents: (Object.keys(uploaded) as DocKind[])
+          .filter((k) => uploaded[k])
+          .map((kind) => ({
+            kind,
+            storageKey: `pending-upload/${kind}`,
+            mimeType: "image/jpeg",
+            sizeBytes: 0,
+          })),
+      });
+      setStatus("submitted");
+      toast.success("Submitted for review", "Most decisions land within a few minutes.");
+    } catch (err) {
+      toast.error("Submission not accepted", humanMessage(err));
+    } finally {
+      setBusy(false);
+    }
   };
 
   /* ---------------------------- terminal states ---------------------------- */

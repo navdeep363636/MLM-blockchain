@@ -2,15 +2,30 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { KeyRound, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Button, Callout, Checkbox, Input, PasswordInput, useToast } from "@/components/ui";
+import { useAuth } from "@/lib/auth/auth-context";
+import { humanMessage, isApiError } from "@/lib/api/errors";
 import { OAuthRow } from "../../_components/auth-shell";
 import { OtpInput } from "../../verify/_components/otp-input";
 
+/**
+ * The lockout shown here MIRRORS the server; it does not implement it.
+ *
+ * The real progressive lockout lives in the API, which counts attempts per
+ * identifier in Redis and answers with `attemptsRemaining`. This component
+ * displays that count. Anything enforced only in the browser is enforced only
+ * for people using the browser.
+ */
 const MAX_ATTEMPTS = 5;
 
 export function LoginForm() {
   const toast = useToast();
+  const router = useRouter();
+  const params = useSearchParams();
+  const { login, completeTwoFa } = useAuth();
+
   const [stage, setStage] = useState<"credentials" | "twofa">("credentials");
   const [busy, setBusy] = useState(false);
   const [attempts, setAttempts] = useState(0);
@@ -19,11 +34,26 @@ export function LoginForm() {
   const [remember, setRemember] = useState(true);
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [challengeId, setChallengeId] = useState<string | null>(null);
+  const [captchaRequired, setCaptchaRequired] = useState(false);
+  const [lockedByServer, setLockedByServer] = useState(false);
 
-  /* FRD A-03: rate-limit login attempts with progressive lockout and a CAPTCHA
-   * step after three failures. */
-  const showCaptcha = attempts >= 3;
-  const lockedOut = attempts >= MAX_ATTEMPTS;
+  /* Where to land after signing in. Carried in the URL rather than in state so it
+   * survives the deep link being opened in a new tab, which is how people
+   * actually arrive from an email. Restricted to same-site paths: an open
+   * redirect on a login page is a phishing primitive. */
+  const nextParam = params.get("next");
+  const next = nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : null;
+
+  const land = (isStaff: boolean) => {
+    router.replace(next ?? (isStaff ? "/admin" : "/app"));
+  };
+
+  /* FRD A-03: progressive lockout with a CAPTCHA step after three failures. Both
+   * flags come from the server's own answer where it gives one, and fall back to
+   * the local count when it does not. */
+  const showCaptcha = captchaRequired || attempts >= 3;
+  const lockedOut = lockedByServer || attempts >= MAX_ATTEMPTS;
 
   const submitCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,13 +63,62 @@ export function LoginForm() {
       return;
     }
     setBusy(true);
-    await new Promise((r) => setTimeout(r, 800));
-    setBusy(false);
+    try {
+      const res = await login(identifier, password);
 
-    // Demo: the seeded account has 2FA enabled, so we always advance to the
-    // second factor rather than pretending some accounts skip it.
-    setStage("twofa");
-    toast.info("Two-factor required", "Enter the 6-digit code from your authenticator app.");
+      /* Not authenticated is the NORMAL path for an account with 2FA enrolled —
+       * the server issues a challenge instead of tokens. Treating it as a failure
+       * would break every protected account. */
+      if (!res.authenticated) {
+        setChallengeId(res.challengeId ?? null);
+        setStage("twofa");
+        toast.info(
+          "Two-factor required",
+          res.twoFaMethod === "sms"
+            ? "We've sent a 6-digit code to your registered number."
+            : "Enter the 6-digit code from your authenticator app.",
+        );
+        return;
+      }
+
+      toast.success("Welcome back", "Signed in successfully.");
+      land(res.isStaff ?? false);
+    } catch (err) {
+      applyAuthError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * Turns an API failure into what the form shows.
+   *
+   * The server tells us how many attempts remain and whether a CAPTCHA is now
+   * required; using those instead of a local counter means the lock the member
+   * sees is the lock that actually exists — including across a page reload,
+   * which a local counter would silently reset.
+   */
+  const applyAuthError = (err: unknown) => {
+    if (isApiError(err)) {
+      const details = (err.details ?? {}) as {
+        attemptsRemaining?: number;
+        captchaRequired?: boolean;
+        lockedUntil?: string;
+      };
+      if (typeof details.attemptsRemaining === "number") {
+        setAttempts(Math.max(0, MAX_ATTEMPTS - details.attemptsRemaining));
+      } else {
+        setAttempts((a) => a + 1);
+      }
+      if (details.captchaRequired) setCaptchaRequired(true);
+      if (details.lockedUntil || err.code === "ACCOUNT_LOCKED" || err.status === 423) {
+        setLockedByServer(true);
+      }
+      setError(humanMessage(err));
+      return;
+    }
+    setAttempts((a) => a + 1);
+    setError(humanMessage(err));
   };
 
   const submitTwoFa = async (e: React.FormEvent) => {
@@ -49,16 +128,27 @@ export function LoginForm() {
       setError("Enter the full 6-digit code.");
       return;
     }
-    setBusy(true);
-    await new Promise((r) => setTimeout(r, 800));
-    setBusy(false);
-    if (code === "000000") {
-      setAttempts((a) => a + 1);
-      setError("That code isn't valid. Codes expire every 30 seconds.");
+    if (!challengeId) {
+      /* The challenge is short-lived and server-side. Without an id there is
+       * nothing to answer, and re-entering credentials is the only honest path. */
+      setError("That sign-in attempt has expired. Please enter your password again.");
+      setStage("credentials");
       return;
     }
-    toast.success("Welcome back", "Signed in successfully.");
-    window.location.href = "/app";
+    setBusy(true);
+    try {
+      const res = await completeTwoFa(challengeId, code);
+      if (!res.authenticated) {
+        setError("That code wasn't accepted. Codes expire every 30 seconds.");
+        return;
+      }
+      toast.success("Welcome back", "Signed in successfully.");
+      land(res.isStaff ?? false);
+    } catch (err) {
+      applyAuthError(err);
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (stage === "twofa") {

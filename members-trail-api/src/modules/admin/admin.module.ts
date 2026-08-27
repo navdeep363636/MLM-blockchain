@@ -1,7 +1,8 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import {
-  ApprovalRequest, AuditLog, Commission, FraudAlert, RolePermission, Ticket, User, Withdrawal,
+  ApprovalRequest, AuditLog, Commission, FraudAlert, KycSubmission, PointsLedgerEntry,
+  RolePermission, Ticket, User, Withdrawal,
 } from "@/database/entities";
 import { AuditModule } from "@/modules/audit/audit.module";
 import { NotificationsModule } from "@/modules/notifications/notifications.module";
@@ -20,6 +21,7 @@ import { AdminService } from "./admin.service";
   imports: [
     TypeOrmModule.forFeature([
       ApprovalRequest, RolePermission, AuditLog, User, Withdrawal, FraudAlert, Ticket, Commission,
+      KycSubmission, PointsLedgerEntry,
     ]),
     AuditModule,
     NotificationsModule,

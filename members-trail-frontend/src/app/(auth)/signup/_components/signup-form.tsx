@@ -9,10 +9,11 @@ import {
 import {
   Badge, Button, Callout, Checkbox, Input, PasswordInput, Select, Steps, useToast,
 } from "@/components/ui";
+import { useRouter } from "next/navigation";
+import { usePublicConfig } from "@/lib/hooks/use-data";
+import { useRegister } from "@/lib/hooks/use-mutations";
+import { humanMessage, isApiError } from "@/lib/api/errors";
 import { OAuthRow } from "../../_components/auth-shell";
-
-/** Jurisdictions blocked at registration (FRD A-01 business rule). */
-const RESTRICTED = new Set(["US", "KP", "IR", "SY", "CU"]);
 
 const COUNTRIES = [
   { value: "IN", label: "India" },
@@ -69,6 +70,9 @@ function ageFrom(dob: string) {
 export function SignUpForm() {
   const toast = useToast();
   const params = useSearchParams();
+  const router = useRouter();
+  const { data: policy } = usePublicConfig();
+  const register = useRegister();
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
   const [refState, setRefState] = useState<"idle" | "checking" | "valid" | "invalid">("idle");
@@ -97,7 +101,12 @@ export function SignUpForm() {
   const checks = useMemo(() => passwordChecks(form.password), [form.password]);
   const pwScore = checks.filter((c) => c.ok).length;
   const age = ageFrom(form.dob);
-  const restricted = RESTRICTED.has(form.country);
+  /* The blocklist and the age floor come from the server (FRD A-01). They were
+   * constants here, which meant this form could accept a registration the API
+   * refuses — the two lists had already drifted: SG, RU, BY, VE, MM and AF are
+   * blocked server-side and were not in the copy that lived in this file. */
+  const restricted = policy.restrictedJurisdictions.includes(form.country);
+  const minAge = policy.jurisdictionMinimumAge[form.country] ?? policy.globalMinimumAge;
 
   const set = <K extends keyof typeof form>(k: K, v: typeof form[K]) => {
     setForm((f) => ({ ...f, [k]: v }));
@@ -111,7 +120,12 @@ export function SignUpForm() {
     if (!/^\+?[\d\s()-]{8,}$/.test(form.phone)) e.phone = "Enter a valid phone number including country code.";
     if (checks.some((c) => !c.ok)) e.password = "Password does not meet all requirements.";
     if (age == null) e.dob = "Enter your date of birth.";
-    else if (age < 18) e.dob = "You must be at least 18 to use Members Trail.";
+    else if (age < minAge) {
+      e.dob =
+        minAge === policy.globalMinimumAge
+          ? `You must be at least ${minAge} to use Members Trail.`
+          : `The minimum age in your jurisdiction is ${minAge}.`;
+    }
     if (!form.country) e.country = "Select your country of residence.";
     else if (restricted) e.country = "Members Trail is not available in this jurisdiction.";
     if (refState === "invalid") e.referral = "That referral code isn't recognised. Clear it or correct it.";
@@ -127,10 +141,50 @@ export function SignUpForm() {
       return;
     }
     setBusy(true);
-    await new Promise((r) => setTimeout(r, 900));
-    setBusy(false);
-    toast.success("Account created", "We've sent codes to your email and phone.");
-    window.location.href = "/verify";
+    try {
+      await register.mutateAsync({
+        email: form.email.trim().toLowerCase(),
+        password: form.password,
+        phone: form.phone.trim(),
+        fullName: form.fullName.trim(),
+        country: form.country,
+        dateOfBirth: form.dob,
+        termsAccepted: form.terms,
+        ...(form.referral.trim() ? { referralCode: form.referral.trim().toUpperCase() } : {}),
+      });
+      toast.success("Account created", "We've sent codes to your email and phone.");
+      /* The email is carried forward so the verify screen knows which address to
+       * resend to without asking for it again. */
+      router.push(`/verify?email=${encodeURIComponent(form.email.trim().toLowerCase())}`);
+    } catch (err) {
+      /* Field-level problems are attached to the field the server names, so the
+       * member sees the message next to the input rather than in a banner far
+       * from the cause. */
+      if (isApiError(err)) {
+        const problems = err.fieldProblems;
+        if (err.code === "PASSWORD_REJECTED") {
+          setErrors((prev) => ({
+            ...prev,
+            password: problems.length > 0 ? problems.join(" ") : humanMessage(err),
+          }));
+        } else if (err.code === "EMAIL_IN_USE") {
+          setErrors((prev) => ({ ...prev, email: "That email is already registered." }));
+        } else if (err.code === "PHONE_IN_USE") {
+          setErrors((prev) => ({ ...prev, phone: "That phone number is already registered." }));
+        } else if (err.code === "JURISDICTION_RESTRICTED") {
+          setErrors((prev) => ({
+            ...prev,
+            country: "Members Trail is not available in this jurisdiction.",
+          }));
+        } else {
+          toast.error("Couldn't create your account", humanMessage(err));
+        }
+      } else {
+        toast.error("Couldn't create your account", humanMessage(err));
+      }
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (

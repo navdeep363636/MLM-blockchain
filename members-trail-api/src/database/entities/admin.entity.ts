@@ -410,7 +410,11 @@ export class ChainEvent extends BaseEntity {
 
 export type OutboundTxKind =
   | "record_commission" | "fund_reward_pool" | "deposit_commission_pool"
-  | "set_kyc_approved" | "clawback" | "transfer" | "create_pool" | "set_pool_active";
+  | "set_kyc_approved" | "clawback" | "transfer" | "create_pool" | "set_pool_active"
+  /* Added with the MTTPayout rail and the completed contract surface. `transfer`
+   * is kept for the direct-token fallback path so historic rows still decode. */
+  | "payout" | "fund_payout_float" | "sweep_payout_float"
+  | "pause" | "unpause" | "set_daily_limit" | "approve" | "set_penalty_receiver";
 
 export type OutboundTxStatus =
   | "queued" | "signing" | "submitted" | "confirmed" | "failed" | "abandoned";
@@ -434,6 +438,8 @@ export class OutboundTransaction extends BaseEntity {
   @Column({ type: "enum", enum: [
     "record_commission", "fund_reward_pool", "deposit_commission_pool",
     "set_kyc_approved", "clawback", "transfer", "create_pool", "set_pool_active",
+    "payout", "fund_payout_float", "sweep_payout_float",
+    "pause", "unpause", "set_daily_limit", "approve", "set_penalty_receiver",
   ] })
   kind!: OutboundTxKind;
 

@@ -7,7 +7,7 @@ import {
   BadgeCheck, FileWarning, HeartHandshake, Landmark, ScrollText, ShieldCheck,
 } from "lucide-react";
 import { Callout } from "@/components/ui";
-import { Reveal } from "@/components/fx";
+import { MeshHaze, Reveal } from "@/components/fx";
 import { cn } from "@/lib/utils";
 import { Container } from "./shell";
 
@@ -42,10 +42,11 @@ const TRUST_LINKS = [
 export function TrustStrip({ className }: { className?: string }) {
   return (
     <section
-      className={cn("relative border-y border-border-subtle bg-surface-inset py-14 sm:py-16", className)}
+      className={cn("scene relative isolate overflow-hidden border-y border-border-subtle bg-surface-inset py-14 sm:py-16", className)}
       aria-labelledby="trust-heading"
     >
-      <Container>
+      <MeshHaze opacity={0.18} />
+      <Container className="relative">
         <Reveal>
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="max-w-2xl">
@@ -60,7 +61,7 @@ export function TrustStrip({ className }: { className?: string }) {
             </div>
             <Link
               href="/legal"
-              className="text-sm font-medium text-[var(--accent-hover)] underline underline-offset-4"
+              className="link-slide text-sm font-medium text-[var(--accent-hover)]"
             >
               Browse the full legal hub
             </Link>
@@ -71,9 +72,13 @@ export function TrustStrip({ className }: { className?: string }) {
               <li key={l.href}>
                 <Link
                   href={l.href}
-                  className="group flex h-full flex-col gap-2 rounded-[var(--radius-card)] border border-border-subtle bg-surface-1 p-4 transition-colors hover:border-[color-mix(in_oklab,var(--accent)_38%,var(--border-default))]"
+                  className="group holo flex h-full flex-col gap-2 rounded-[var(--radius-card)] border border-border-subtle bg-surface-1 p-4
+                             [box-shadow:var(--shadow-e2),inset_0_1px_0_0_var(--rim-light)]
+                             transition-[border-color,box-shadow,transform] duration-[var(--dur-base)] ease-[var(--ease-tide)]
+                             hover:-translate-y-0.5 hover:border-[color-mix(in_oklab,var(--accent)_38%,var(--border-default))]
+                             hover:[box-shadow:var(--shadow-e4),inset_0_1px_0_0_var(--rim-light-strong)]"
                 >
-                  <span className="grid size-9 place-items-center rounded-lg bg-accent-soft text-[var(--accent)] [&>svg]:size-4">
+                  <span className="grid size-9 place-items-center rounded-lg bg-accent-soft text-[var(--accent)] ring-1 ring-inset ring-[var(--accent-ring)] [box-shadow:inset_0_1px_0_0_var(--rim-light)] transition-transform duration-[var(--dur-base)] ease-[var(--ease-tide)] group-hover:scale-105 [&>svg]:size-4">
                     {l.icon}
                   </span>
                   <span className="text-sm font-semibold text-text-primary">{l.title}</span>
@@ -92,7 +97,7 @@ export function TrustStrip({ className }: { className?: string }) {
             ].map((c) => (
               <span
                 key={c.label}
-                className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-3 py-1 text-[11px] font-medium text-text-muted ring-1 ring-inset ring-border-subtle"
+                className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-3 py-1 text-[11px] font-medium text-text-muted ring-1 ring-inset ring-border-subtle [box-shadow:inset_0_1px_0_0_var(--rim-light)]"
               >
                 {c.icon}
                 {c.label}

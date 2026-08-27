@@ -59,12 +59,17 @@ const QUEUED = {
   confirmedAt: null as Date | null,
 };
 
+const RECIPIENT = "0x3333333333333333333333333333333333333333";
+const SOURCE_EVENT_ID =
+  "0x1111111111111111111111111111111111111111111111111111111111111111";
+
 describe("TxSubmitterService", () => {
   let svc: TxSubmitterService;
   let txs: ReturnType<typeof repo>;
   let rpc: {
     canSign: boolean; signer: string; pendingNonce: jest.Mock; gasPrice: jest.Mock;
     send: jest.Mock; receipt: jest.Mock; blockNumber: jest.Mock; explorerTx: jest.Mock;
+    hasAddress: jest.Mock; address: jest.Mock;
   };
   let redis: { withLock: jest.Mock };
   let bus: { publish: jest.Mock };
@@ -80,6 +85,11 @@ describe("TxSubmitterService", () => {
       receipt: jest.fn(async () => null),
       blockNumber: jest.fn(async () => 1_000),
       explorerTx: jest.fn((h: string) => `https://testnet.bscscan.com/tx/${h}`),
+      /* The submitter now resolves which contract a row targets by ADDRESS, so
+       * the fixture's `toAddress` has to belong to a configured contract. The
+       * distributor is the right one: these rows all call recordCommission. */
+      hasAddress: jest.fn((key: string) => key === "referralDistributor"),
+      address: jest.fn(() => "0x2222222222222222222222222222222222222222"),
     };
     redis = { withLock: jest.fn(async (_k: string, _t: number, fn: () => Promise<unknown>) => fn()) };
     bus = { publish: jest.fn() };
@@ -109,8 +119,11 @@ describe("TxSubmitterService", () => {
 
       const row = await svc.enqueue({
         kind: "record_commission",
+        contract: "referralDistributor",
         functionName: "recordCommission",
-        args: [],
+        /* Real arguments: enqueue now proves they encode against the generated
+         * ABI before a row exists, so an empty array is correctly refused. */
+        args: [RECIPIENT, 1, 10n ** 18n, SOURCE_EVENT_ID],
         toAddress: "0x2222222222222222222222222222222222222222",
         idempotencyKey: "commission:cm-1",
       });
@@ -120,13 +133,56 @@ describe("TxSubmitterService", () => {
       expect(rpc.send).not.toHaveBeenCalled();
     });
 
+    it("REFUSES a call that is not on the allowlist, before a row exists", async () => {
+      txs.findOne.mockResolvedValue(null);
+
+      await expect(
+        svc.enqueue({
+          kind: "record_commission",
+          contract: "staking",
+          /* A real function on MTTStaking — deliberately not one the platform
+           * may call, because it moves a member's own tokens. */
+          functionName: "stake",
+          args: [0n, 10n ** 18n],
+          idempotencyKey: "bad:1",
+        }),
+      ).rejects.toThrow(/not in the callable allowlist/);
+
+      expect(txs.save).not.toHaveBeenCalled();
+    });
+
+    it("REFUSES arguments that do not encode against the real ABI", async () => {
+      txs.findOne.mockResolvedValue(null);
+
+      /*
+       * The guard that would have caught the original defect at the call site.
+       * `recordCommission(recipient, sourceEventId, level, amount)` — the
+       * argument order the previous chain layer used — does not encode against
+       * `recordCommission(address,uint8,uint256,bytes32)`.
+       */
+      await expect(
+        svc.enqueue({
+          kind: "record_commission",
+          contract: "referralDistributor",
+          functionName: "recordCommission",
+          args: [RECIPIENT, SOURCE_EVENT_ID, 1, 10n ** 18n],
+          idempotencyKey: "bad:2",
+        }),
+      ).rejects.toThrow(/does not encode/);
+
+      expect(txs.save).not.toHaveBeenCalled();
+    });
+
     it("is idempotent on the domain key — a retried job never queues a second send", async () => {
       txs.findOne.mockResolvedValue({ ...QUEUED });
 
       const row = await svc.enqueue({
         kind: "record_commission",
+        contract: "referralDistributor",
         functionName: "recordCommission",
-        args: [],
+        /* Real arguments: enqueue now proves they encode against the generated
+         * ABI before a row exists, so an empty array is correctly refused. */
+        args: [RECIPIENT, 1, 10n ** 18n, SOURCE_EVENT_ID],
         toAddress: "0x2222222222222222222222222222222222222222",
         idempotencyKey: "commission:cm-1",
       });

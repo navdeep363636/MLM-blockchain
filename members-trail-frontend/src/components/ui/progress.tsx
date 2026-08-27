@@ -15,9 +15,20 @@ export function ProgressBar({
   height?: string;
 }) {
   const pct = max === 0 ? 0 : Math.min(100, Math.max(0, (value / max) * 100));
+  /* A gradient rather than a flat fill, plus a lit leading edge. On a cap meter
+     — the compliance-critical control on this platform — the bright end makes
+     "how close am I" legible at a glance from across a room. */
   const bg = {
-    brand: "bg-[var(--accent)]", good: "bg-good-500",
-    warning: "bg-warning-500", critical: "bg-critical-500",
+    brand: "bg-[linear-gradient(90deg,var(--color-brand-700),var(--accent)_70%,var(--color-brand-300))]",
+    good: "bg-[linear-gradient(90deg,var(--color-good-500),var(--color-good-400))]",
+    warning: "bg-[linear-gradient(90deg,var(--color-warning-500),var(--color-warning-400))]",
+    critical: "bg-[linear-gradient(90deg,var(--color-critical-500),var(--color-critical-400))]",
+  }[tone];
+  const glow = {
+    brand: "var(--accent-ring)",
+    good: "color-mix(in oklab, var(--color-good-500) 45%, transparent)",
+    warning: "color-mix(in oklab, var(--color-warning-500) 45%, transparent)",
+    critical: "color-mix(in oklab, var(--color-critical-500) 50%, transparent)",
   }[tone];
 
   return (
@@ -29,18 +40,30 @@ export function ProgressBar({
         </div>
       )}
       <div
-        className={cn("w-full overflow-hidden rounded-full bg-surface-3", height)}
+        className={cn(
+          "relative w-full overflow-hidden rounded-full bg-surface-inset",
+          "[box-shadow:inset_0_1px_2px_-1px_rgb(0_0_0_/_0.45),inset_0_0_0_1px_var(--border-subtle)]",
+          height,
+        )}
         role="progressbar"
         aria-valuenow={Math.round(pct)}
         aria-valuemin={0}
         aria-valuemax={100}
       >
         <motion.div
-          className={cn("h-full rounded-full", bg)}
+          className={cn("relative h-full rounded-full", bg)}
           initial={{ width: 0 }}
           animate={{ width: `${pct}%` }}
-          transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-        />
+          transition={{ duration: 0.9, ease: [0.32, 0.72, 0, 1] }}
+          style={{ boxShadow: `0 0 12px 0 ${glow}, inset 0 1px 0 0 rgb(255 255 255 / 0.28)` }}
+        >
+          {pct > 2 && pct < 100 && (
+            <span
+              aria-hidden
+              className="absolute right-0 top-0 h-full w-1 rounded-full bg-white/70 blur-[1px]"
+            />
+          )}
+        </motion.div>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import { Controller, Get, HttpCode, Param, ParseUUIDPipe, Post } from "@nestjs/common";
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { CurrentUser, type AuthUser } from "@/common/decorators";
+import { CurrentUser, Idempotent, type AuthUser } from "@/common/decorators";
 import { QuestsService } from "./quests.service";
 import {
   AchievementSummaryResponse, ClaimQuestResponse, QuestListResponse,
@@ -33,6 +33,7 @@ export class QuestsController {
   }
 
   @Post(":id/claim")
+  @Idempotent("quest")
   @HttpCode(200)
   @ApiOperation({
     summary: "Claim a completed quest's reward",

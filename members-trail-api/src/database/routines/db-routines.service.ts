@@ -90,6 +90,22 @@ export interface AdminKpiRow {
   queuedCommissionMtt: string;
 }
 
+export interface MemberCohortRow {
+  periodKey: string;
+  signups: number;
+  verified: number;
+  referred: number;
+  closed: number;
+}
+
+export interface ConversionMonthRow {
+  periodKey: string;
+  rateApplied: string | null;
+  conversions: number;
+  pointsSpent: string;
+  mttCredited: string;
+}
+
 export interface LeaderboardSnapshotRow {
   userId: string;
   score: number;
@@ -224,6 +240,60 @@ export class DbRoutinesService {
     const row = rows[0];
     if (!row) throw new Error("v_admin_kpis returned no row — has the migration been run?");
     return row;
+  }
+
+  /**
+   * Treasury aggregates for a run of recent periods.
+   *
+   * The dashboard charts want a series, and asking for one period at a time was
+   * twelve round trips to draw one line. `periodKey` sorts lexically because it
+   * is `YYYY-MM`, so an ORDER BY on it is chronological with no date parsing.
+   */
+  async treasuryPeriodSeries(months: number): Promise<TreasuryPeriodRow[]> {
+    const rows = await this.ds.query<TreasuryPeriodRow[]>(
+      "SELECT * FROM v_treasury_period ORDER BY periodKey DESC LIMIT ?",
+      [this.windowSize(months)],
+    );
+    return rows.reverse();
+  }
+
+  /** The payout-ratio components for a run of recent periods. */
+  async payoutRatioSeries(months: number): Promise<PayoutRatioRow[]> {
+    const rows = await this.ds.query<PayoutRatioRow[]>(
+      "SELECT * FROM v_payout_ratio ORDER BY periodKey DESC LIMIT ?",
+      [this.windowSize(months)],
+    );
+    return rows.reverse();
+  }
+
+  /** Signup cohorts by month — the denominator for every retention figure. */
+  async memberSignupCohorts(months: number): Promise<MemberCohortRow[]> {
+    const rows = await this.ds.query<MemberCohortRow[]>(
+      "SELECT * FROM v_member_signup_cohort ORDER BY periodKey DESC LIMIT ?",
+      [this.windowSize(months)],
+    );
+    return rows.reverse();
+  }
+
+  /** Points-to-MTT conversion volume by month. */
+  async conversionMonthly(months: number): Promise<ConversionMonthRow[]> {
+    const rows = await this.ds.query<ConversionMonthRow[]>(
+      "SELECT * FROM v_conversion_monthly ORDER BY periodKey DESC LIMIT ?",
+      [this.windowSize(months)],
+    );
+    return rows.reverse();
+  }
+
+  /**
+   * Clamps a caller's month count.
+   *
+   * A chart asking for 10 000 months is a bug, not a request, and an unbounded
+   * LIMIT on a view that scans a ledger is how one dashboard read becomes an
+   * outage.
+   */
+  private windowSize(months: number): number {
+    if (!Number.isFinite(months)) return 12;
+    return Math.min(Math.max(Math.trunc(months), 1), 60);
   }
 
   /* ==================================================================== *

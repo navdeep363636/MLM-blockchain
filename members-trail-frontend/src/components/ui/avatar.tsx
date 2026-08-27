@@ -37,6 +37,9 @@ export function Avatar({
     <span
       className={cn(
         "relative grid shrink-0 place-items-center overflow-hidden rounded-full font-semibold text-white select-none",
+        /* Inset highlight top, inset shade bottom: the same two-line trick the
+           token faces use. It turns a coloured circle into a sphere. */
+        "[box-shadow:inset_0_1px_1px_rgb(255_255_255_/_0.3),inset_0_-2px_3px_rgb(0_0_0_/_0.25),var(--shadow-e1)]",
         sizes[size],
         ring && "ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-[var(--surface-1)]",
         className,
@@ -48,8 +51,13 @@ export function Avatar({
         // eslint-disable-next-line @next/next/no-img-element
         <img src={src} alt={name} className="size-full object-cover" />
       ) : (
-        initials(name) || "?"
+        <span className="relative">{initials(name) || "?"}</span>
       )}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0 rounded-full"
+        style={{ background: "radial-gradient(55% 40% at 35% 20%, rgb(255 255 255 / 0.28), transparent 70%)" }}
+      />
     </span>
   );
 }
@@ -58,13 +66,13 @@ export function AvatarStack({ names, max = 4, size = "sm" }: { names: string[]; 
   const shown = names.slice(0, max);
   const rest = names.length - shown.length;
   return (
-    <div className="flex items-center">
+    <div className="flex items-center [&>*]:relative">
       {shown.map((n, i) => (
         <Avatar
           key={n + i}
           name={n}
           size={size}
-          className="-ml-2 ring-2 ring-[var(--surface-1)] first:ml-0"
+          className="-ml-2 ring-2 ring-[var(--surface-1)] transition-transform duration-[var(--dur-quick)] ease-[var(--ease-tide)] first:ml-0 hover:z-10 hover:-translate-y-0.5 hover:scale-105"
         />
       ))}
       {rest > 0 && (

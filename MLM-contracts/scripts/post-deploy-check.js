@@ -34,6 +34,9 @@ async function main() {
   const dist = await ethers.getContractAt("MTTReferralDistributor", a.MTTReferralDistributor);
   const teamVest = await ethers.getContractAt("MTTVesting", a.TeamVesting);
   const advVest = await ethers.getContractAt("MTTVesting", a.AdvisorsVesting);
+  const payout = a.MTTPayout ? await ethers.getContractAt("MTTPayout", a.MTTPayout) : null;
+
+  const isMainnetLike = network.config.chainId === 56;
 
   console.log("=".repeat(70));
   console.log("Post-Deployment Verification —", network.name);
@@ -91,6 +94,76 @@ async function main() {
     check("staking contract is solvent for all staked principal",
       (await token.balanceOf(a.MTTStaking)) >= totalStakedAll,
       `held=${ethers.formatEther(await token.balanceOf(a.MTTStaking))} staked=${ethers.formatEther(totalStakedAll)}`);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Payout rail — the contract that holds spendable float
+   * ------------------------------------------------------------------ */
+  console.log("\n[Payout rail]");
+  if (!payout) {
+    console.log("  INFO  no MTTPayout in this deployment — withdrawals would fall back to a");
+    console.log("        direct token transfer, which requires the relayer key to hold the");
+    console.log("        rewards pool. Redeploy to include the rail.");
+  } else {
+    const dailyLimit = await payout.dailyLimit();
+    const totalPaid = await payout.totalPaid();
+    const float = await payout.float();
+
+    check("payout rail has a non-zero daily ceiling", dailyLimit > 0n,
+      `dailyLimit=${ethers.formatEther(dailyLimit)}`);
+
+    /* The ceiling exists to bound a compromised hot key. A limit larger than the
+     * float it guards is not a limit. */
+    check(
+      "daily ceiling is not larger than the float it protects",
+      float === 0n || dailyLimit <= float,
+      `limit ${ethers.formatEther(dailyLimit)} vs float ${ethers.formatEther(float)}`,
+    );
+
+    check("payout rail starts unpaused", (await payout.paused()) === false);
+    check("nothing paid yet on a fresh deployment", totalPaid === 0n,
+      `totalPaid=${ethers.formatEther(totalPaid)}`);
+
+    /* The separation the contract exists to create: the payer must NOT be able
+     * to fund, sweep, pause or grant. If the relayer key holds treasury or
+     * guardian rights, a compromise of it is unbounded again. */
+    const payerAddr = dep.configuredWallets.payoutRelayer ?? dep.deployer;
+    const PAYER = await payout.PAYER_ROLE();
+    const TREASURY = await payout.TREASURY_ROLE();
+    const GUARDIAN = await payout.GUARDIAN_ROLE();
+    const ADMIN = ethers.ZeroHash;
+
+    check("relayer holds PAYER_ROLE", await payout.hasRole(PAYER, payerAddr));
+
+    const payerIsPrivileged =
+      (await payout.hasRole(TREASURY, payerAddr)) ||
+      (await payout.hasRole(GUARDIAN, payerAddr)) ||
+      (await payout.hasRole(ADMIN, payerAddr));
+
+    if (isMainnetLike) {
+      check(
+        "relayer holds ONLY PAYER_ROLE — no treasury, guardian or admin rights",
+        !payerIsPrivileged,
+        "a payer that can also fund or pause defeats the separation this contract exists for",
+      );
+    } else {
+      console.log(
+        `  INFO  relayer also privileged: ${payerIsPrivileged} ` +
+        "(acceptable on a local/test chain where one key plays every role)",
+      );
+      console.log("        this MUST be false before mainnet");
+    }
+
+    /* No escape hatch: sweep sends to msg.sender under TREASURY_ROLE, so there
+     * is no parameter an attacker could aim at their own address. */
+    const fns = payout.interface.fragments
+      .filter((f) => f.type === "function")
+      .map((f) => f.name);
+    check(
+      "no arbitrary-destination withdraw function exists",
+      !fns.some((n) => /^(withdraw|emergencyWithdraw|rescue|drain)$/i.test(n)),
+      fns.join(", "),
+    );
   }
 
   console.log("\n[Access control]");
