@@ -140,12 +140,29 @@ export function StarField({
     };
 
     let last = 0;
+    let running = false;
+
     const loop = (now: number) => {
       /* Clamp dt: after a tab has been backgrounded, `now - last` can be
          minutes, which would teleport every mote past the camera at once. */
       const dt = Math.min(48, last ? now - last : 16);
       last = now;
-      if (visible && !document.hidden) draw(dt);
+      if (!visible || document.hidden) {
+        /* Park the loop instead of re-arming it every frame. The old code
+         * skipped `draw` but still scheduled the next frame forever, so an
+         * off-screen or backgrounded field kept waking the compositor. */
+        running = false;
+        raf = 0;
+        return;
+      }
+      draw(dt);
+      raf = requestAnimationFrame(loop);
+    };
+
+    const start = () => {
+      if (running || reduce) return;
+      running = true;
+      last = 0;
       raf = requestAnimationFrame(loop);
     };
 
@@ -155,21 +172,35 @@ export function StarField({
       py = (e.clientY / window.innerHeight - 0.5) * 2;
     };
 
-    const io = new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; }, { rootMargin: "120px" });
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        visible = entry.isIntersecting;
+        if (visible) start();
+      },
+      { rootMargin: "120px" },
+    );
     io.observe(wrap);
 
     const ro = new ResizeObserver(resize);
     ro.observe(wrap);
 
+    const onVisibility = () => { if (!document.hidden) start(); };
+    document.addEventListener("visibilitychange", onVisibility);
+
     resize();
-    raf = requestAnimationFrame(loop);
-    window.addEventListener("pointermove", onPointer, { passive: true });
+    start();
+    /* Only attach the pointer listener when the field actually reacts to it.
+     * It was previously registered unconditionally and the flag checked inside
+     * the handler, so every non-interactive field still took a callback on
+     * every pointer move. */
+    if (interactive) window.addEventListener("pointermove", onPointer, { passive: true });
 
     return () => {
-      cancelAnimationFrame(raf);
+      if (raf) cancelAnimationFrame(raf);
       io.disconnect();
       ro.disconnect();
-      window.removeEventListener("pointermove", onPointer);
+      document.removeEventListener("visibilitychange", onVisibility);
+      if (interactive) window.removeEventListener("pointermove", onPointer);
     };
   }, [reduce, density, speed, depth, interactive]);
 
@@ -184,12 +215,29 @@ export function StarField({
 /*  CSS layers                                                                 */
 /* -------------------------------------------------------------------------- */
 
-/** Four soft coloured lights. The base atmosphere for any dark section. */
-export function MeshHaze({ className, opacity = 1 }: { className?: string; opacity?: number }) {
+/**
+ * Four soft coloured lights. The base atmosphere for any dark section.
+ *
+ * `drift` is OPT-IN, and the two app shells do not opt in.
+ *
+ * This element is mounted by app-shell and public-shell, i.e. on every route in
+ * the product. `mesh-haze` paints four radial gradients up to 58rem x 34rem;
+ * animating `drift-3d` on top of that kept one very large composited layer
+ * repainting for the entire life of the session, on every page, behind content
+ * that is mostly opaque anyway. Sections that genuinely want the movement — a
+ * marketing hero — pass `drift`.
+ */
+export function MeshHaze({
+  className, opacity = 1, drift = false,
+}: { className?: string; opacity?: number; drift?: boolean }) {
   return (
     <div
       aria-hidden
-      className={cn("pointer-events-none absolute inset-0 mesh-haze animate-[drift-3d_26s_ease-in-out_infinite_alternate] motion-reduce:animate-none", className)}
+      className={cn(
+        "pointer-events-none absolute inset-0 mesh-haze",
+        drift && "animate-[drift-3d_26s_ease-in-out_infinite_alternate] motion-reduce:animate-none",
+        className,
+      )}
       style={{ opacity }}
     />
   );

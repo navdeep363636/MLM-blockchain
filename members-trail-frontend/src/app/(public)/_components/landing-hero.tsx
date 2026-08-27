@@ -171,7 +171,7 @@ export function LandingHero() {
             }}
             aria-hidden
           >
-            <TokenHelix count={15} radius={168} rise={38} turn={33} />
+            <TokenHelix count={10} radius={168} rise={38} turn={33} />
 
             {/* A ring on the floor beneath the helix, so it reads as standing
                 in the scene rather than floating in front of it. */}

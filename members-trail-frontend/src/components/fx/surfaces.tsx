@@ -190,14 +190,14 @@ export function Sheen({ trigger, className }: { trigger: unknown; className?: st
       className={cn("pointer-events-none absolute inset-0 rounded-[inherit] overflow-hidden", className)}
       initial={{ opacity: 1 }}
       animate={{ opacity: 0 }}
-      transition={{ duration: 0.9, ease: "linear" }}
+      transition={{ duration: 0.42, ease: "linear" }}
     >
       <motion.span
         className="absolute inset-y-0 w-1/3"
         style={{ background: "linear-gradient(90deg, transparent, rgb(255 255 255 / 0.16), transparent)" }}
         initial={{ x: "-120%" }}
         animate={{ x: "320%" }}
-        transition={{ duration: 0.85, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
       />
     </motion.span>
   );
