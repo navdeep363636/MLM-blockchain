@@ -45,11 +45,20 @@ export interface NavLinkProps {
   /** Where the pending indicator goes. Defaults to after the children. */
   indicatorClassName?: string;
   showIndicator?: boolean;
+  /**
+   * Passed straight to `next/link`. Leave it alone for one-off links; pass
+   * `false` for a list of links that are all in the viewport at once, such as a
+   * sidebar. Next prefetches every Link it can see as soon as the page loads,
+   * which for the dashboard sidebar meant ~8 route chunks landing between 1.7s
+   * and 2.1s on a cold /admin — while the page's own data was still in flight.
+   * RoutePrefetcher warms the same routes on pointer intent instead.
+   */
+  prefetch?: boolean;
 }
 
 export function NavLink({
   href, children, className, activeClassName, active, title,
-  onNavigate, indicatorClassName, showIndicator = true,
+  onNavigate, indicatorClassName, showIndicator = true, prefetch,
 }: NavLinkProps) {
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLAnchorElement>) => {
@@ -74,6 +83,7 @@ export function NavLink({
     <Link
       href={href}
       title={title}
+      prefetch={prefetch}
       onClick={handleClick}
       data-active={active || undefined}
       className={cn("nav-link", className, active && activeClassName)}

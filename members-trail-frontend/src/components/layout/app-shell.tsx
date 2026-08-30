@@ -12,7 +12,8 @@ import {
 import { cn } from "@/lib/utils";
 import type { NavGroup } from "@/lib/nav";
 import { Avatar, Badge, Dropdown, KycBadge } from "@/components/ui";
-import { WalletConnectButton, MockDataBanner, NetworkGuard } from "@/components/web3";
+import { MockDataBanner } from "@/components/web3/mock-data-banner";
+import { ShellWalletButton, ShellNetworkGuard } from "@/components/web3/shell-wallet";
 import { useCurrentUser, useNotifications } from "@/lib/hooks/use-data";
 import { MeshHaze, PageTransition } from "@/components/fx";
 import { NavLink } from "./nav-link";
@@ -47,6 +48,8 @@ function NavSection({
         href={it.href}
         active={active}
         onNavigate={onNavigate}
+        /* The whole sidebar is in the viewport at load. See NavLinkProps.prefetch. */
+        prefetch={false}
         title={collapsed ? it.label : undefined}
         className={cn(
           "group relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium",
@@ -86,6 +89,7 @@ function NavSection({
               active={active}
               title={it.label}
               onNavigate={onNavigate}
+              prefetch={false}
               showIndicator={false}
               className="flex items-center justify-center rounded-xl py-2.5 text-text-muted transition-colors hover:bg-surface-2"
               activeClassName="bg-accent-soft text-[var(--accent-hover)]"
@@ -133,6 +137,7 @@ function NavSection({
                       href={it.href}
                       active={active}
                       onNavigate={onNavigate}
+                      prefetch={false}
                       className={cn(
                         "group relative flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm",
                         "transition-[background-color,color,transform] duration-[var(--dur-quick)] ease-[var(--ease-tide)]",
@@ -275,7 +280,7 @@ export function AppShell({
       </AnimatePresence>
 
       <div className={cn("transition-[padding] duration-300", collapsed ? "lg:pl-[4.5rem]" : "lg:pl-[16.5rem]")}>
-        <NetworkGuard />
+        <ShellNetworkGuard />
         <MockDataBanner />
 
         <header
@@ -317,7 +322,7 @@ export function AppShell({
             <ThemeToggle />
 
             <div className="hidden sm:block">
-              <WalletConnectButton compact />
+              <ShellWalletButton compact />
             </div>
 
             <Dropdown
