@@ -126,8 +126,11 @@ function useAuthedResource<T>(
   fallback: T,
   opts: Opts<T> = {},
 ): Resource<T> {
-  const { phase } = useAuth();
-  const authed = phase === "authenticated";
+  const { phase, sessionReady } = useAuth();
+  /* Gate on the bearer token, not on the profile. `/users/me` runs in parallel
+   * with these requests, so waiting for `phase` to reach "authenticated" costs
+   * every authenticated screen one extra round trip before it starts loading. */
+  const authed = sessionReady;
   const res = useResource(key, fetcher, fallback, {
     ...opts,
     enabled: authed && opts.enabled !== false,
@@ -136,7 +139,7 @@ function useAuthedResource<T>(
     ...res,
     /* While the session is still resolving, report loading rather than "empty".
      * Otherwise every authenticated screen flashes its empty state on load. */
-    isLoading: phase === "loading" || (authed && res.isLoading),
+    isLoading: (phase === "loading" && !authed) || (authed && res.isLoading),
   };
 }
 
@@ -251,8 +254,9 @@ export const Q = {
  * a hook built on a spec behaves identically to one written out longhand.
  */
 function useSpec<T>(spec: QuerySpec<T>, fallback: T, opts: Opts<T> = {}): Resource<T> {
-  const { phase } = useAuth();
-  const signedIn = phase === "authenticated";
+  const { phase, sessionReady } = useAuth();
+  /* See `useAuthedResource` — the token, not the profile, is what a request needs. */
+  const signedIn = sessionReady;
   const res = useResource(spec.queryKey, spec.queryFn, fallback, {
     ...(spec.staleTime === undefined ? {} : { staleTime: spec.staleTime }),
     ...opts,
@@ -261,7 +265,7 @@ function useSpec<T>(spec: QuerySpec<T>, fallback: T, opts: Opts<T> = {}): Resour
   if (!spec.authed) return res;
   /* While the session is still resolving, report loading rather than "empty" —
      otherwise every authenticated screen flashes its empty state on load. */
-  return { ...res, isLoading: phase === "loading" || (signedIn && res.isLoading) };
+  return { ...res, isLoading: (phase === "loading" && !signedIn) || (signedIn && res.isLoading) };
 }
 
 /* ================================ Player scope ============================ */
