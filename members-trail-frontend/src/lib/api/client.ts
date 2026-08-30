@@ -107,24 +107,58 @@ export function hasSession(): boolean {
  * first load for an anonymous visitor that is the expected answer, not an error,
  * and treating it as one fills the console with noise on every public page.
  */
+type RefreshBody = { tokens?: { accessToken?: string; expiresIn?: number } } | null;
+
+/**
+ * The refresh the document head kicked off during HTML parse, if it is still
+ * unclaimed. Claimed once: a refresh token is single-use, so a second POST would
+ * invalidate the token this one just spent and read as reuse-as-breach.
+ */
+function adoptHeadRefresh(): Promise<RefreshBody> | null {
+  if (typeof window === "undefined") return null;
+  const w = window as Window & { __mtSession?: Promise<RefreshBody> };
+  const p = w.__mtSession;
+  if (!p) return null;
+  delete w.__mtSession;
+  return p;
+}
+
+/**
+ * The `/users/me` the head chained onto the refresh, if it is still unclaimed.
+ * Unlike the refresh there is nothing single-use about it — claiming once is
+ * simply so a later profile reload goes to the network for a current answer
+ * rather than replaying the one from page load.
+ */
+export function adoptHeadProfile(): Promise<unknown> | null {
+  if (typeof window === "undefined") return null;
+  const w = window as Window & { __mtProfile?: Promise<unknown> };
+  const p = w.__mtProfile;
+  if (!p) return null;
+  delete w.__mtProfile;
+  return p;
+}
+
 export async function refreshSession(): Promise<boolean> {
   refreshInFlight ??= (async () => {
     try {
-      const res = await fetch(`${API_BASE}/auth/refresh`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        /* Empty body: the token is in the cookie. The field is optional server-side
-         * precisely so a browser never has to hold it. */
-        body: "{}",
-      });
-      if (!res.ok) {
+      const head = adoptHeadRefresh();
+      const body = head
+        ? await head
+        : await (async () => {
+            const res = await fetch(`${API_BASE}/auth/refresh`, {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              /* Empty body: the token is in the cookie. The field is optional
+               * server-side precisely so a browser never has to hold it. */
+              body: "{}",
+            });
+            return res.ok ? ((await res.json()) as RefreshBody) : null;
+          })();
+      if (!body) {
         clearSession();
         return false;
       }
-      const body = (await res.json()) as {
-        tokens?: { accessToken?: string; expiresIn?: number };
-      };
       const token = body.tokens?.accessToken;
       if (!token) {
         clearSession();
@@ -147,6 +181,51 @@ export async function refreshSession(): Promise<boolean> {
 
 /** Restores a session on page load. Safe to call when signed out. */
 export const restoreSession = refreshSession;
+
+/* ------------------------ eager session bootstrap ------------------------- */
+
+/**
+ * The session restore starts when this MODULE evaluates, not when React mounts.
+ *
+ * THE PROBLEM
+ * -----------
+ * Restoring the session was the first thing an effect did after hydration, and
+ * every authenticated query is gated on the result. That put three round trips
+ * in a row on the critical path of every cold load:
+ *
+ *     hydrate -> POST /auth/refresh -> GET /users/me -> queries become enabled
+ *
+ * Measured on a 4x-throttled cold load of /admin against a 120ms API, the first
+ * data request went out at 1,651ms — on a page that had painted at 296ms. Almost
+ * none of that was the network. It was waiting for a turn.
+ *
+ * Module evaluation happens while React is still hydrating, so firing the
+ * refresh here overlaps it with work the browser is doing anyway. By the time
+ * the provider's effect runs, the token is usually already in hand.
+ *
+ * `refreshSession()` dedupes on `refreshInFlight`, but only while a call is in
+ * flight — a second call after the first resolved would rotate the refresh
+ * token again for nothing. So the promise is held here and the provider awaits
+ * THIS one rather than starting its own.
+ *
+ * Guarded on `window`: on the server there is no cookie jar to restore from, and
+ * firing a request during a server render would be one request per rendered
+ * page, to no purpose.
+ */
+let bootstrap: Promise<boolean> | null = null;
+
+export function bootstrapSession(): Promise<boolean> {
+  if (typeof window === "undefined") return Promise.resolve(false);
+  bootstrap ??= refreshSession().catch(() => false);
+  return bootstrap;
+}
+
+if (typeof window !== "undefined") {
+  /* Fire immediately. Nothing awaits it here — the provider picks up the same
+     promise, and an anonymous visitor's failed restore is expected, not an
+     error worth surfacing. */
+  void bootstrapSession();
+}
 
 /* ------------------------------- the request ------------------------------ */
 

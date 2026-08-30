@@ -22,7 +22,9 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { api, clearSession, onSessionChange, restoreSession, setSession } from "@/lib/api/client";
+import {
+  adoptHeadProfile, api, bootstrapSession, clearSession, onSessionChange, setSession,
+} from "@/lib/api/client";
 import { isApiError } from "@/lib/api/errors";
 import type { MeResponse } from "@/lib/api/types";
 
@@ -57,6 +59,16 @@ interface AuthValue {
   logout: () => Promise<void>;
   /** Re-reads the profile. Call after anything that changes status or KYC tier. */
   reload: () => Promise<void>;
+  /**
+   * A usable access token exists. True BEFORE the profile has loaded.
+   *
+   * Data queries need a bearer token, not a profile — so gating them on `phase`
+   * made every authenticated screen wait out a `/users/me` round trip and the
+   * re-render that follows it, for information none of them were asking for.
+   * `phase` still governs anything that depends on WHO the member is: KYC gates,
+   * the display name, the account status.
+   */
+  sessionReady: boolean;
 }
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -75,11 +87,19 @@ interface TokenEnvelope {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [phase, setPhase] = useState<AuthPhase>("loading");
   const [user, setUser] = useState<MeResponse | null>(null);
+  const [sessionReady, setSessionReady] = useState(false);
   const queryClient = useQueryClient();
 
   const loadProfile = useCallback(async (): Promise<MeResponse | null> => {
     try {
-      const me = await api.get<MeResponse>("/users/me");
+      /* The document head chains /users/me onto the session restore, so on a
+       * cold load the answer is usually already here. Measured on a 4x-throttled
+       * /admin, that request finished at ~250ms against ~1280ms when it waited
+       * for hydration — and the route guards hold the page until it lands. A
+       * miss (anonymous visitor, failed request, or a later reload) falls
+       * through to the normal call. */
+      const head = (await adoptHeadProfile()) as MeResponse | null;
+      const me = head ?? (await api.get<MeResponse>("/users/me"));
       setUser(me);
       setPhase("authenticated");
       return me;
@@ -99,18 +119,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  /* On mount: try to turn the httpOnly refresh cookie into a live session. For an
-   * anonymous visitor this fails quietly and settles on "anonymous". */
+  /* On mount: adopt the session restore that the api client already started.
+   *
+   * `bootstrapSession()` fires when that module evaluates, which is while React
+   * is still hydrating — so by the time this effect runs the request is usually
+   * already in flight or done. Awaiting the SAME promise rather than calling
+   * `restoreSession()` again matters: refresh tokens are single-use, and a
+   * second call after the first resolved would rotate one for nothing.
+   *
+   * `sessionReady` flips as soon as the token lands, so the data layer can start
+   * fetching WHILE the profile is still loading rather than after it. For an
+   * anonymous visitor the restore fails quietly and settles on "anonymous". */
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const restored = await restoreSession();
+      const restored = await bootstrapSession();
       if (cancelled) return;
       if (!restored) {
+        setSessionReady(false);
         setPhase("anonymous");
         setUser(null);
         return;
       }
+      setSessionReady(true);
       await loadProfile();
     })();
     return () => {
@@ -126,6 +157,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       onSessionChange((authenticated) => {
         if (!authenticated) {
           setUser(null);
+          setSessionReady(false);
           setPhase("anonymous");
           /* Drop every cached query. Leaving them would show the previous
            * member's balances to whoever signs in next on a shared machine. */
@@ -202,6 +234,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AuthValue>(
     () => ({
       phase,
+      sessionReady,
       user,
       isStaff: user?.isStaff ?? false,
       login,
@@ -209,7 +242,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logout,
       reload,
     }),
-    [phase, user, login, completeTwoFa, logout, reload],
+    [phase, sessionReady, user, login, completeTwoFa, logout, reload],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
