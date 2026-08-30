@@ -106,8 +106,15 @@ export function CommissionView() {
    *  upline exists, which compounds with coverage. */
   const effectiveRate = activeLevels.reduce((sum, rate, i) => sum + (rate / 100) * Math.pow(cov, i), 0);
 
+  /* `eligible` starts from `cfg.eligibleTypes`, which is server config — a
+     trigger the server has and this table does not is a deploy-order problem,
+     not a reason to blank the page. Unknown types contribute nothing and the
+     rest of the simulator still works. */
   const eligibleRevenueOf = (row: Record<string, number | string>) =>
-    eligible.reduce((sum, t) => sum + Number(row[TRIGGER_META[t].revenueKey] ?? 0), 0);
+    eligible.reduce((sum, t) => {
+      const key = TRIGGER_META[t]?.revenueKey;
+      return key ? sum + Number(row[key] ?? 0) : sum;
+    }, 0);
 
   const backtest = useMemo(
     () =>
@@ -622,7 +629,7 @@ export function CommissionView() {
             <DetailRow label="Max depth" value={`${cfg.maxDepth} → ${maxDepth} levels`} />
             <DetailRow
               label="Eligible types"
-              value={eligible.map((t) => TRIGGER_META[t].label).join(", ") || "None"}
+              value={eligible.map((t) => TRIGGER_META[t]?.label ?? t).join(", ") || "None"}
             />
             <DetailRow
               label="Monthly cap"
