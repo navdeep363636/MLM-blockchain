@@ -33,6 +33,14 @@ const nextConfig: NextConfig = {
      * be fresher is invalidated by the socket already.
      */
     staleTimes: { dynamic: 30, static: 300 },
+
+    /*
+     * Every /app page pulls in RainbowKit/wagmi plus a `components/ui` barrel
+     * and a dozen lucide-react icons. Without this, dev compiles trace the
+     * full graph of each package on first visit to a route (10s+ per route);
+     * this makes the compiler only trace the specific symbols imported.
+     */
+    optimizePackageImports: ["lucide-react", "recharts", "@rainbow-me/rainbowkit"],
   },
 
   webpack: (config) => {
