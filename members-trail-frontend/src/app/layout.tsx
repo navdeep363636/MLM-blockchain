@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
+import { API_BASE, API_ORIGIN } from "@/lib/api/client";
 
 export const metadata: Metadata = {
   title: {
@@ -30,6 +31,34 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" data-theme="dark" suppressHydrationWarning>
+      <head>
+        {/* Preconnect so the refresh below does not pay for DNS + TLS itself. */}
+        <link rel="preconnect" href={API_ORIGIN} crossOrigin="use-credentials" />
+        {/* Starts the session restore during HTML parse instead of after hydration.
+            Measured on a 4x-throttled cold /admin: the module-level bootstrap in
+            client.ts could not run until the app bundle evaluated, which put
+            POST /auth/refresh at 593ms on a document whose scripts had all landed
+            by 217ms. Every authenticated request on the page queues behind it.
+            The promise is parked on window and adopted by refreshSession(), so
+            React never issues a second one - refresh tokens are single-use. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              `try{var B=${JSON.stringify(API_BASE)};` +
+              `var s=fetch(B+"/auth/refresh",{method:"POST",credentials:"include",` +
+              `headers:{"Content-Type":"application/json"},body:"{}"})` +
+              `.then(function(r){return r.ok?r.json():null}).catch(function(){return null});` +
+              `window.__mtSession=s;` +
+              /* Chained here rather than left to React: the guards on every
+                 dashboard route hold their content until the profile lands, so
+                 this one request is what the reader is waiting on. */
+              `window.__mtProfile=s.then(function(b){var t=b&&b.tokens&&b.tokens.accessToken;if(!t)return null;` +
+              `return fetch(B+"/users/me",{headers:{Authorization:"Bearer "+t}})` +
+              `.then(function(r){return r.ok?r.json():null})}).catch(function(){return null});` +
+              `}catch(e){}`,
+          }}
+        />
+      </head>
       <body>
         <a
           href="#main"
