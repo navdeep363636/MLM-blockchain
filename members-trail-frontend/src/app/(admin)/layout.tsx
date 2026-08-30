@@ -1,5 +1,5 @@
 import { AppShell } from "@/components/layout";
-import { Web3Provider } from "@/components/web3/web3-provider";
+import { DeferredWeb3Provider } from "@/components/web3/deferred-web3-provider";
 import { adminNav } from "@/lib/nav";
 import { RequireStaff } from "@/lib/auth/guard";
 
@@ -16,10 +16,10 @@ import { RequireStaff } from "@/lib/auth/guard";
  */
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
-    <Web3Provider>
+    <DeferredWeb3Provider>
       <AppShell nav={adminNav} variant="admin">
         <RequireStaff>{children}</RequireStaff>
       </AppShell>
-    </Web3Provider>
+    </DeferredWeb3Provider>
   );
 }
