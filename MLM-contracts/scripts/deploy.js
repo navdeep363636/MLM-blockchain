@@ -176,6 +176,24 @@ async function main() {
   // Save the deployment record
   const outDir = path.join(__dirname, "..", "deployments");
   fs.mkdirSync(outDir, { recursive: true });
+  /*
+   * The record carries the EXACT constructor arguments for every instance, not
+   * just the addresses.
+   *
+   * BscScan verification replays the constructor, so a missing argument makes a
+   * contract unverifiable after the fact. Two of them cannot be reconstructed
+   * from configuration alone:
+   *
+   *   - The vesting `start` is the BLOCK TIMESTAMP when VESTING_START_UNIX is
+   *     unset, so it exists nowhere except in this run.
+   *   - The token's team and advisor positions hold the DEPLOYER address, not
+   *     the beneficiaries — the allocations mint here and are forwarded to the
+   *     vesting contracts immediately afterwards. Verifying with the
+   *     beneficiary addresses produces a bytecode mismatch and a confusing
+   *     afternoon.
+   *
+   * scripts/verify.js reads this block and passes it through verbatim.
+   */
   const record = {
     network: network.name,
     chainId: network.config.chainId,
@@ -183,6 +201,42 @@ async function main() {
     deployer: deployer.address,
     addresses: deployed,
     configuredWallets: ADDRESSES,
+    vesting: {
+      start: now,
+      startIso: new Date(now * 1000).toISOString(),
+      startSource: process.env.VESTING_START_UNIX ? "VESTING_START_UNIX" : "block timestamp",
+      team: { cliffSeconds: 12 * MONTH, durationSeconds: 36 * MONTH },
+      advisors: { cliffSeconds: 6 * MONTH, durationSeconds: 24 * MONTH },
+    },
+    payout: {
+      dailyLimitWei: PAYOUT_DAILY_LIMIT.toString(),
+      dailyLimitMtt: ethers.formatEther(PAYOUT_DAILY_LIMIT),
+    },
+    constructorArgs: {
+      MTTToken: [
+        ADDRESSES.admin,
+        ADDRESSES.rewardsPool,
+        ADDRESSES.treasuryReserve,
+        deployer.address,
+        ADDRESSES.liquidityWallet,
+        ADDRESSES.marketingWallet,
+        deployer.address,
+      ],
+      TeamVesting: [
+        ADDRESSES.teamBeneficiary, deployed.MTTToken, now, 12 * MONTH, 36 * MONTH,
+      ],
+      AdvisorsVesting: [
+        ADDRESSES.advisorsBeneficiary, deployed.MTTToken, now, 6 * MONTH, 24 * MONTH,
+      ],
+      MTTStaking: [deployed.MTTToken, ADDRESSES.admin, ADDRESSES.treasuryReserve],
+      MTTReferralDistributor: [deployed.MTTToken, ADDRESSES.admin],
+      MTTPayout: [
+        deployed.MTTToken,
+        ADDRESSES.admin,
+        ADDRESSES.payoutRelayer,
+        PAYOUT_DAILY_LIMIT.toString(),
+      ],
+    },
   };
   fs.writeFileSync(
     path.join(outDir, `${network.name}.json`),
