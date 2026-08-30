@@ -34,7 +34,7 @@
 
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { prefetchRoute, specsForRoute } from "@/lib/data/route-prefetch";
 import { useAuth } from "@/lib/auth/auth-context";
@@ -42,10 +42,16 @@ import { useAuth } from "@/lib/auth/auth-context";
 /** Re-arm a route at most this often, however many times it is hovered. */
 const REARM_MS = 10_000;
 
+/** Longest we hold a warm-up back waiting for the page to go quiet. */
+const MAX_QUIET_WAIT_MS = 5_000;
+
 /** Where people go next from each shell's landing page. */
 const WARM_ON_MOUNT: Record<string, readonly string[]> = {
   "/app": ["/app/wallet", "/app/staking"],
-  "/admin": ["/admin/users"],
+  /* /admin deliberately warms nothing. Its one likely destination, /admin/users,
+     opens on `adminMembers` — five paginated requests — which is far too much to
+     spend on a guess. Hover intent covers it, and a member list is the kind of
+     page a reader arrives at deliberately rather than by reflex. */
 };
 
 function idle(fn: () => void): () => void {
@@ -59,11 +65,61 @@ function idle(fn: () => void): () => void {
   return () => window.clearTimeout(id);
 }
 
+/**
+ * Runs `fn` once the query cache is quiet, so speculative work for the *next*
+ * route never competes with the current page's own requests. Browsers cap a
+ * single origin at six concurrent HTTP/1.1 connections, so a warm-up fired while
+ * the dashboard is still fetching does not run alongside it — it queues in front
+ * of the tail of it. Capped so a page that polls forever still warms eventually.
+ */
+function whenQuiet(qc: QueryClient, fn: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  let cancelIdle: (() => void) | null = null;
+  let done = false;
+
+  const run = () => {
+    if (done) return;
+    done = true;
+    unsubscribe();
+    window.clearTimeout(cap);
+    cancelIdle = idle(fn);
+  };
+
+  const check = () => {
+    if (qc.isFetching() === 0) run();
+  };
+
+  const unsubscribe = qc.getQueryCache().subscribe(check);
+  const cap = window.setTimeout(run, MAX_QUIET_WAIT_MS);
+  check();
+
+  return () => {
+    done = true;
+    unsubscribe();
+    window.clearTimeout(cap);
+    cancelIdle?.();
+  };
+}
+
 export function RoutePrefetcher() {
   const router = useRouter();
   const qc = useQueryClient();
-  const { phase } = useAuth();
+  const { phase, sessionReady } = useAuth();
   const signedIn = phase === "authenticated";
+
+  /* Warm the route the reader is ALREADY on, the instant the token lands.
+   *
+   * The hover map exists for the route they are going to; this is the same
+   * registry pointed at the current path. It matters because a page's own hooks
+   * live inside its components, several of which arrive as separate chunks -
+   * measured on a cold /admin, the first data request went out at 1596ms on a
+   * document whose scripts had landed by 217ms. Firing the specs here puts them
+   * on the wire as soon as there is a credential to send, so the components
+   * mount into a warm cache instead of starting the clock. */
+  useEffect(() => {
+    if (!sessionReady) return;
+    prefetchRoute(qc, window.location.pathname, true);
+  }, [sessionReady, qc]);
 
   /* Refs, not state: these are read inside a listener that must not be torn
      down and rebuilt every time the session phase settles. */
@@ -122,7 +178,7 @@ export function RoutePrefetcher() {
     if (!signedIn) return;
     const targets = WARM_ON_MOUNT[window.location.pathname];
     if (!targets) return;
-    return idle(() => {
+    return whenQuiet(qc, () => {
       for (const href of targets) {
         router.prefetch(href);
         prefetchRoute(qc, href, true);
