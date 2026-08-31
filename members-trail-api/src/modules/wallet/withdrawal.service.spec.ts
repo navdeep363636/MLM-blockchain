@@ -597,6 +597,56 @@ describe("WithdrawalService", () => {
     });
   });
 
+  describe("sweepExpiredCoolingOff", () => {
+    /* The delayed release job lives in Redis for the length of the window — 48
+       hours by default. Redis is not the system of record, and losing that job
+       used to leave the request in cooling_off forever with the member's funds
+       locked and nothing looking at it. */
+    it("releases a window that closed while its scheduled job went missing", async () => {
+      const stuck = {
+        id: "w1", ref: "WD-STUCK", status: "cooling_off", reviewRequired: false,
+        coolingOffUntil: new Date(Date.now() - HOUR), userId: "u1",
+      };
+      withdrawals.find.mockResolvedValue([stuck]);
+      withdrawals.findOne.mockResolvedValue(stuck);
+
+      const result = await svc.sweepExpiredCoolingOff();
+
+      expect(result.released).toBe(1);
+      expect(withdrawals.save).toHaveBeenCalledWith(expect.objectContaining({ status: "approved" }));
+      expect(queue.add).toHaveBeenCalled();
+    });
+
+    it("finds nothing on a healthy instance", async () => {
+      withdrawals.find.mockResolvedValue([]);
+      const result = await svc.sweepExpiredCoolingOff();
+      expect(result.released).toBe(0);
+      expect(withdrawals.save).not.toHaveBeenCalled();
+    });
+
+    it("keeps going when one row cannot be released", async () => {
+      /* A single wedged withdrawal must not stop the sweep clearing the rest —
+         clearing them is the entire purpose. */
+      const rows = [
+        { id: "bad", ref: "WD-BAD", status: "cooling_off", reviewRequired: false,
+          coolingOffUntil: new Date(Date.now() - HOUR), userId: "u1" },
+        { id: "good", ref: "WD-GOOD", status: "cooling_off", reviewRequired: false,
+          coolingOffUntil: new Date(Date.now() - HOUR), userId: "u2" },
+      ];
+      withdrawals.find.mockResolvedValue(rows);
+      withdrawals.findOne.mockImplementation(async (opts: { where: { id: string } }) =>
+        rows.find((r) => r.id === opts.where.id) ?? null,
+      );
+      withdrawals.save.mockImplementation(async (row: { id: string }) => {
+        if (row.id === "bad") throw new Error("deadlock");
+        return row;
+      });
+
+      const result = await svc.sweepExpiredCoolingOff();
+      expect(result.released).toBe(1);
+    });
+  });
+
   describe("markCompleted", () => {
     const approved = {
       id: "w1", ref: "WD-ABC", userId: "u1", amountMtt: "100.000000000000000000",

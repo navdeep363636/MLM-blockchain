@@ -101,6 +101,27 @@ export class EconomyJobs {
    * A stuck deposit is either a processor problem or a member owed their money;
    * either way somebody has to look, and nobody looks at a table nobody reports on.
    */
+  /**
+   * The floor under the cooling-off release.
+   *
+   * The release itself is a delayed job scheduled when the withdrawal is
+   * requested; this only catches the case where that job was lost, because it
+   * lived in Redis for 48 hours and Redis is not the system of record. On a
+   * healthy instance it finds nothing, every run.
+   *
+   * Every five minutes rather than hourly: the member is waiting on money, and
+   * the query is an indexed lookup on `status` bounded to 200 rows.
+   */
+  @Cron(CronExpression.EVERY_5_MINUTES, { name: "cooling-off-sweep" })
+  async sweepCoolingOff(): Promise<void> {
+    await this.locked("cooling-off-sweep", 270, async () => {
+      const { released } = await this.withdrawals.sweepExpiredCoolingOff();
+      if (released > 0) {
+        this.log.warn(`cooling-off sweep released ${released} stuck withdrawal(s)`);
+      }
+    });
+  }
+
   @Cron(CronExpression.EVERY_30_MINUTES, { name: "stale-deposits" })
   async flagStaleDeposits(): Promise<void> {
     await this.locked("stale-deposits", 1_500, async () => {
