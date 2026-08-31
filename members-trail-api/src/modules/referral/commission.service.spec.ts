@@ -482,6 +482,10 @@ describe("CommissionService", () => {
       await svc.processRevenueEvent("rev-1");
       expect(redis.withLock).toHaveBeenCalledWith(
         "commission:cap:sponsor-1:2026-02", expect.any(Number), expect.any(Function),
+        /* Waits for its turn rather than failing on contention: two downlines of
+           one sponsor buying at the same moment is ordinary traffic, and a lost
+           commission is not an acceptable outcome for it. */
+        expect.objectContaining({ waitMs: expect.any(Number) }),
       );
     });
 

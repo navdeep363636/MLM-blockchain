@@ -71,6 +71,9 @@ const SORT_COLUMNS = ["createdAt", "amount", "level", "status"] as const;
 const CAP_TRAILING_MONTHS = 3;
 
 const CAP_LOCK_TTL_SECONDS = 20;
+
+/** How long a cap application waits its turn. Well inside the lock's own TTL. */
+const CAP_LOCK_WAIT_MS = 10_000;
 const CLAIM_LOCK_TTL_SECONDS = 20;
 
 /** Statuses that represent a real, funded obligation against the pool. */
@@ -198,14 +201,27 @@ export class CommissionService {
         `commission:cap:${candidate.recipient.id}:${month}`,
         CAP_LOCK_TTL_SECONDS,
         () => this.applyCapAndRecord({ candidate, event, trigger, month, gross, fiatPerMtt, plan }),
+        /* Wait for a turn rather than failing on contention. Two purchases by two
+         * downlines of the SAME sponsor land together routinely, and each holder
+         * finishes in milliseconds — so the throw below should be reserved for a
+         * lock that is genuinely wedged, not for normal traffic. Without the wait
+         * an operator processing a batch by hand got a 409 per collision, and the
+         * queue spent its retry budget on work that only needed to queue. */
+        { waitMs: CAP_LOCK_WAIT_MS },
       );
 
       if (result === null) {
-        /* Could not serialise. Throwing lets the queue retry rather than
-         * silently skipping someone's commission. */
+        /* Still contended after the wait. Throwing lets the queue retry rather
+         * than silently skipping someone's commission — but the message must not
+         * claim to be retrying, because this call is not: it is telling its
+         * caller to. The old wording said "retrying" and an operator driving this
+         * by hand reasonably read that as "it will sort itself out". */
         throw new ConflictException({
           code: "CAP_LOCK_CONTENDED",
-          message: `Could not acquire the cap lock for ${candidate.recipient.id} — retrying`,
+          message:
+            `Another commission is still being applied against ${candidate.recipient.id}'s ` +
+            `${month} cap after waiting ${CAP_LOCK_WAIT_MS}ms. Nothing was recorded for this ` +
+            `event — retry it.`,
         });
       }
 
