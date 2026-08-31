@@ -72,9 +72,23 @@ class SeedModule {}
 
 const log = new Logger("Seed");
 
-/** Staff accounts the platform needs before anyone can approve anything. */
+/**
+ * Staff accounts the platform needs before anyone can approve anything.
+ *
+ * There are TWO super_admins, and that is not redundancy for its own sake: every
+ * treasury outflow needs four-eyes approval, and `treasury:approve` is granted to
+ * super_admin alone. With a single one seeded, no pool could be funded on a fresh
+ * install — the proposer holds `treasury:write` and the only approver cannot
+ * supply a second pair of eyes — so the control that guards every movement of
+ * money was the one thing the platform could not perform.
+ *
+ * Two accounts, held by two people, is also what four-eyes means operationally.
+ * If a deployment genuinely wants one, remove the second here deliberately and
+ * know that pool funding stops with it.
+ */
 const STAFF: { key: string; email: string; name: string; role: "super_admin" | "compliance" | "finance_admin" | "support" }[] = [
   { key: "SEED_ADMIN_EMAIL", email: "ops@memberstrail.local", name: "Platform Operations", role: "super_admin" },
+  { key: "SEED_ADMIN2_EMAIL", email: "treasury@memberstrail.local", name: "Treasury Operations", role: "super_admin" },
   { key: "SEED_COMPLIANCE_EMAIL", email: "compliance@memberstrail.local", name: "Compliance Desk", role: "compliance" },
   { key: "SEED_FINANCE_EMAIL", email: "finance@memberstrail.local", name: "Finance Desk", role: "finance_admin" },
   { key: "SEED_SUPPORT_EMAIL", email: "support@memberstrail.local", name: "Support Desk", role: "support" },
