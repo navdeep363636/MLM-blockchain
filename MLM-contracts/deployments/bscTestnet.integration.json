@@ -1,0 +1,120 @@
+{
+  "_eventNames": "Event names in the per-contract notes below were corrected against abi/*.json on 2026-08-31; the first version of this file listed five names no contract emits. A wrong event name is a wrong topic0 and eth_getLogs returns an empty array rather than an error, so an indexer built on one reports healthy and indexes nothing.",
+  "_purpose": "Frontend/backend integration reference for the BSC Testnet deployment. Generated after deploy -> roles -> pools -> fund -> payout -> post-deploy-check (23/23 passed). ABIs live in ../abi/*.json — this file only carries addresses, config, and chain metadata.",
+  "network": {
+    "name": "bscTestnet",
+    "chainId": 97,
+    "rpcUrls": [
+      "https://data-seed-prebsc-1-s1.binance.org:8545",
+      "https://bsc-testnet-rpc.publicnode.com"
+    ],
+    "explorerBase": "https://testnet.bscscan.com",
+    "nativeCurrency": { "name": "Test BNB", "symbol": "tBNB", "decimals": 18 },
+    "indexerStartBlock": 128242300,
+    "_indexerStartBlock_note": "Conservative lower bound at/just before MTTToken deployment. Scanning eth_getLogs from this block forward captures every setup event (RoleGranted, pool creation, initial funding) as well as all future activity. Snapshot taken at block 128243680 right after setup completed."
+  },
+  "contracts": {
+    "MTTToken": {
+      "address": "0x53AE1e2888C1703b3Acf818C1305bf411a86892B",
+      "abi": "../abi/MTTToken.json",
+      "explorer": "https://testnet.bscscan.com/address/0x53AE1e2888C1703b3Acf818C1305bf411a86892B",
+      "notes": "ERC20, fixed 1,000,000,000 MTT supply, no mint(). Pausable (PAUSER_ROLE), burnable (holder self-burn + BURNER_ROLE adminBurn). Key events (from abi/MTTToken.json): Transfer, Approval, AllocationMinted, Paused, Unpaused."
+    },
+    "TeamVesting": {
+      "address": "0x723053F097E8de0D7C8DAc967cD4346d0366580F",
+      "abi": "../abi/MTTVesting.json",
+      "explorer": "https://testnet.bscscan.com/address/0x723053F097E8de0D7C8DAc967cD4346d0366580F",
+      "beneficiary": "0x978C3e593901Cb89cDC7Bd49329ef60E992ad292",
+      "allocationMtt": "150000000",
+      "cliffSeconds": 31104000,
+      "durationSeconds": 93312000,
+      "startUnix": 1788155652,
+      "startIso": "2026-08-31T05:54:12.000Z",
+      "notes": "12-month cliff (360d), 36-month linear (1080d) vesting. release() callable by anyone; always pays the beneficiary. Key events: TokensReleased."
+    },
+    "AdvisorsVesting": {
+      "address": "0xE1FB92AAF3190de8e2c24Dd342327F87fcfBBa29",
+      "abi": "../abi/MTTVesting.json",
+      "explorer": "https://testnet.bscscan.com/address/0xE1FB92AAF3190de8e2c24Dd342327F87fcfBBa29",
+      "beneficiary": "0xD40e3924E035B78E50584f11E02ddc9037fd4E1c",
+      "allocationMtt": "50000000",
+      "cliffSeconds": 15552000,
+      "durationSeconds": 62208000,
+      "startUnix": 1788155652,
+      "startIso": "2026-08-31T05:54:12.000Z",
+      "notes": "6-month cliff (180d), 24-month linear (720d) vesting. Key events: TokensReleased."
+    },
+    "MTTStaking": {
+      "address": "0xce83252a19AfcC8B9C89ef44d3f2554b89C7Cb38",
+      "abi": "../abi/MTTStaking.json",
+      "explorer": "https://testnet.bscscan.com/address/0xce83252a19AfcC8B9C89ef44d3f2554b89C7Cb38",
+      "penaltyReceiver": "0x40269336F5547f1E6686723C3A0D223bF8477cD3",
+      "notes": "Multi-pool staking. No pause, no escape hatch. Key events (from abi/MTTStaking.json): Staked, Unstaked, RewardClaimed, PoolCreated, PoolFunded, PenaltyReceiverUpdated, RoleGranted/RoleRevoked.",
+      "pools": [
+        { "id": 0, "label": "Flexible", "active": true, "lockDurationSeconds": "0", "rewardsDurationSeconds": "604800", "earlyUnstakePenaltyBps": "0", "totalRewardsFunded": "0.0" },
+        { "id": 1, "label": "30-Day", "active": true, "lockDurationSeconds": "2592000", "rewardsDurationSeconds": "2592000", "earlyUnstakePenaltyBps": "2000", "totalRewardsFunded": "25000.0", "periodFinish": "1790747926", "periodFinishIso": "2026-09-30T05:58:46.000Z" },
+        { "id": 2, "label": "90-Day", "active": true, "lockDurationSeconds": "7776000", "rewardsDurationSeconds": "2592000", "earlyUnstakePenaltyBps": "3000", "totalRewardsFunded": "0.0" },
+        { "id": 3, "label": "180-Day", "active": true, "lockDurationSeconds": "15552000", "rewardsDurationSeconds": "2592000", "earlyUnstakePenaltyBps": "4000", "totalRewardsFunded": "0.0" }
+      ]
+    },
+    "MTTReferralDistributor": {
+      "address": "0x6AE2AB55b420FEA264920F2944A5A1d729A94C8F",
+      "abi": "../abi/MTTReferralDistributor.json",
+      "explorer": "https://testnet.bscscan.com/address/0x6AE2AB55b420FEA264920F2944A5A1d729A94C8F",
+      "notes": "Commission ledger enforcing totalRecorded <= totalDeposited. No withdraw/emergencyWithdraw. Currently unfunded (totalDeposited=0) — treasury must call depositCommissionPool() before ORACLE_ROLE can recordCommission(). Key events (from abi/MTTReferralDistributor.json): CommissionRecorded, CommissionClaimed, CommissionClawedBack, KycStatusUpdated, CommissionPoolFunded."
+    },
+    "MTTPayout": {
+      "address": "0x0af73E1bbe85526D5c74b34F6eA44E94861Ff827",
+      "abi": "../abi/MTTPayout.json",
+      "explorer": "https://testnet.bscscan.com/address/0x0af73E1bbe85526D5c74b34F6eA44E94861Ff827",
+      "relayer": "0xdD83d806789e199D7D4C079FEEE80523cd023AAf",
+      "floatMtt": "10000.0",
+      "dailyLimitMtt": "5000.0",
+      "remainingAllowanceMtt": "5000.0",
+      "paused": false,
+      "notes": "Withdrawal settlement rail. Replay-guarded, daily ceiling resets per 24h window (not sliding — up to 2x limit can leave across a boundary). No arbitrary-destination withdraw. Key events (from abi/MTTPayout.json): PayoutSent, Funded, Swept, DailyLimitUpdated, WindowReset, Paused/Unpaused."
+    }
+  },
+  "roles": {
+    "_note": "bytes32 role identifiers are keccak256(role name), identical across all networks/deployments. DEFAULT_ADMIN_ROLE is always the zero hash.",
+    "DEFAULT_ADMIN_ROLE": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "TREASURY_ROLE": "0xe1dcbdb91df27212a29bc27177c840cf2f819ecf2187432e1fac86c2dd5dfca9",
+    "POOL_ADMIN_ROLE": "0x24e583e35a20f9ecfc1572e7cb66bcc18ad3cd1650ec40dbf6ad2290e553a9fa",
+    "ORACLE_ROLE": "0x68e79a7bf1e0bc45d0a330c573bc367f9cf464fd326078812f301165fbda4ef1",
+    "COMPLIANCE_ROLE": "0x442a94f1a1fac79af32856af2a64f63648cfa2ef3b98610a5bb7cbec4cee6985",
+    "GUARDIAN_ROLE": "0x55435dd261a4b9b3364963f7738a7a662ad9c84396d64be3365284bb7f0a5041",
+    "PAYER_ROLE": "0x8ec07e268e32cae7f300b49ad34f20106d088445cb9d9b2d62cbd864638308b2",
+    "PAUSER_ROLE": "0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a",
+    "BURNER_ROLE": "0x3c11d16cbaffd01df69ce1c404f6340ee057498f5f00246190ea54220576a848",
+    "holders": {
+      "admin (DEFAULT_ADMIN_ROLE, all contracts)": "0xf832BA0d3337CC72043E47cA7a56938125801E4b",
+      "TREASURY_ROLE (staking, distributor, payout)": "0xf489713C222252c6260Da1E367C1E8c10342168A",
+      "POOL_ADMIN_ROLE (staking)": "0xf489713C222252c6260Da1E367C1E8c10342168A",
+      "ORACLE_ROLE (distributor)": "0xdD83d806789e199D7D4C079FEEE80523cd023AAf",
+      "COMPLIANCE_ROLE (distributor)": "0x9BE3308f5d834db492ba18Ac940567D3444475e3",
+      "GUARDIAN_ROLE (payout)": "0xf489713C222252c6260Da1E367C1E8c10342168A",
+      "PAYER_ROLE (payout)": "0xdD83d806789e199D7D4C079FEEE80523cd023AAf",
+      "_warning": "The deployer EOA (0xf832BA0d3337CC72043E47cA7a56938125801E4b) still holds DEFAULT_ADMIN_ROLE on all contracts because REVOKE_DEPLOYER was not set. Acceptable for testnet rehearsal only — must be revoked / replaced by a multisig before mainnet."
+    }
+  },
+  "tokenomics": {
+    "totalSupplyMtt": "1000000000",
+    "allocations": {
+      "rewardsPool": { "address": "0xdA2cBf969F757b1Ef20269705525759460E64fFb", "pct": 40, "balanceMttAfterSetup": "399965000.0", "note": "35,000 MTT already forwarded to fund pool 1 (25,000) and the payout float (10,000)" },
+      "treasuryReserve": { "address": "0x40269336F5547f1E6686723C3A0D223bF8477cD3", "pct": 15, "balanceMtt": "150000000.0" },
+      "liquidityWallet": { "address": "0x8401927F4D9d9Ff475D555E057De4E2c563cd9F6", "pct": 15, "balanceMtt": "150000000.0" },
+      "marketingWallet": { "address": "0x26B230Dd2e30Ca6157b5dc1A8658c8d73b42cb9e", "pct": 10, "balanceMtt": "100000000.0" },
+      "teamVesting": { "address": "0x723053F097E8de0D7C8DAc967cD4346d0366580F", "pct": 15, "balanceMtt": "150000000.0" },
+      "advisorsVesting": { "address": "0xE1FB92AAF3190de8e2c24Dd342327F87fcfBBa29", "pct": 5, "balanceMtt": "50000000.0" }
+    },
+    "deployerFinalBalanceMtt": "0.0"
+  },
+  "deployer": {
+    "address": "0xf832BA0d3337CC72043E47cA7a56938125801E4b",
+    "note": "The externally-funded testnet key provided for this rehearsal (0.19874624 BNB at preflight). Ends this run at zero MTT balance, matching the post-deploy-check deployer-hygiene assertion."
+  },
+  "postDeployCheck": {
+    "result": "23 passed, 0 failed",
+    "ranAt": "2026-08-31"
+  }
+}
