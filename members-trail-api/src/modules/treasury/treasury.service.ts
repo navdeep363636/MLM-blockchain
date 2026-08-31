@@ -301,7 +301,7 @@ export class TreasuryService {
     }
     if (dec(dto.amount).lte(0)) throw new BadRequestException("Amount must be positive");
 
-    const fromReserve = dto.fromReserve === "true";
+    const fromReserve = dto.fromReserve === true;
 
     /* A reserve draw is explicitly exempt from the revenue ceiling — that is
      * what the reserve is for — but it is recorded as such so the published
@@ -583,6 +583,7 @@ const iso = (d: Date | null | undefined): string | null => (d ? d.toISOString() 
 
 function toInflowView(i: TreasuryInflow): TreasuryInflowResponse {
   return {
+    id: i.id,
     ref: i.ref,
     recognisedAt: i.createdAt.toISOString(),
     stream: i.stream,
