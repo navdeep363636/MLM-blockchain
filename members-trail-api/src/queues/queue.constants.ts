@@ -50,7 +50,11 @@ export const QueueDefaults: Record<QueueName, {
   /** Optional per-queue rate cap, e.g. to respect an RPC provider's limits. */
   limiter?: { max: number; duration: number };
 }> = {
-  [Queues.GameValidation]: { attempts: 3, backoffMs: 2_000, removeOnComplete: 1_000, removeOnFail: 5_000 },
+  /* Raised from 3/2s. Validation credits Points, and a member who finishes
+     several rounds together produces a burst of jobs contending for one
+     per-account lock — a budget that small ran out while the queue was still
+     draining, and a validated session that runs out of attempts never pays. */
+  [Queues.GameValidation]: { attempts: 6, backoffMs: 5_000, removeOnComplete: 1_000, removeOnFail: 5_000 },
   [Queues.Commission]:     { attempts: 8, backoffMs: 10_000, removeOnComplete: 5_000, removeOnFail: 20_000 },
   [Queues.ChainTx]:        { attempts: 6, backoffMs: 15_000, removeOnComplete: 5_000, removeOnFail: 20_000, limiter: { max: 5, duration: 1_000 } },
   [Queues.ChainIndex]:     { attempts: 5, backoffMs: 5_000, removeOnComplete: 200, removeOnFail: 1_000, limiter: { max: 10, duration: 1_000 } },
