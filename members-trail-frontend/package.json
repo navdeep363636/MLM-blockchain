@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "dev:warm": "node scripts/warm-dev.mjs"
   },
   "dependencies": {
     "@rainbow-me/rainbowkit": "2.2.11",
