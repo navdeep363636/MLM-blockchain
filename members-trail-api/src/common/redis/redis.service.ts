@@ -124,10 +124,42 @@ export class RedisService implements OnModuleDestroy {
   }
 
   /** Runs `fn` under a lock, or returns null if the lock is held elsewhere. */
-  async withLock<T>(key: string, ttlSeconds: number, fn: () => Promise<T>): Promise<T | null> {
-    const token = await this.acquireLock(key, ttlSeconds);
+  /**
+   * Runs `fn` while holding `key`, or returns null if the lock is held.
+   *
+   * `waitMs` is the important option. With the default of 0 this is a single
+   * non-blocking attempt, which is right when a busy lock means "someone else is
+   * already doing this, so I should not" — a scheduled rollup, say.
+   *
+   * It is wrong when a busy lock means "someone else is doing this FIRST, and I
+   * still need my turn". A member finishing several game rounds in a minute
+   * produces exactly that: each validation credits Points under a per-account
+   * lock, and with no wait the second job failed instantly, burned a retry, and
+   * after three attempts gave up — leaving sessions the server had validated with
+   * their Points never credited. Waiting a few seconds for a lock whose holder
+   * finishes in milliseconds turns a lost credit into a brief delay.
+   *
+   * Polls with jitter so a burst of waiters does not retry in lockstep.
+   */
+  async withLock<T>(
+    key: string,
+    ttlSeconds: number,
+    fn: () => Promise<T>,
+    opts: { waitMs?: number; pollMs?: number } = {},
+  ): Promise<T | null> {
+    const waitMs = Math.max(0, opts.waitMs ?? 0);
+    const pollMs = Math.max(10, opts.pollMs ?? 120);
+    const deadline = Date.now() + waitMs;
+
+    let token = await this.acquireLock(key, ttlSeconds);
+    while (!token && Date.now() < deadline) {
+      const jitter = Math.round(Math.random() * pollMs);
+      await new Promise((r) => setTimeout(r, pollMs + jitter));
+      token = await this.acquireLock(key, ttlSeconds);
+    }
+
     if (!token) {
-      this.log.debug(`lock busy: ${key}`);
+      this.log.debug(`lock busy after ${waitMs}ms: ${key}`);
       return null;
     }
     try {

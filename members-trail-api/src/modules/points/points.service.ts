@@ -88,6 +88,14 @@ export interface CreditPointsResult {
 const HISTORY_SORT_COLUMNS = ["createdAt", "amount", "source"] as const;
 const LOCK_TTL_SECONDS = 10;
 
+/**
+ * How long a Points credit waits its turn behind another credit for the same
+ * account before giving up. Long enough to drain a realistic burst of finished
+ * sessions, short enough to stay inside LOCK_TTL_SECONDS so a waiter can never
+ * outlive the lock it is waiting for.
+ */
+const CREDIT_LOCK_WAIT_MS = 8_000;
+
 /** Points are integral by definition; the money helpers work in 18dp strings. */
 function toIntPoints(v: string): number {
   return Number(dec(v).toFixed(0, Decimal.ROUND_DOWN));
@@ -126,11 +134,20 @@ export class PointsService {
     }
 
     /* Serialise the read-decide-write per user. Without this, two sessions
-     * finishing at the same instant both see full headroom and both credit. */
+     * finishing at the same instant both see full headroom and both credit.
+     *
+     * Waiting for the lock rather than failing on it: contention here is the
+     * NORMAL case — a member finishes three rounds in a minute and all three
+     * validations land together — and each holder finishes in milliseconds. With
+     * no wait, the losers threw, consumed the validation job's retry budget and
+     * ended in a final failure, so a session the server had accepted never paid
+     * out its Points. The wait comfortably exceeds the work under the lock while
+     * staying well inside the lock's own TTL. */
     const result = await this.redis.withLock(
       `points:credit:${input.userId}`,
       LOCK_TTL_SECONDS,
       () => this.creditUnderLock(input),
+      { waitMs: CREDIT_LOCK_WAIT_MS },
     );
 
     if (result === null) {
