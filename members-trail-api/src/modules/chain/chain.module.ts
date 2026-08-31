@@ -8,6 +8,7 @@ import { StakingModule } from "@/modules/staking/staking.module";
 import { ChainAdminController } from "./chain.admin.controller";
 import { ChainReadService } from "./chain-read.service";
 import { ChainWriteService } from "./chain-write.service";
+import { DeploymentVerifierService } from "./deployment-verifier.service";
 import { EventDispatcherService } from "./event-dispatcher.service";
 import { IndexerService } from "./indexer.service";
 import { RpcService } from "./rpc.service";
@@ -34,10 +35,12 @@ import { TxSubmitterService } from "./tx-submitter.service";
   providers: [
     RpcService, ChainReadService, ChainWriteService,
     IndexerService, EventDispatcherService, TxSubmitterService,
+    DeploymentVerifierService,
   ],
   exports: [
     RpcService, ChainReadService, ChainWriteService,
     IndexerService, EventDispatcherService, TxSubmitterService,
+    DeploymentVerifierService,
   ],
 })
 export class ChainModule {}
