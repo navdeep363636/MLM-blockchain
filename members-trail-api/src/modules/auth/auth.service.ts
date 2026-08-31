@@ -3,10 +3,10 @@ import {
   HttpStatus, Inject, Injectable, Logger, NotFoundException, UnauthorizedException,
 } from "@nestjs/common";
 import { InjectRepository, InjectDataSource } from "@nestjs/typeorm";
-import { DataSource, IsNull, Repository, type EntityManager } from "typeorm";
+import { DataSource, In, IsNull, Repository, type EntityManager } from "typeorm";
 import {
   FraudAlert, LoginHistory, NotificationPreference, ReferralEdge, User,
-  UserBalance, VerificationToken,
+  UserBalance, VerificationToken, type FraudAlertStatus,
 } from "@/database/entities";
 import { CryptoService } from "@/common/crypto/crypto.service";
 import { RedisService } from "@/common/redis/redis.service";
@@ -159,6 +159,11 @@ export class AuthService {
     }
 
     /* ----------------------------- referral ----------------------------- */
+    /* A holder rather than a plain `let`: the assignment happens inside the
+       transaction callback, and TypeScript's flow analysis does not follow an
+       assignment made in a callback — it would narrow the variable back to null
+       for the code after it. Published once the transaction commits; see below. */
+    const raised: { value: { alert: FraudAlert; isNew: boolean } | null } = { value: null };
     let sponsor: User | null = null;
     if (dto.referralCode?.trim()) {
       sponsor = await this.resolveSponsor(dto.referralCode.trim());
@@ -249,13 +254,46 @@ export class AuthService {
       }
 
       if (sponsor && selfReferral.suspected) {
-        await this.raiseSelfReferralAlert(m, user, sponsor, selfReferral, ctx);
+        raised.value = await this.raiseSelfReferralAlert(m, user, sponsor, selfReferral, ctx);
       }
 
       return user;
     });
 
     /* ------------------- side effects, after the commit ----------------- */
+
+    /*
+     * Announce the alert, if one was raised.
+     *
+     * This has to happen out here rather than beside the insert: publishing from
+     * inside the transaction would tell the admin console about an alert that a
+     * rollback could still take away. And it has to happen at all — the realtime
+     * gateway is subscribed to FraudAlertRaised, so without this the ONE fraud
+     * signal that fires at signup was the one that never reached the dashboard
+     * live. Only a newly-created alert is announced; a merge into an open case is
+     * not new information arriving.
+     */
+    if (raised.value?.isNew) {
+      const { alert } = raised.value;
+      try {
+        await this.bus.publish(Events.FraudAlertRaised, {
+          ref: alert.ref,
+          kind: alert.kind,
+          severity: alert.severity,
+          riskScore: alert.riskScore,
+          affectedUserIds: alert.affectedUserIds,
+          signals: alert.signals,
+        });
+      } catch (e) {
+        /* The alert is committed and visible in the queue either way. A broker
+         * outage must not fail a registration that already succeeded. */
+        this.log.error(
+          `failed to publish self-referral alert ${alert.ref}`,
+          e instanceof Error ? e.stack : String(e),
+        );
+      }
+    }
+
     let resendAfter = this.cfg.otpResendCooldown;
     try {
       const emailIssue = await this.otp.issue({
@@ -1049,38 +1087,87 @@ export class AuthService {
     throw new ConflictException("Could not allocate a referral code, please retry");
   }
 
+  /**
+   * Raises — or merges into — the self-referral case for this sponsor.
+   *
+   * Runs inside the registration transaction on purpose: an alert that says
+   * "these edges were withheld" must commit with the registration that withheld
+   * them, or a rollback leaves a case pointing at a user who does not exist.
+   *
+   * That is also why it cannot call `FraudService.raise()`, which uses its own
+   * repository outside this transaction — and why the dedupe rule that service
+   * documents has to be repeated here. It was NOT repeated here before, so the
+   * comment below promised one case per (sponsor, signal set) while the code
+   * inserted one per registration: a ring signing up two hundred accounts off one
+   * address produced two hundred identical open high-severity alerts, which
+   * buries the pattern it is meant to expose rather than surfacing it. The index
+   * on `dedupeKey` is not unique, so nothing at the schema level caught it.
+   *
+   * Merging matches the service: an OPEN or INVESTIGATING case absorbs the new
+   * signup. Once a reviewer has decided, a recurrence raises a fresh case,
+   * because the pattern returning after a decision is itself information.
+   */
   private async raiseSelfReferralAlert(
     m: EntityManager,
     user: User,
     sponsor: User,
     assessment: SelfReferralAssessment,
     ctx: RequestContext,
-  ): Promise<void> {
+  ): Promise<{ alert: FraudAlert; isNew: boolean }> {
     const repo = m.getRepository(FraudAlert);
-    await repo.save(
+    const dedupeKey = `self_referral:${sponsor.id}:${assessment.signals.slice().sort().join(",")}`;
+    const summary =
+      `Registration ${user.ref} used ${sponsor.ref}'s referral code from the same ` +
+      `device or network. Referral edges were withheld pending review.`;
+    const evidence = {
+      sponsorRef: sponsor.ref,
+      newUserRef: user.ref,
+      ip: ctx.ip ?? null,
+      fingerprintMatched: assessment.signals.includes("same_signup_fingerprint"),
+      ipMatched: assessment.signals.includes("same_signup_ip"),
+    };
+
+    const existing = await repo.findOne({
+      where: {
+        dedupeKey,
+        status: In(["open", "investigating"] as FraudAlertStatus[]),
+      },
+    });
+
+    if (existing) {
+      /* Every flagged signup is named, so a reviewer sees the size of the
+         cluster instead of one arbitrary member of it. */
+      existing.affectedUserIds = [...new Set([...existing.affectedUserIds, user.id, sponsor.id])];
+      existing.signals = [...new Set([...existing.signals, ...assessment.signals])];
+      const seen = ((existing.evidence?.signups as unknown[]) ?? []) as unknown[];
+      existing.evidence = {
+        ...(existing.evidence ?? {}),
+        ...evidence,
+        signups: [...seen, { userRef: user.ref, ip: ctx.ip ?? null, at: new Date().toISOString() }],
+      };
+      existing.summary = summary;
+      await repo.save(existing);
+      return { alert: existing, isNew: false };
+    }
+
+    const alert = await repo.save(
       repo.create({
         ref: Ref.alert(),
         kind: "self_referral_ring",
         severity: "high",
         riskScore: RISK_WEIGHTS.selfReferralSuspected,
         affectedUserIds: [user.id, sponsor.id],
-        summary:
-          `Registration ${user.ref} used ${sponsor.ref}'s referral code from the same ` +
-          `device or network. Referral edges were withheld pending review.`,
+        summary,
         signals: assessment.signals,
         evidence: {
-          sponsorRef: sponsor.ref,
-          newUserRef: user.ref,
-          ip: ctx.ip ?? null,
-          fingerprintMatched: assessment.signals.includes("same_signup_fingerprint"),
-          ipMatched: assessment.signals.includes("same_signup_ip"),
+          ...evidence,
+          signups: [{ userRef: user.ref, ip: ctx.ip ?? null, at: new Date().toISOString() }],
         },
         status: "open",
-        /* Dedupe so a cluster of signups off one device raises one case per
-         * (sponsor, signal set) rather than one per registration. */
-        dedupeKey: `self_referral:${sponsor.id}:${assessment.signals.sort().join(",")}`,
+        dedupeKey,
       }),
     );
+    return { alert, isNew: true };
   }
 
   private async resolveVerificationSubject(
