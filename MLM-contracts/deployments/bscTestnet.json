@@ -1,0 +1,84 @@
+{
+  "network": "bscTestnet",
+  "chainId": 97,
+  "deployedAt": "2026-08-31T05:54:37.723Z",
+  "deployer": "0xf832BA0d3337CC72043E47cA7a56938125801E4b",
+  "addresses": {
+    "MTTToken": "0x53AE1e2888C1703b3Acf818C1305bf411a86892B",
+    "TeamVesting": "0x723053F097E8de0D7C8DAc967cD4346d0366580F",
+    "AdvisorsVesting": "0xE1FB92AAF3190de8e2c24Dd342327F87fcfBBa29",
+    "MTTStaking": "0xce83252a19AfcC8B9C89ef44d3f2554b89C7Cb38",
+    "MTTReferralDistributor": "0x6AE2AB55b420FEA264920F2944A5A1d729A94C8F",
+    "MTTPayout": "0x0af73E1bbe85526D5c74b34F6eA44E94861Ff827"
+  },
+  "configuredWallets": {
+    "admin": "0xf832BA0d3337CC72043E47cA7a56938125801E4b",
+    "rewardsPool": "0xdA2cBf969F757b1Ef20269705525759460E64fFb",
+    "treasuryReserve": "0x40269336F5547f1E6686723C3A0D223bF8477cD3",
+    "liquidityWallet": "0x8401927F4D9d9Ff475D555E057De4E2c563cd9F6",
+    "marketingWallet": "0x26B230Dd2e30Ca6157b5dc1A8658c8d73b42cb9e",
+    "teamBeneficiary": "0x978C3e593901Cb89cDC7Bd49329ef60E992ad292",
+    "advisorsBeneficiary": "0xD40e3924E035B78E50584f11E02ddc9037fd4E1c",
+    "treasuryOps": "0xf489713C222252c6260Da1E367C1E8c10342168A",
+    "backendOracle": "0xdD83d806789e199D7D4C079FEEE80523cd023AAf",
+    "complianceSigner": "0x9BE3308f5d834db492ba18Ac940567D3444475e3",
+    "payoutRelayer": "0xdD83d806789e199D7D4C079FEEE80523cd023AAf"
+  },
+  "vesting": {
+    "start": 1788155652,
+    "startIso": "2026-08-31T05:54:12.000Z",
+    "startSource": "block timestamp",
+    "team": {
+      "cliffSeconds": 31104000,
+      "durationSeconds": 93312000
+    },
+    "advisors": {
+      "cliffSeconds": 15552000,
+      "durationSeconds": 62208000
+    }
+  },
+  "payout": {
+    "dailyLimitWei": "50000000000000000000000",
+    "dailyLimitMtt": "50000.0"
+  },
+  "constructorArgs": {
+    "MTTToken": [
+      "0xf832BA0d3337CC72043E47cA7a56938125801E4b",
+      "0xdA2cBf969F757b1Ef20269705525759460E64fFb",
+      "0x40269336F5547f1E6686723C3A0D223bF8477cD3",
+      "0xf832BA0d3337CC72043E47cA7a56938125801E4b",
+      "0x8401927F4D9d9Ff475D555E057De4E2c563cd9F6",
+      "0x26B230Dd2e30Ca6157b5dc1A8658c8d73b42cb9e",
+      "0xf832BA0d3337CC72043E47cA7a56938125801E4b"
+    ],
+    "TeamVesting": [
+      "0x978C3e593901Cb89cDC7Bd49329ef60E992ad292",
+      "0x53AE1e2888C1703b3Acf818C1305bf411a86892B",
+      1788155652,
+      31104000,
+      93312000
+    ],
+    "AdvisorsVesting": [
+      "0xD40e3924E035B78E50584f11E02ddc9037fd4E1c",
+      "0x53AE1e2888C1703b3Acf818C1305bf411a86892B",
+      1788155652,
+      15552000,
+      62208000
+    ],
+    "MTTStaking": [
+      "0x53AE1e2888C1703b3Acf818C1305bf411a86892B",
+      "0xf832BA0d3337CC72043E47cA7a56938125801E4b",
+      "0x40269336F5547f1E6686723C3A0D223bF8477cD3"
+    ],
+    "MTTReferralDistributor": [
+      "0x53AE1e2888C1703b3Acf818C1305bf411a86892B",
+      "0xf832BA0d3337CC72043E47cA7a56938125801E4b"
+    ],
+    "MTTPayout": [
+      "0x53AE1e2888C1703b3Acf818C1305bf411a86892B",
+      "0xf832BA0d3337CC72043E47cA7a56938125801E4b",
+      "0xdD83d806789e199D7D4C079FEEE80523cd023AAf",
+      "50000000000000000000000"
+    ]
+  }
+}
