@@ -363,6 +363,17 @@ export class EventDispatcherService {
       return "skipped";
     }
 
+    if (event.eventName === "WindowReset") {
+      /* Logged rather than applied: nothing in the platform's tables changes,
+         but this is the row that explains why the payout rail's remaining
+         allowance jumped back up without anyone raising the limit. */
+      this.log.log(
+        `MTTPayout daily window reset at unix ${String(args.newWindowStart ?? "?")}; ` +
+        `${fromWei(asAmount(args.previousSpend) ?? "0")} MTT went out in the window that closed`,
+      );
+      return "skipped";
+    }
+
     if (event.eventName === "Funded" || event.eventName === "Swept") {
       this.log.log(
         `payout float ${event.eventName === "Funded" ? "funded" : "swept"}: ` +

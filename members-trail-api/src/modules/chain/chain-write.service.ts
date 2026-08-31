@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import type { Address, Hex } from "viem";
 import { keccak256, toHex } from "viem";
 import type { OutboundTransaction } from "@/database/entities";
-import { toWei } from "@/common/utils";
+import { fromWei, toWei } from "@/common/utils";
 import { ChainReadService } from "./chain-read.service";
 import { RpcService } from "./rpc.service";
 import { TxSubmitterService } from "./tx-submitter.service";
@@ -127,6 +127,41 @@ export class ChainWriteService {
           `Already recorded on chain for source ${sourceEventRef}: ` +
           `${alreadyRecorded.join(", ")}. The batch would revert whole.`,
       });
+    }
+
+    /*
+     * Pre-flight the FUNDING invariant, for the same reason as the dedupe check
+     * above and with more force behind it.
+     *
+     * The contract enforces `totalRecorded <= totalDeposited`, so a batch larger
+     * than the pool's headroom reverts whole. On the BSC testnet deployment the
+     * commission pool sits at `totalDeposited = 0` — nobody has called
+     * `depositCommissionPool()` yet — which means EVERY batch reverts, each one
+     * spending gas and burning a nonce that the whole queue behind it waits on.
+     * One view call turns that into a refusal with a reason.
+     *
+     * Advisory, like the dedupe check: another submission can land between this
+     * read and ours, and the contract's `require` remains the real guard. An
+     * unreadable pool is not treated as empty — refusing to settle because the
+     * RPC blinked would be worse than letting the contract decide.
+     */
+    const total = entries.reduce((sum, e) => sum + toWei(e.amountMtt), 0n);
+    const state = await this.reads.distributorState().catch(() => null);
+    if (state) {
+      const headroom = toWei(state.availablePoolBalance);
+      if (headroom < total) {
+        throw new BadRequestException({
+          code: "COMMISSION_POOL_UNDERFUNDED",
+          message:
+            `The commission pool has ${state.availablePoolBalance} MTT of unrecorded headroom ` +
+            `and this batch needs ${fromWei(total)} MTT, so recordCommissionBatch would revert ` +
+            `whole on the totalRecorded <= totalDeposited invariant. ` +
+            (state.totalDeposited === "0"
+              ? "Nothing has been deposited yet — treasury must call depositCommissionPool() " +
+                "before any commission can settle on chain."
+              : "Deposit more to the pool, or settle a smaller batch."),
+        });
+      }
     }
 
     return this.submitter.enqueue({

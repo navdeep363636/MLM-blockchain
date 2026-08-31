@@ -101,7 +101,12 @@ export const CONTRACT_SPECS: readonly ContractSpec[] = [
     name: Contracts.Payout,
     configKey: "payout",
     abi: mttPayoutAbi,
-    watch: ["PayoutSent", "Funded", "Swept", "DailyLimitUpdated", "Paused", "Unpaused"],
+    /* WindowReset is what makes the daily ceiling legible after the fact: without
+       it, `remainingAllowance` jumping back to the full limit looks like the
+       limit was raised. The window is fixed-24h rather than sliding, so up to
+       twice the limit can leave across a boundary — an operator reading a
+       payout spike needs to see where the boundary was. */
+    watch: ["PayoutSent", "Funded", "Swept", "DailyLimitUpdated", "WindowReset", "Paused", "Unpaused"],
     /*
      * `fund` and `sweep` are TREASURY_ROLE and `pause` is GUARDIAN_ROLE — the
      * relayer key holds neither, so those calls revert on chain regardless of
