@@ -5,10 +5,12 @@ import {
 } from "@/database/entities";
 import { ReferralModule } from "@/modules/referral/referral.module";
 import { StakingModule } from "@/modules/staking/staking.module";
+import { TreasuryModule } from "@/modules/treasury/treasury.module";
 import { ChainAdminController } from "./chain.admin.controller";
 import { ChainReadService } from "./chain-read.service";
 import { ChainWriteService } from "./chain-write.service";
 import { DeploymentVerifierService } from "./deployment-verifier.service";
+import { TreasuryChainBridgeService } from "./treasury-chain-bridge.service";
 import { EventDispatcherService } from "./event-dispatcher.service";
 import { IndexerService } from "./indexer.service";
 import { RpcService } from "./rpc.service";
@@ -30,17 +32,20 @@ import { TxSubmitterService } from "./tx-submitter.service";
     TypeOrmModule.forFeature([ChainEvent, IndexerCursor, OutboundTransaction, WalletAddress, User]),
     StakingModule,
     ReferralModule,
+    /* For the outflow bridge below. Treasury does not import chain, so the
+       dependency runs the documented direction. */
+    TreasuryModule,
   ],
   controllers: [ChainAdminController],
   providers: [
     RpcService, ChainReadService, ChainWriteService,
     IndexerService, EventDispatcherService, TxSubmitterService,
-    DeploymentVerifierService,
+    DeploymentVerifierService, TreasuryChainBridgeService,
   ],
   exports: [
     RpcService, ChainReadService, ChainWriteService,
     IndexerService, EventDispatcherService, TxSubmitterService,
-    DeploymentVerifierService,
+    DeploymentVerifierService, TreasuryChainBridgeService,
   ],
 })
 export class ChainModule {}
