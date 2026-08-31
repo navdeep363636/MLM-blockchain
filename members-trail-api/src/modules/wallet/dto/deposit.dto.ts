@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsEnum, IsNumberString, IsOptional, IsString, Length, MaxLength } from "class-validator";
+import {
+  IsIn, IsNumberString, IsOptional, IsString, Length, MaxLength,
+} from "class-validator";
 import { DateRangeQuery } from "@/common/dto";
 import type { DepositMethod, DepositStatus } from "@/database/entities";
 
@@ -17,7 +19,7 @@ export const DEPOSIT_STATUSES: DepositStatus[] = [
 
 export class CreateDepositRequest {
   @ApiProperty({ enum: DEPOSIT_METHODS })
-  @IsEnum(DEPOSIT_METHODS)
+  @IsIn(DEPOSIT_METHODS)
   method!: DepositMethod;
 
   @ApiProperty({ description: "Fiat amount as a decimal string" })
@@ -56,7 +58,7 @@ export class DepositIntentResponse extends DepositResponse {
 
 export class DepositHistoryQuery extends DateRangeQuery {
   @ApiPropertyOptional({ enum: DEPOSIT_STATUSES })
-  @IsOptional() @IsEnum(DEPOSIT_STATUSES)
+  @IsOptional() @IsIn(DEPOSIT_STATUSES)
   status?: DepositStatus;
 }
 

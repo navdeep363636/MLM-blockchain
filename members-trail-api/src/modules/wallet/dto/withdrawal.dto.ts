@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
-  IsEnum, IsEthereumAddress, IsIn, IsNumberString, IsOptional, IsString, MaxLength, MinLength,
+  IsEthereumAddress, IsIn, IsNumberString, IsOptional, IsString, MaxLength, MinLength,
 } from "class-validator";
 import { DateRangeQuery } from "@/common/dto";
 import type { FundsSourceTag, WithdrawalKind, WithdrawalStatus } from "@/database/entities";
@@ -42,7 +42,7 @@ export class CreateWithdrawalRequest {
     enum: SOURCE_TAGS,
     description: "Provenance of the funds. Recorded for AML — a payout must be traceable to how it was earned.",
   })
-  @IsEnum(SOURCE_TAGS)
+  @IsIn(SOURCE_TAGS)
   sourceTag!: FundsSourceTag;
 }
 
@@ -83,7 +83,7 @@ export class WithdrawalLimitsResponse {
 
 export class WithdrawalHistoryQuery extends DateRangeQuery {
   @ApiPropertyOptional({ enum: WITHDRAWAL_STATUSES })
-  @IsOptional() @IsEnum(WITHDRAWAL_STATUSES)
+  @IsOptional() @IsIn(WITHDRAWAL_STATUSES)
   status?: WithdrawalStatus;
 }
 
@@ -94,7 +94,7 @@ export class AdminWithdrawalQuery extends WithdrawalHistoryQuery {
   userId?: string;
 
   @ApiPropertyOptional({ enum: SOURCE_TAGS })
-  @IsOptional() @IsEnum(SOURCE_TAGS)
+  @IsOptional() @IsIn(SOURCE_TAGS)
   sourceTag?: FundsSourceTag;
 }
 

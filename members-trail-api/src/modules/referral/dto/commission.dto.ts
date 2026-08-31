@@ -1,7 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
-  IsArray, IsEnum, IsIn, IsInt, IsISO8601, IsNumberString, IsOptional, IsString,
-  IsUUID, Max, MaxLength, Min, MinLength,
+  IsArray, IsISO8601, IsIn, IsInt, IsNumberString, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength,
 } from "class-validator";
 import { DateRangeQuery } from "@/common/dto";
 import type { CommissionStatus, CommissionTrigger } from "@/database/entities";
@@ -49,7 +48,7 @@ export class CommissionResponse {
 
 export class CommissionQuery extends DateRangeQuery {
   @ApiPropertyOptional({ enum: COMMISSION_STATUSES })
-  @IsOptional() @IsEnum(COMMISSION_STATUSES)
+  @IsOptional() @IsIn(COMMISSION_STATUSES)
   status?: CommissionStatus;
 
   @ApiPropertyOptional({ enum: [1, 2, 3] })

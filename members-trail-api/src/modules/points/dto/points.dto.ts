@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsEnum, IsOptional, IsUUID } from "class-validator";
+import {
+  IsIn, IsOptional, IsUUID,
+} from "class-validator";
 import { DateRangeQuery } from "@/common/dto";
 import type { PointsSource } from "@/database/entities";
 
@@ -14,7 +16,7 @@ const SOURCES: PointsSource[] = [
 
 export class PointsHistoryQuery extends DateRangeQuery {
   @ApiPropertyOptional({ enum: SOURCES, description: "Filter to a single issuance source" })
-  @IsOptional() @IsEnum(SOURCES)
+  @IsOptional() @IsIn(SOURCES)
   source?: PointsSource;
 
   @ApiPropertyOptional({ description: "Filter to one game" })

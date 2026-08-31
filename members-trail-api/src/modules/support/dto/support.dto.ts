@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
-  IsBoolean, IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength,
+  IsBoolean, IsIn, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength,
 } from "class-validator";
 import { PaginationQuery } from "@/common/dto";
 import type { TicketCategory, TicketPriority, TicketStatus } from "@/database/entities";
@@ -27,7 +27,7 @@ export class CreateTicketRequest {
   subject!: string;
 
   @ApiProperty({ enum: TICKET_CATEGORIES })
-  @IsEnum(TICKET_CATEGORIES)
+  @IsIn(TICKET_CATEGORIES)
   category!: TicketCategory;
 
   @ApiProperty({ description: "The member's opening message" })
@@ -91,11 +91,11 @@ export class TicketDetailResponse extends TicketResponse {
 
 export class TicketQuery extends PaginationQuery {
   @ApiPropertyOptional({ enum: TICKET_STATUSES })
-  @IsOptional() @IsEnum(TICKET_STATUSES)
+  @IsOptional() @IsIn(TICKET_STATUSES)
   status?: TicketStatus;
 
   @ApiPropertyOptional({ enum: TICKET_CATEGORIES })
-  @IsOptional() @IsEnum(TICKET_CATEGORIES)
+  @IsOptional() @IsIn(TICKET_CATEGORIES)
   category?: TicketCategory;
 }
 
@@ -137,7 +137,7 @@ export class ResolveTicketRequest {
 
 export class SetPriorityRequest {
   @ApiProperty({ enum: TICKET_PRIORITIES })
-  @IsEnum(TICKET_PRIORITIES)
+  @IsIn(TICKET_PRIORITIES)
   priority!: TicketPriority;
 
   @ApiProperty({ description: "Why the priority changed" })

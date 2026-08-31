@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength } from "class-validator";
+import {
+  IsIn, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength,
+} from "class-validator";
 import type { AchievementTier, QuestKind } from "@/database/entities";
 
 /* ============================================================================
@@ -95,7 +97,7 @@ export class UpsertQuestRequest {
   description!: string;
 
   @ApiProperty({ enum: QUEST_KINDS })
-  @IsEnum(QUEST_KINDS)
+  @IsIn(QUEST_KINDS)
   kind!: QuestKind;
 
   @ApiPropertyOptional() @IsOptional() @IsUUID()
