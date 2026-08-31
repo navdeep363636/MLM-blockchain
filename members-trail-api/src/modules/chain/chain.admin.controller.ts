@@ -13,6 +13,7 @@ import { IndexerService, type IndexRunResult, type IndexerStatus } from "./index
 import { TxSubmitterService, type SubmitOutcome } from "./tx-submitter.service";
 import { ChainReadService } from "./chain-read.service";
 import { ChainWriteService } from "./chain-write.service";
+import { DeploymentVerifierService } from "./deployment-verifier.service";
 import { CONTRACT_SPECS, validateSpecs } from "./chain.constants";
 
 /* ============================================================================
@@ -126,6 +127,7 @@ export class ChainAdminController {
     private readonly submitter: TxSubmitterService,
     private readonly reads: ChainReadService,
     private readonly writes: ChainWriteService,
+    private readonly deployment: DeploymentVerifierService,
   ) {}
 
   /* --------------------------------- state -------------------------------- */
@@ -161,6 +163,31 @@ export class ChainAdminController {
         callableFunctions: spec.callable,
       })),
     };
+  }
+
+  @Get("deployment")
+  @ApiOperation({
+    summary: "Whether the configured addresses are the contracts this build expects",
+    description:
+      "`verified` is true only when the check ran against a reachable RPC and found no errors. " +
+      "It compares every configured address against the recorded deployment, confirms each has " +
+      "bytecode, confirms every peripheral contract settles in the configured MTTToken, checks " +
+      "the staking pool count, and checks the relayer signer holds the address the deployment " +
+      "granted ORACLE_ROLE to. Each of those failures is otherwise silent: a wrong address " +
+      "means getLogs matches nothing while the indexer reports healthy. " +
+      "`reachable: false` means the RPC failed, so a clean result proves nothing.",
+  })
+  deploymentReport() {
+    return this.deployment.latest() ?? { pending: true };
+  }
+
+  @Post("deployment/verify")
+  @ApiOperation({
+    summary: "Re-run the deployment verification now",
+    description: "Use after changing addresses or rotating the relayer key, instead of restarting.",
+  })
+  reverifyDeployment() {
+    return this.deployment.verify();
   }
 
   @Get("solvency")

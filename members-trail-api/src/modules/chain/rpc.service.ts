@@ -196,6 +196,18 @@ export class RpcService implements OnModuleInit {
     return value;
   }
 
+  /**
+   * Whether an address is a contract on this chain.
+   *
+   * The first thing to ask about a configured address: an EOA, or a nothing, has
+   * no code, and every read against it reverts while every getLogs against it
+   * matches nothing. Never cached — it is asked once at boot.
+   */
+  async hasCode(address: Address): Promise<boolean> {
+    const code = await this.client.getCode({ address });
+    return code !== undefined && code !== "0x";
+  }
+
   /** Pending nonce for an address, straight from the node. Never cached. */
   async pendingNonce(address: Address): Promise<number> {
     return this.client.getTransactionCount({ address, blockTag: "pending" });
