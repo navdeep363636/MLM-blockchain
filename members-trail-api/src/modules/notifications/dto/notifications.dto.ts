@@ -1,7 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
-  ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsObject, IsOptional, IsString, IsUUID,
-  MaxLength, MinLength,
+  ArrayMaxSize, IsArray, IsBoolean, IsIn, IsObject, IsOptional, IsString, IsUUID, MaxLength, MinLength,
 } from "class-validator";
 import { Type } from "class-transformer";
 import { PaginationQuery } from "@/common/dto";
@@ -34,7 +33,7 @@ export class NotificationResponse {
 
 export class NotificationListQuery extends PaginationQuery {
   @ApiPropertyOptional({ enum: NOTIFICATION_KINDS })
-  @IsOptional() @IsEnum(NOTIFICATION_KINDS)
+  @IsOptional() @IsIn(NOTIFICATION_KINDS)
   kind?: NotificationKind;
 
   @ApiPropertyOptional({ default: false })
@@ -94,7 +93,7 @@ export class BroadcastRequest {
   userIds!: string[];
 
   @ApiProperty({ enum: ["system", "promo"], description: "Broadcasts are limited to these kinds" })
-  @IsEnum(["system", "promo"] as const)
+  @IsIn(["system", "promo"] as const)
   kind!: "system" | "promo";
 
   @ApiProperty() @IsString() @MinLength(3) @MaxLength(200)

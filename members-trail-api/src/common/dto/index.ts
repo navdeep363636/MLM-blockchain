@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
-  IsEnum, IsInt, IsISO8601, IsOptional, IsString, Max, MaxLength, Min,
+  IsISO8601, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min,
 } from "class-validator";
 
 /* ============================================================================
@@ -23,7 +23,7 @@ export class PaginationQuery {
   sortBy?: string;
 
   @ApiPropertyOptional({ enum: ["ASC", "DESC"], default: "DESC" })
-  @IsOptional() @IsEnum(["ASC", "DESC"] as const)
+  @IsOptional() @IsIn(["ASC", "DESC"] as const)
   sortDir: "ASC" | "DESC" = "DESC";
 
   get skip(): number {

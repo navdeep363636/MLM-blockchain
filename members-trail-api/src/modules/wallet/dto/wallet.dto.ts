@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
-  IsEnum, IsEthereumAddress, IsOptional, IsString, Matches, MaxLength, MinLength,
+  IsEthereumAddress, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength,
 } from "class-validator";
 import { DateRangeQuery } from "@/common/dto";
 import type { TxStatus, TxType } from "@/database/entities";
@@ -40,11 +40,11 @@ export class BalanceResponse {
 
 export class TransactionQuery extends DateRangeQuery {
   @ApiPropertyOptional({ enum: TX_TYPES })
-  @IsOptional() @IsEnum(TX_TYPES)
+  @IsOptional() @IsIn(TX_TYPES)
   type?: TxType;
 
   @ApiPropertyOptional({ enum: TX_STATUSES })
-  @IsOptional() @IsEnum(TX_STATUSES)
+  @IsOptional() @IsIn(TX_STATUSES)
   status?: TxStatus;
 }
 

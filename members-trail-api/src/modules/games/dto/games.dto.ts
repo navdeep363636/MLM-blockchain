@@ -1,7 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
-  IsArray, IsBoolean, IsEnum, IsInt, IsNumberString, IsOptional, IsString, IsUUID,
-  Max, MaxLength, Min, MinLength, ValidateNested,
+  IsArray, IsBoolean, IsIn, IsInt, IsNumberString, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength, ValidateNested,
 } from "class-validator";
 import { Type } from "class-transformer";
 import { DateRangeQuery, PaginationQuery } from "@/common/dto";
@@ -46,7 +45,7 @@ export class GameQuery extends PaginationQuery {
   genre?: string;
 
   @ApiPropertyOptional({ enum: ENTRY_TYPES })
-  @IsOptional() @IsEnum(ENTRY_TYPES)
+  @IsOptional() @IsIn(ENTRY_TYPES)
   entryType?: EntryType;
 }
 
@@ -57,7 +56,7 @@ export class StartSessionRequest {
   gameId!: string;
 
   @ApiProperty({ enum: SESSION_MODES })
-  @IsEnum(SESSION_MODES)
+  @IsIn(SESSION_MODES)
   mode!: SessionMode;
 
   @ApiPropertyOptional({ description: "Required when mode is tournament" })
@@ -155,7 +154,7 @@ export class SessionQuery extends DateRangeQuery {
   gameId?: string;
 
   @ApiPropertyOptional({ enum: SESSION_STATUSES })
-  @IsOptional() @IsEnum(SESSION_STATUSES)
+  @IsOptional() @IsIn(SESSION_STATUSES)
   status?: SessionStatus;
 }
 
@@ -198,7 +197,7 @@ export class UpsertGameRequest {
   pointsPerSessionMax!: number;
 
   @ApiProperty({ enum: ENTRY_TYPES })
-  @IsEnum(ENTRY_TYPES)
+  @IsIn(ENTRY_TYPES)
   entryType!: EntryType;
 
   @ApiProperty() @IsNumberString()

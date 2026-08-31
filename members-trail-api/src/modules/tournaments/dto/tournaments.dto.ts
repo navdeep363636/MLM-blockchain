@@ -1,7 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
-  ArrayMaxSize, ArrayMinSize, IsArray, IsEnum, IsISO8601, IsInt, IsNumberString, IsOptional,
-  IsString, IsUUID, Max, MaxLength, Min, MinLength, ValidateNested,
+  ArrayMaxSize, ArrayMinSize, IsArray, IsISO8601, IsIn, IsInt, IsNumberString, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength, ValidateNested,
 } from "class-validator";
 import { Type } from "class-transformer";
 import { PaginationQuery } from "@/common/dto";
@@ -55,7 +54,7 @@ export class TournamentResponse {
 
 export class TournamentQuery extends PaginationQuery {
   @ApiPropertyOptional({ enum: TOURNAMENT_STATUSES })
-  @IsOptional() @IsEnum(TOURNAMENT_STATUSES)
+  @IsOptional() @IsIn(TOURNAMENT_STATUSES)
   status?: TournamentStatus;
 
   @ApiPropertyOptional() @IsOptional() @IsUUID()

@@ -1,7 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
-  Equals, IsBoolean, IsEmail, IsEnum, IsISO31661Alpha2, IsOptional,
-  IsString, IsUUID, Matches, MaxLength, MinLength,
+  Equals, IsBoolean, IsEmail, IsISO31661Alpha2, IsIn, IsOptional, IsString, IsUUID, Matches, MaxLength, MinLength,
 } from "class-validator";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "../auth.constants";
 
@@ -75,7 +74,7 @@ export type OtpChannel = "email" | "phone";
 
 export class VerifyOtpDto {
   @ApiProperty({ enum: ["email", "phone"] })
-  @IsEnum(["email", "phone"] as const)
+  @IsIn(["email", "phone"] as const)
   channel!: OtpChannel;
 
   @ApiProperty({ example: "482913" })
@@ -96,7 +95,7 @@ export class VerifyOtpResponse {
 
 export class ResendOtpDto {
   @ApiProperty({ enum: ["email", "phone"] })
-  @IsEnum(["email", "phone"] as const)
+  @IsIn(["email", "phone"] as const)
   channel!: OtpChannel;
 
   @ApiProperty({ description: "Email address or phone number the code goes to" })
@@ -230,7 +229,7 @@ export class SessionView {
 
 export class TwoFaSetupDto {
   @ApiPropertyOptional({ enum: ["totp", "sms"], default: "totp" })
-  @IsOptional() @IsEnum(["totp", "sms"] as const)
+  @IsOptional() @IsIn(["totp", "sms"] as const)
   method?: "totp" | "sms";
 }
 

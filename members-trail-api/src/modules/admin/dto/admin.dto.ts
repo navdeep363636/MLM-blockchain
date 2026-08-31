@@ -1,8 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
-  IsBoolean, IsEnum, IsIn, IsInt, IsObject, IsOptional, IsString, IsUUID, Max, MaxLength,
-  Min, MinLength,
+  IsBoolean, IsIn, IsInt, IsObject, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength,
 } from "class-validator";
 import { DateRangeQuery, PaginationQuery } from "@/common/dto";
 import type { ApprovalKind, ApprovalStatus, UserStatus } from "@/database/entities";
@@ -50,7 +49,7 @@ export class ApprovalResponse {
 
 export class CreateApprovalRequest {
   @ApiProperty({ enum: APPROVAL_KINDS })
-  @IsEnum(APPROVAL_KINDS)
+  @IsIn(APPROVAL_KINDS)
   kind!: ApprovalKind;
 
   @ApiPropertyOptional({ description: "The entity this request acts on" })
@@ -78,11 +77,11 @@ export class DecideApprovalRequest {
 
 export class ApprovalQuery extends PaginationQuery {
   @ApiPropertyOptional({ enum: APPROVAL_STATUSES })
-  @IsOptional() @IsEnum(APPROVAL_STATUSES)
+  @IsOptional() @IsIn(APPROVAL_STATUSES)
   status?: ApprovalStatus;
 
   @ApiPropertyOptional({ enum: APPROVAL_KINDS })
-  @IsOptional() @IsEnum(APPROVAL_KINDS)
+  @IsOptional() @IsIn(APPROVAL_KINDS)
   kind?: ApprovalKind;
 
   @ApiPropertyOptional({ description: "Only requests this actor may decide (excludes their own)" })
@@ -94,7 +93,7 @@ export class ApprovalQuery extends PaginationQuery {
 
 export class ChangeUserStatusRequest {
   @ApiProperty({ enum: USER_STATUSES })
-  @IsEnum(USER_STATUSES)
+  @IsIn(USER_STATUSES)
   status!: UserStatus;
 
   @ApiProperty({ description: "Shown to the member and recorded in the audit trail" })

@@ -1,7 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
-  IsBoolean, IsEnum, IsIn, IsInt, IsNumberString, IsOptional, IsString, IsUUID,
-  Max, MaxLength, Min, MinLength,
+  IsBoolean, IsIn, IsInt, IsNumberString, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength,
 } from "class-validator";
 import { Type } from "class-transformer";
 import { PaginationQuery } from "@/common/dto";
@@ -42,11 +41,11 @@ export class StoreItemResponse {
 
 export class StoreQuery extends PaginationQuery {
   @ApiPropertyOptional({ enum: ITEM_CATEGORIES })
-  @IsOptional() @IsEnum(ITEM_CATEGORIES)
+  @IsOptional() @IsIn(ITEM_CATEGORIES)
   category?: ItemCategory;
 
   @ApiPropertyOptional({ enum: ITEM_RARITIES })
-  @IsOptional() @IsEnum(ITEM_RARITIES)
+  @IsOptional() @IsIn(ITEM_RARITIES)
   rarity?: ItemRarity;
 
   @ApiPropertyOptional({ description: "Free-text search over name and sku" })
@@ -144,11 +143,11 @@ export class ListingResponse {
 
 export class MarketQuery extends PaginationQuery {
   @ApiPropertyOptional({ enum: ITEM_RARITIES })
-  @IsOptional() @IsEnum(ITEM_RARITIES)
+  @IsOptional() @IsIn(ITEM_RARITIES)
   rarity?: ItemRarity;
 
   @ApiPropertyOptional({ enum: ITEM_CATEGORIES })
-  @IsOptional() @IsEnum(ITEM_CATEGORIES)
+  @IsOptional() @IsIn(ITEM_CATEGORIES)
   category?: ItemCategory;
 
   @ApiPropertyOptional({ description: "Only your own listings" })
@@ -191,11 +190,11 @@ export class UpsertItemRequest {
   description!: string;
 
   @ApiProperty({ enum: ITEM_CATEGORIES })
-  @IsEnum(ITEM_CATEGORIES)
+  @IsIn(ITEM_CATEGORIES)
   category!: ItemCategory;
 
   @ApiProperty({ enum: ITEM_RARITIES })
-  @IsEnum(ITEM_RARITIES)
+  @IsIn(ITEM_RARITIES)
   rarity!: ItemRarity;
 
   @ApiProperty() @IsNumberString()

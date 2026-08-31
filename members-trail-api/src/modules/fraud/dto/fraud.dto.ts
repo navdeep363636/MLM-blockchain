@@ -1,7 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
-  IsBoolean, IsEnum, IsIn, IsInt, IsObject, IsOptional, IsString, IsUUID, Max, MaxLength,
-  Min, MinLength,
+  IsBoolean, IsIn, IsInt, IsObject, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength,
 } from "class-validator";
 import { PaginationQuery } from "@/common/dto";
 import type { FraudAlertKind, FraudAlertStatus, FraudSeverity } from "@/database/entities";
@@ -43,15 +42,15 @@ export class AlertResponse {
 
 export class AlertQuery extends PaginationQuery {
   @ApiPropertyOptional({ enum: FRAUD_STATUSES })
-  @IsOptional() @IsEnum(FRAUD_STATUSES)
+  @IsOptional() @IsIn(FRAUD_STATUSES)
   status?: FraudAlertStatus;
 
   @ApiPropertyOptional({ enum: FRAUD_KINDS })
-  @IsOptional() @IsEnum(FRAUD_KINDS)
+  @IsOptional() @IsIn(FRAUD_KINDS)
   kind?: FraudAlertKind;
 
   @ApiPropertyOptional({ enum: FRAUD_SEVERITIES })
-  @IsOptional() @IsEnum(FRAUD_SEVERITIES)
+  @IsOptional() @IsIn(FRAUD_SEVERITIES)
   severity?: FraudSeverity;
 
   @ApiPropertyOptional() @IsOptional() @IsUUID()
@@ -110,7 +109,7 @@ export class UpsertRuleRequest {
   description!: string;
 
   @ApiProperty({ enum: FRAUD_KINDS })
-  @IsEnum(FRAUD_KINDS)
+  @IsIn(FRAUD_KINDS)
   kind!: FraudAlertKind;
 
   @ApiProperty({ description: "Numeric thresholds this pattern evaluates against" })
