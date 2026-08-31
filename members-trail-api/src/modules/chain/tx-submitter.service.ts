@@ -10,6 +10,7 @@ import { EventBusService, Events } from "@/events";
 import { RedisService } from "@/common/redis/redis.service";
 import { Ref, dec } from "@/common/utils";
 import { RpcService } from "./rpc.service";
+import { decodeArgList, encodeArgList } from "./tx-args";
 import {
   CONTRACT_SPECS, MAX_REPRICE_ATTEMPTS, MIN_TX_CONFIRMATIONS, REPRICE_BUMP_BPS, STUCK_TX_MS,
   assertCallable, specFor, specForCallable, type ContractName, type ContractSpec,
@@ -147,7 +148,9 @@ export class TxSubmitterService {
         fromAddress: this.rpc.canSign ? this.rpc.signer : "0x0000000000000000000000000000000000000000",
         toAddress,
         functionName: input.functionName,
-        args: input.args,
+        /* Tagged for the json column: a raw bigint throws on insert. See
+           tx-args.ts — this is why the outbound queue used to stay empty. */
+        args: encodeArgList(input.args),
         status: "queued",
         attempts: 0,
         relatedType: input.relatedType ?? null,
@@ -225,7 +228,7 @@ export class TxSubmitterService {
         to: row.toAddress as `0x${string}`,
         abi: spec.abi,
         functionName: row.functionName,
-        args: row.args,
+        args: decodeArgList(row.args),
         nonce,
         gasPriceWei: gasPrice,
       });
@@ -415,7 +418,7 @@ export class TxSubmitterService {
         to: row.toAddress as `0x${string}`,
         abi: spec.abi,
         functionName: row.functionName,
-        args: row.args,
+        args: decodeArgList(row.args),
         /* THE SAME NONCE. */
         nonce: row.nonce,
         gasPriceWei: bumped,
