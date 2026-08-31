@@ -83,6 +83,35 @@ const SETTLEMENT_TOKEN_FN: Partial<Record<ContractName, "mtt" | "token">> = {
   [Contracts.AdvisorsVesting]: "token",
 };
 
+/**
+ * How long the whole verification may take before it gives up and reports the
+ * chain unreachable.
+ *
+ * Needed because "unreachable" is the slow answer, not the fast one. An RPC host
+ * that blackholes a connection burns the client's full per-request timeout on
+ * every attempt, and with retries across two endpoints that is ~90s per read —
+ * so the first version of this check, which read every contract in sequence with
+ * no overall bound, took about twenty minutes to conclude nothing was reachable,
+ * and the admin re-verify endpoint held an HTTP request open for all of it.
+ *
+ * A health check has to bound its own runtime. Past this, the report says
+ * `reachable: false` and says why, which is the correct answer anyway.
+ */
+const VERIFY_DEADLINE_MS = 20_000;
+
+/** Resolves to `fallback` if `work` has not settled within `ms`. */
+async function withDeadline<T>(work: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms);
+  });
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 @Injectable()
 export class DeploymentVerifierService implements OnApplicationBootstrap {
   private readonly log = new Logger(DeploymentVerifierService.name);
@@ -128,7 +157,10 @@ export class DeploymentVerifierService implements OnApplicationBootstrap {
     /* Resolve the token address first: every other identity check compares
        against it, so a problem here makes the rest of them meaningless. */
     const tokenConfigured = this.configured(Contracts.MttToken);
-    let reachable = true;
+
+    /* ---- offline phase: everything that needs no network, so a dead RPC still
+            produces the findings it cannot hide. ---- */
+    const onChainTargets: { spec: (typeof CONTRACT_SPECS)[number]; address: Address }[] = [];
 
     for (const spec of CONTRACT_SPECS) {
       const configured = this.configured(spec.name);
@@ -164,17 +196,54 @@ export class DeploymentVerifierService implements OnApplicationBootstrap {
         }
       }
 
-      const { hasCode, settlesInMtt, rpcFailed } = await this.checkOnChain(
-        spec.name, configured, spec.abi, tokenConfigured, findings,
-      );
-      if (rpcFailed) reachable = false;
-
-      contracts.push({ name: spec.name, configured, matchesRecord, hasCode, settlesInMtt });
+      contracts.push({
+        name: spec.name, configured, matchesRecord, hasCode: null, settlesInMtt: null,
+      });
+      onChainTargets.push({ spec, address: configured });
     }
 
-    await this.checkPoolShape(record, findings);
     const relayer = this.checkRelayer(chainId, findings);
     this.checkIndexerStart(record, findings);
+
+    /* ---- network phase: in parallel and under one deadline. Sequentially, an
+            RPC that blackholes turns this into twenty minutes of waiting. ---- */
+    const timedOut = Symbol("timeout");
+    const network = await withDeadline(
+      (async () => {
+        const results = await Promise.all(
+          onChainTargets.map(({ spec, address }) =>
+            this.checkOnChain(spec.name, address, spec.abi, tokenConfigured, findings)
+              .then((r) => ({ name: spec.name, ...r })),
+          ),
+        );
+        await this.checkPoolShape(record, findings);
+        return results;
+      })(),
+      VERIFY_DEADLINE_MS,
+      timedOut as unknown as { name: ContractName; hasCode: boolean | null; settlesInMtt: boolean | null; rpcFailed: boolean }[],
+    );
+
+    let reachable = true;
+    if ((network as unknown) === timedOut) {
+      reachable = false;
+      findings.push({
+        level: "warning",
+        contract: null,
+        message:
+          `Chain checks did not finish within ${VERIFY_DEADLINE_MS}ms, so the addresses could ` +
+          `not be confirmed against the chain. The RPC endpoints are unreachable or very slow ` +
+          `from this host — treat this report's on-chain fields as unknown, not as clean.`,
+      });
+    } else {
+      for (const r of network) {
+        const row = contracts.find((c) => c.name === r.name);
+        if (row) {
+          row.hasCode = r.hasCode;
+          row.settlesInMtt = r.settlesInMtt;
+        }
+        if (r.rpcFailed) reachable = false;
+      }
+    }
 
     const report: DeploymentReport = {
       chainId,
