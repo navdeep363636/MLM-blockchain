@@ -6,7 +6,7 @@
  * The wagmi config itself lives in ./wagmi.ts, which is client-only.
  * ========================================================================== */
 
-import type { Address } from "viem";
+import { getAddress, type Address } from "viem";
 
 /** 97 = BSC Testnet (default), 56 = BSC Mainnet. */
 export const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID ?? 97) as 56 | 97;
@@ -18,8 +18,28 @@ export const BSC_TESTNET_RPC =
 
 export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
 
-const addr = (v: string | undefined): Address =>
-  v && /^0x[a-fA-F0-9]{40}$/.test(v) ? (v as Address) : ZERO_ADDRESS;
+/**
+ * A configured address, normalised to its EIP-55 checksummed form.
+ *
+ * `getAddress` is the check, not the regex: a mixed-case address whose checksum
+ * is wrong is the signature of a corrupted paste, and viem throws on one — from
+ * inside whichever contract read happened to reach it first, which is a long way
+ * from the line that set it. Anything unusable becomes the zero address, which
+ * the hooks already read as "not deployed" and handle.
+ *
+ * Being well-formed says nothing about being the RIGHT contract. That is checked
+ * against the chain by the API at boot (see the backend's deployment verifier);
+ * the browser is not the place to discover it.
+ */
+const addr = (v: string | undefined): Address => {
+  const raw = v?.trim();
+  if (!raw) return ZERO_ADDRESS;
+  try {
+    return getAddress(raw);
+  } catch {
+    return ZERO_ADDRESS;
+  }
+};
 
 /**
  * Deployed addresses, from MLM-contracts/deployments/<network>.json.
