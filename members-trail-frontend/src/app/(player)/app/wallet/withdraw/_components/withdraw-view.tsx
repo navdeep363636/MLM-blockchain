@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle, ArrowUpFromLine, Banknote, CheckCircle2, Clock, Info, ShieldAlert,
   ShieldCheck, Wallet, X,
@@ -9,10 +9,15 @@ import {
   Badge, Button, Callout, CapMeter, Checkbox, DataTable, DetailRow, InfoHint, Input,
   KycBadge, Modal, SegmentedControl, Select, StatusPill, useToast, type Column,
 } from "@/components/ui";
-import { useBalances, useCurrentUser, useTransactions, useWithdrawalLimits } from "@/lib/hooks/use-data";
-import { useRequestWithdrawal, type SourceTag } from "@/lib/hooks/use-mutations";
+import {
+  useBalances, useCurrentUser, useTransactions, useWalletAddresses, useWithdrawalLimits,
+} from "@/lib/hooks/use-data";
+import {
+  useAddWalletAddress, useAddressChallenge, useRequestWithdrawal, type SourceTag,
+} from "@/lib/hooks/use-mutations";
 import { humanMessage, isApiError } from "@/lib/api/errors";
-import { useMttBalance } from "@/lib/hooks/use-web3";
+import { useMttBalance, useWallet } from "@/lib/hooks/use-web3";
+import { useSignMessage } from "wagmi";
 import { MTT_SYMBOL, txUrl } from "@/lib/web3";
 import { clamp, formatCurrency, formatDate, formatToken, shortenHash } from "@/lib/utils";
 import type { Transaction } from "@/types";
@@ -58,11 +63,21 @@ export function WithdrawView() {
   const tierLimit = TIER_LIMITS[tier];
   const kycOk = user.kycTier === "tier1" || user.kycTier === "tier2";
 
+  /* The addresses the SERVER considers linked. The withdraw endpoint accepts
+     nothing else — it looks the destination up against this member's verified
+     addresses and returns 403 DESTINATION_NOT_VERIFIED otherwise — so this
+     screen must choose from them rather than accept a typed string. */
+  const { data: addresses, refetch: refetchAddresses } = useWalletAddresses();
+  const { address: connected, isConnected, wrongNetwork } = useWallet();
+  const challenge = useAddressChallenge();
+  const addAddress = useAddWalletAddress();
+  const { signMessageAsync } = useSignMessage();
+
   const [kind, setKind] = useState<Kind>("mtt");
   const [amount, setAmount] = useState(1_000);
   const [destination, setDestination] = useState("");
+  const [linking, setLinking] = useState(false);
   const [source, setSource] = useState("gameplay");
-  const [whitelisted, setWhitelisted] = useState(true);
   const [ack, setAck] = useState({ address: false, irreversible: false });
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -83,7 +98,35 @@ export function WithdrawView() {
 
   const limitRemaining = Math.max(0, tierLimit - used30d);
   const maxOut = Math.min(available, limitRemaining);
-  const addressValid = kind === "fiat" || /^0x[a-fA-F0-9]{40}$/.test(destination.trim());
+
+  const verified = useMemo(
+    () => addresses.filter((a) => !!a.verifiedAt),
+    [addresses],
+  );
+  const selected = useMemo(
+    () => verified.find((a) => a.address.toLowerCase() === destination.toLowerCase()) ?? null,
+    [verified, destination],
+  );
+  /* Default to the primary address, or the only one, so the common case needs no
+     choice at all. */
+  const defaultAddress = useMemo(
+    () => verified.find((a) => a.isPrimary)?.address ?? verified[0]?.address ?? "",
+    [verified],
+  );
+  useEffect(() => {
+    if (!destination && defaultAddress) setDestination(defaultAddress);
+  }, [destination, defaultAddress]);
+
+  /* Not "is it a plausible hex string" — is it an address the server will accept.
+     Cooling-off is reported separately so the member can still submit and see the
+     hold, rather than being blocked with no explanation. */
+  const addressValid = kind === "fiat" || !!selected;
+  /* The server's answer, not a checkbox: `withdrawable` is false while the
+     address is inside its cooling-off window. */
+  const whitelisted = kind === "fiat" || (selected?.withdrawable ?? false);
+  /* The connected wallet is only offerable if it is not already linked. */
+  const connectedIsLinked =
+    !!connected && verified.some((a) => a.address.toLowerCase() === connected.toLowerCase());
   const needsReview = amount > AUTO_APPROVE_THRESHOLD;
   const overLimit = amount > limitRemaining;
   const canSubmit =
@@ -156,6 +199,47 @@ export function WithdrawView() {
         ) : null,
     },
   ];
+
+  /**
+   * Links the connected wallet as a payout destination.
+   *
+   * This is the step the screen was missing entirely. The API has always
+   * required it — challenge, sign, present the signature — and the hooks for it
+   * existed with no caller, so the withdraw form collected a typed address the
+   * server could only ever refuse. A whitelist you can add an arbitrary address
+   * to protects nobody, which is exactly why the server insists on the proof.
+   *
+   * The signature proves control of the key. It authorises no transfer, and the
+   * message says so.
+   */
+  const linkConnectedWallet = async () => {
+    if (!connected) return;
+    setLinking(true);
+    try {
+      const { message } = await challenge.mutateAsync({ address: connected });
+      const signature = await signMessageAsync({ message });
+      await addAddress.mutateAsync({ address: connected, signature });
+      refetchAddresses();
+      setDestination(connected);
+      toast.success(
+        "Address linked",
+        `Withdrawals to ${connected.slice(0, 8)}…${connected.slice(-6)} are now possible. ` +
+        `A new address waits out the ${coolingOffHours}-hour cooling-off period first.`,
+      );
+    } catch (err) {
+      /* A wallet-side rejection is the member changing their mind, not a fault. */
+      const rejected =
+        err instanceof Error && /rejected|denied|cancell?ed/i.test(err.message);
+      toast.error(
+        rejected ? "Signature cancelled" : "Address not linked",
+        rejected
+          ? "The signing request was dismissed in your wallet, so nothing was linked."
+          : humanMessage(err),
+      );
+    } finally {
+      setLinking(false);
+    }
+  };
 
   const submit = async () => {
     setBusy(true);
@@ -281,27 +365,63 @@ export function WithdrawView() {
 
           {kind === "mtt" ? (
             <div className="mt-5">
-              <Input
-                label="Destination address"
-                required
-                placeholder="0x…"
-                value={destination}
-                onChange={(e) => { setDestination(e.target.value); setAck((a) => ({ ...a, address: false })); }}
-                error={destination.length > 0 && !addressValid && "Enter a valid BSC (BEP-20) address."}
-                hint="BNB Smart Chain only. Double-check every character — on-chain transfers cannot be reversed."
-              />
-              <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-xl border border-border-subtle bg-surface-inset p-3.5">
-                <input
-                  type="checkbox"
-                  checked={whitelisted}
-                  onChange={(e) => setWhitelisted(e.target.checked)}
-                  className="mt-0.5 size-4 accent-[var(--accent)]"
+              {verified.length > 0 ? (
+                <Select
+                  label="Destination address"
+                  options={verified.map((a) => ({
+                    value: a.address,
+                    label:
+                      `${a.label ? `${a.label} — ` : ""}${a.address.slice(0, 10)}…${a.address.slice(-6)}` +
+                      `${a.isPrimary ? " (primary)" : ""}` +
+                      `${a.withdrawable ? "" : " — cooling off"}`,
+                  }))}
+                  value={destination}
+                  onChange={(e) => { setDestination(e.target.value); setAck((a) => ({ ...a, address: false })); }}
+                  hint="Only addresses you have linked with a signature can receive a withdrawal."
                 />
-                <span className="text-sm text-text-secondary">
-                  <span className="font-medium text-text-primary">This is an address I&apos;ve used before</span> —
-                  uncheck if it&apos;s new, and the {coolingOffHours}-hour cooling-off period will apply.
-                </span>
-              </label>
+              ) : (
+                <Callout tone="warning" title="No linked address yet" icon={<ShieldAlert />}>
+                  <p className="mt-1">
+                    An on-chain withdrawal can only go to an address you have proved you control.
+                    Connect the wallet you want to be paid to and sign a one-line message — it
+                    authorises no transfer, it only proves the key is yours.
+                  </p>
+                </Callout>
+              )}
+
+              {/* Linking a new address, in place. */}
+              <div className="mt-3 rounded-xl border border-border-subtle bg-surface-inset p-3.5">
+                {!isConnected ? (
+                  <p className="text-sm text-text-muted">
+                    Connect a wallet from the header to link a new payout address.
+                  </p>
+                ) : wrongNetwork ? (
+                  <p className="text-sm text-warning-400">
+                    Your wallet is on the wrong network. Switch to BNB Smart Chain to link it.
+                  </p>
+                ) : connectedIsLinked ? (
+                  <p className="text-sm text-text-muted">
+                    Your connected wallet is already linked and selectable above.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <span className="text-sm text-text-secondary">
+                      Link the connected wallet{" "}
+                      <span className="font-mono text-xs text-text-primary">
+                        {connected?.slice(0, 10)}…{connected?.slice(-6)}
+                      </span>
+                    </span>
+                    <Button size="sm" variant="secondary" loading={linking} onClick={linkConnectedWallet}>
+                      Sign to link
+                    </Button>
+                  </div>
+                )}
+              </div>
+              {/* There was a checkbox here reading "this is an address I've used
+                  before", which the member ticked and the server ignored. The
+                  cooling-off window is decided from `whitelistedAt` on the linked
+                  address, so a self-declaration could only ever disagree with what
+                  actually happened. The address's own state says it instead. */}
             </div>
           ) : (
             <div className="mt-5 space-y-4">
@@ -329,6 +449,9 @@ export function WithdrawView() {
                 first withdrawal is released. It&apos;s an anti-fraud control: if someone compromises
                 your account and swaps the payout address, that window is what lets you and our
                 compliance team catch it.
+                {selected?.withdrawableAt
+                  ? ` This address becomes available on ${formatDate(selected.withdrawableAt, true)}.`
+                  : ""}
               </p>
             </Callout>
           )}
