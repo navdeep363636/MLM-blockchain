@@ -5,7 +5,7 @@ import {
 import { InjectRepository } from "@nestjs/typeorm";
 import { InjectQueue } from "@nestjs/bullmq";
 import type { Queue } from "bullmq";
-import { IsNull, Repository } from "typeorm";
+import { IsNull, LessThanOrEqual, Repository } from "typeorm";
 import {
   Transaction, User, UserBalance, WalletAddress, Withdrawal,
   type WithdrawalStatus,
@@ -586,6 +586,56 @@ export class WithdrawalService {
   /* ==================================================================== *
    * Called by queue processors — not exposed over HTTP
    * ==================================================================== */
+
+  /**
+   * Finds cooling-off windows that have closed and releases them.
+   *
+   * The primary mechanism is a delayed job scheduled at request time, which is
+   * the right design — the release happens at the instant the window closes
+   * rather than up to a poll interval later. But that job lives in Redis for the
+   * length of the window, which is 48 hours by default, and Redis is not the
+   * system of record. A restart without persistence, a flush, a changed key
+   * prefix or a failover all lose it.
+   *
+   * Losing it was unrecoverable: nothing else in the platform looked at
+   * `coolingOffUntil`, so the request stayed in `cooling_off` forever with the
+   * member's funds locked, no error raised and no operator path to advance it.
+   * A withdrawal is not a cache entry; it needs a floor under it.
+   *
+   * So this reconciles from the database, which does hold the truth. It is a
+   * safety net, not the mechanism: on a healthy instance the delayed job has
+   * already done the work and this finds nothing.
+   */
+  async sweepExpiredCoolingOff(limit = 200): Promise<{ released: number }> {
+    const due = await this.withdrawals.find({
+      where: { status: "cooling_off", coolingOffUntil: LessThanOrEqual(new Date()) },
+      order: { coolingOffUntil: "ASC" },
+      take: limit,
+    });
+
+    let released = 0;
+    for (const row of due) {
+      try {
+        await this.releaseCoolingOff(row.id);
+        released += 1;
+      } catch (e) {
+        /* One bad row must not stop the rest — a stuck withdrawal is exactly what
+         * this exists to clear. */
+        this.log.error(
+          `could not release ${row.ref} after its cooling-off window closed`,
+          e instanceof Error ? e.stack : String(e),
+        );
+      }
+    }
+
+    if (released > 0) {
+      this.log.warn(
+        `released ${released} withdrawal(s) whose cooling-off window had closed without the ` +
+        `delayed job firing — the scheduled release was lost, which is worth investigating`,
+      );
+    }
+    return { released };
+  }
 
   /**
    * Closes the cooling-off window. Routes to review or straight to payout using
