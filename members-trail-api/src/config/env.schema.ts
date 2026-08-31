@@ -14,6 +14,33 @@ const bool = z
 
 const port = z.coerce.number().int().min(0).max(65535);
 
+/**
+ * A contract address, or nothing.
+ *
+ * Format-checked rather than left as a free string, because a wrong contract
+ * address is the one piece of misconfiguration in this app that produces no
+ * error anywhere: `getLogs` against a non-contract matches nothing (so the
+ * indexer reports healthy and indexes zero events) and every read reverts into
+ * the read layer's honest nulls (so dashboards show dashes). Refusing to boot on
+ * a malformed one costs nothing and removes the whole class of typo.
+ *
+ * Case is normalised to lowercase here and re-checksummed where viem needs it,
+ * so a hand-typed all-lowercase address is accepted while a MIS-checksummed
+ * mixed-case one — a real symptom of a corrupted paste — still is.
+ *
+ * The address being well-formed says nothing about it being the RIGHT contract.
+ * That is checked against the chain at boot; see
+ * modules/chain/deployment-verifier.service.ts.
+ */
+const evmAddress = z
+  .string()
+  .trim()
+  .refine((v) => v === "" || /^0x[0-9a-fA-F]{40}$/.test(v), {
+    message: "must be a 20-byte hex address (0x + 40 hex chars), or empty",
+  })
+  .transform((v) => (v === "" ? undefined : v))
+  .optional();
+
 export const envSchema = z.object({
   /* ------------------------------- runtime ------------------------------- */
   NODE_ENV: z.enum(["development", "test", "staging", "production"]).default("development"),
@@ -81,14 +108,26 @@ export const envSchema = z.object({
   CHAIN_ID: z.coerce.number().int().refine((v) => v === 56 || v === 97, {
     message: "CHAIN_ID must be 56 (BSC mainnet) or 97 (BSC testnet)",
   }).default(97),
-  BSC_RPC_URLS: z.string().default("https://bsc-testnet-rpc.publicnode.com"),
-  MTT_TOKEN_ADDRESS: z.string().optional(),
-  STAKING_ADDRESS: z.string().optional(),
-  REFERRAL_DISTRIBUTOR_ADDRESS: z.string().optional(),
-  TEAM_VESTING_ADDRESS: z.string().optional(),
-  ADVISORS_VESTING_ADDRESS: z.string().optional(),
+  /**
+   * Comma-separated. The RPC transport rotates on failure and prefers the
+   * fastest responder, so more than one is worth having: the first testnet
+   * deploy attempt was lost to a single provider timing out.
+   */
+  BSC_RPC_URLS: z
+    .string()
+    .default(
+      "https://data-seed-prebsc-1-s1.binance.org:8545,https://bsc-testnet-rpc.publicnode.com",
+    )
+    .refine((v) => v.split(",").some((u) => u.trim().length > 0), {
+      message: "BSC_RPC_URLS must contain at least one URL",
+    }),
+  MTT_TOKEN_ADDRESS: evmAddress,
+  STAKING_ADDRESS: evmAddress,
+  REFERRAL_DISTRIBUTOR_ADDRESS: evmAddress,
+  TEAM_VESTING_ADDRESS: evmAddress,
+  ADVISORS_VESTING_ADDRESS: evmAddress,
   /** MTTPayout — the withdrawal settlement rail. See MTTPayout.sol. */
-  PAYOUT_ADDRESS: z.string().optional(),
+  PAYOUT_ADDRESS: evmAddress,
 
   /** Indexer tuning. Confirmations guard against reorgs. */
   INDEXER_ENABLED: bool.default("true"),
