@@ -242,15 +242,24 @@ export class ChainWriteService {
   }
 
   /** Funds the commission pool from reconciled revenue. TREASURY_ROLE on chain. */
-  async depositCommissionPool(amountMtt: string, periodRef: string): Promise<OutboundTransaction> {
+  /**
+   * `link` attaches the transaction to the record that authorised it, so the
+   * confirmation can be routed back. Without it a confirmed deposit is linked
+   * only to a period, and nothing can tell WHICH approved outflow it settled.
+   */
+  async depositCommissionPool(
+    amountMtt: string,
+    periodRef: string,
+    link?: { relatedType: string; relatedId: string; idempotencyKey?: string },
+  ): Promise<OutboundTransaction> {
     return this.submitter.enqueue({
       kind: "deposit_commission_pool",
       contract: Contracts.ReferralDistributor,
       functionName: "depositCommissionPool",
       args: [toWei(amountMtt)],
-      idempotencyKey: `commission-pool:deposit:${periodRef}`,
-      relatedType: "treasury_period",
-      relatedId: periodRef,
+      idempotencyKey: link?.idempotencyKey ?? `commission-pool:deposit:${periodRef}`,
+      relatedType: link?.relatedType ?? "treasury_period",
+      relatedId: link?.relatedId ?? periodRef,
     });
   }
 
@@ -318,16 +327,19 @@ export class ChainWriteService {
    * not a promise made before it.
    */
   async fundRewardPool(
-    poolId: number, amountMtt: string, periodRef: string,
+    poolId: number,
+    amountMtt: string,
+    periodRef: string,
+    link?: { relatedType: string; relatedId: string; idempotencyKey?: string },
   ): Promise<OutboundTransaction> {
     return this.submitter.enqueue({
       kind: "fund_reward_pool",
       contract: Contracts.Staking,
       functionName: "fundRewardPool",
       args: [BigInt(poolId), toWei(amountMtt)],
-      idempotencyKey: `pool-funding:${periodRef}:${poolId}`,
-      relatedType: "treasury_period",
-      relatedId: periodRef,
+      idempotencyKey: link?.idempotencyKey ?? `pool-funding:${periodRef}:${poolId}`,
+      relatedType: link?.relatedType ?? "treasury_period",
+      relatedId: link?.relatedId ?? periodRef,
     });
   }
 
