@@ -50,7 +50,7 @@ import type {
   RevenueByStreamPoint, RolePermissionResponse, StaffIdentity, StaffMemberResponse,
   StakePositionsResponse, StakingPoolResponse, StakingRewardResponse, StakingTvlPoint,
   StoreItemResponse, TicketResponse, TournamentResponse, TransactionResponse, TreasuryDashboard,
-  TreasuryInflowResponse, TreasuryOutflowResponse,
+  TreasuryInflowResponse, TreasuryOutflowResponse, WalletAddressResponse,
 } from "@/lib/api/types";
 import { useAuth } from "@/lib/auth/auth-context";
 import type {
@@ -536,6 +536,27 @@ export const useConversionSummary = (): Resource<Record<string, unknown>> =>
     qk.conversionSummary(),
     () => api.get<Record<string, unknown>>("/conversion/summary"),
     {},
+  );
+
+/**
+ * The member's linked withdrawal addresses.
+ *
+ * The API has always served this and nothing read it, which is why the withdraw
+ * screen offered a free-text address field: it had no way to show which
+ * addresses were actually linked. `withdrawable` is false while an address is
+ * inside its cooling-off window, and `withdrawableAt` says when that ends — both
+ * come from the server, because the window length is per-environment.
+ */
+export const useWalletAddresses = (): Resource<WalletAddressResponse[]> =>
+  useAuthedResource(
+    qk.walletAddresses(),
+    /* The endpoint returns a bare array. `page()` anyway, because a payload that
+       is not the shape the screen assumes should degrade to "no addresses" — the
+       withdraw page calls .filter on this, and an unexpected object took the whole
+       route to its error boundary rather than showing an empty list. */
+    async () => page(await api.get<WalletAddressResponse[]>("/wallet/addresses")),
+    [],
+    { staleTime: FRESH.money },
   );
 
 /** Withdrawal minimums, ceilings and the cooling-off period for this member's tier. */
