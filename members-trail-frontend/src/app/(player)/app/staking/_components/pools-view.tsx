@@ -46,6 +46,13 @@ export function PoolsView() {
               totalRewardsPaid: chain.totalRewardsPaid,
               earlyPenaltyBps: chain.earlyUnstakePenaltyBps,
               lockDays: Math.round(chain.lockDuration / 86_400),
+              /* A pool with no rewards funded on chain pays nothing, whatever
+                 rate the platform has configured for it. On the current testnet
+                 deployment that is three of the four pools: they were created and
+                 activated, and only the 30-day pool was funded. Showing the
+                 configured rate for the others would advertise a return the
+                 contract cannot pay — so the card says so instead. */
+              rewardsUnfunded: chain.totalRewardsFunded <= 0,
             }
           : p;
       }),
@@ -151,10 +158,22 @@ export function PoolsView() {
                       Variable by design — never advertised as fixed or guaranteed.
                     </InfoHint>
                   </p>
-                  <p className="tnum mt-0.5 font-display text-2xl font-semibold tracking-tight text-text-primary">
-                    {formatPercent(p.currentApr)}
-                    <span className="ml-1.5 text-xs font-medium text-text-muted">variable</span>
-                  </p>
+                  {"rewardsUnfunded" in p && p.rewardsUnfunded ? (
+                    <>
+                      <p className="mt-0.5 font-display text-lg font-semibold tracking-tight text-text-secondary">
+                        Not yet funded
+                      </p>
+                      <p className="mt-1 text-xs leading-relaxed text-text-muted">
+                        This pool accepts stakes but its reward stream has no balance on chain, so it
+                        pays nothing until the treasury funds it. Your principal is unaffected.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="tnum mt-0.5 font-display text-2xl font-semibold tracking-tight text-text-primary">
+                      {formatPercent(p.currentApr)}
+                      <span className="ml-1.5 text-xs font-medium text-text-muted">variable</span>
+                    </p>
+                  )}
                 </div>
 
                 <dl className="mt-4 space-y-1 text-xs">
