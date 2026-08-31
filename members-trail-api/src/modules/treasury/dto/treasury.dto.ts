@@ -1,8 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { Type } from "class-transformer";
+import { Type, Transform } from "class-transformer";
 import {
-  IsArray, IsEnum, IsInt, IsISO8601, IsNumberString, IsOptional, IsString,
-  IsUUID, Max, MaxLength, Min, MinLength,
+  IsArray, IsBoolean, IsISO8601, IsIn, IsInt, IsNumberString, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength,
 } from "class-validator";
 import { DateRangeQuery } from "@/common/dto";
 import type { RevenueStream } from "@/database/entities";
@@ -13,11 +12,11 @@ export const REVENUE_STREAMS = ["iap", "tournament", "marketplace", "advertising
 
 export class InflowQuery extends DateRangeQuery {
   @ApiPropertyOptional({ enum: REVENUE_STREAMS })
-  @IsOptional() @IsEnum(REVENUE_STREAMS)
+  @IsOptional() @IsIn(REVENUE_STREAMS)
   stream?: RevenueStream;
 
   @ApiPropertyOptional({ description: "Filter to reconciled or unreconciled only" })
-  @IsOptional() @IsEnum(["true", "false"] as const)
+  @IsOptional() @IsIn(["true", "false"] as const)
   reconciled?: "true" | "false";
 
   @ApiPropertyOptional({ example: "2026-08" })
@@ -27,11 +26,11 @@ export class InflowQuery extends DateRangeQuery {
 
 export class OutflowQuery extends DateRangeQuery {
   @ApiPropertyOptional({ enum: ["staking_pool", "commission_pool"] })
-  @IsOptional() @IsEnum(["staking_pool", "commission_pool"] as const)
+  @IsOptional() @IsIn(["staking_pool", "commission_pool"] as const)
   destination?: "staking_pool" | "commission_pool";
 
   @ApiPropertyOptional({ enum: ["proposed", "approved", "submitted", "confirmed", "failed", "rejected"] })
-  @IsOptional() @IsEnum(["proposed", "approved", "submitted", "confirmed", "failed", "rejected"] as const)
+  @IsOptional() @IsIn(["proposed", "approved", "submitted", "confirmed", "failed", "rejected"] as const)
   status?: string;
 
   @ApiPropertyOptional({ example: "2026-08" })
@@ -44,7 +43,7 @@ export class OutflowQuery extends DateRangeQuery {
 export class RecogniseRevenueDto {
   @ApiProperty() @IsUUID() userId!: string;
 
-  @ApiProperty({ enum: REVENUE_STREAMS }) @IsEnum(REVENUE_STREAMS) stream!: RevenueStream;
+  @ApiProperty({ enum: REVENUE_STREAMS }) @IsIn(REVENUE_STREAMS) stream!: RevenueStream;
 
   @ApiProperty({ description: "Gross amount charged, as a decimal string" })
   @IsNumberString() grossAmount!: string;
@@ -76,7 +75,7 @@ export class ReconcileBatchDto {
 
 export class ProposeOutflowDto {
   @ApiProperty({ enum: ["staking_pool", "commission_pool"] })
-  @IsEnum(["staking_pool", "commission_pool"] as const)
+  @IsIn(["staking_pool", "commission_pool"] as const)
   destination!: "staking_pool" | "commission_pool";
 
   @ApiPropertyOptional({ description: "Required when destination is staking_pool" })
@@ -92,8 +91,24 @@ export class ProposeOutflowDto {
   @ApiProperty({ minLength: 10, description: "Mandatory rationale — recorded in the audit log" })
   @IsString() @MinLength(10) @MaxLength(1000) rationale!: string;
 
-  @ApiPropertyOptional({ description: "Draw from the 15% Treasury Reserve instead of real revenue" })
-  @IsOptional() @IsEnum(["true", "false"] as const) fromReserve?: "true" | "false";
+  /**
+   * A real boolean, because this is a JSON body.
+   *
+   * It was typed `"true" | "false"`, which is right for a query string and wrong
+   * here: a client sending `true` was rejected with a validation error, so the
+   * reserve draw — the only way to fund a pool once the period's reconciled
+   * revenue is spent — could not be requested at all from an ordinary JSON
+   * client. The string forms are still accepted for anything posting
+   * form-encoded.
+   */
+  @ApiPropertyOptional({
+    type: Boolean,
+    description: "Draw from the 15% Treasury Reserve instead of real revenue",
+  })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === "string" ? value.trim().toLowerCase() === "true" : value))
+  @IsBoolean()
+  fromReserve?: boolean;
 }
 
 export class ApproveOutflowDto {
@@ -115,6 +130,13 @@ export class ApproveOutflowDto {
  * ========================================================================== */
 
 export class TreasuryInflowResponse {
+  @ApiProperty({
+    description:
+      "Row id. Present because POST /admin/treasury/reconcile takes `inflowIds` as UUIDs, " +
+      "and without it the documented reconciliation flow could not be driven from the API at " +
+      "all — the listing was the only way to find the rows and it returned no id.",
+  })
+  id!: string;
   @ApiProperty() ref!: string;
   @ApiProperty({
     description:

@@ -173,7 +173,8 @@ describe("TreasuryService", () => {
       const row = await svc.proposeOutflow(
         {
           destination: "commission_pool", amount: "20000", periodKey: "2026-08",
-          rationale: "bootstrap draw, pre-revenue period", fromReserve: "true",
+          /* A real boolean: this is a JSON body, not a query string. */
+          rationale: "bootstrap draw, pre-revenue period", fromReserve: true,
         },
         "finance-1",
       );
