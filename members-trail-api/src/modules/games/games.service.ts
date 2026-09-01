@@ -8,6 +8,7 @@ import type { Queue } from "bullmq";
 import { Repository } from "typeorm";
 import { randomBytes } from "node:crypto";
 import { Game, GameSession, PointsRule, User } from "@/database/entities";
+import type { GameScoringConfig } from "@/database/entities/game.entity";
 import { EventBusService, Events } from "@/events";
 import { Jobs, Queues, jobKey } from "@/queues/queue.constants";
 import { CryptoService } from "@/common/crypto/crypto.service";
@@ -58,6 +59,9 @@ const SESSION_MAX_AGE_MS = 6 * 60 * 60 * 1_000;
 /** Below this, a "session" is too short to have been played. */
 const MIN_PLAUSIBLE_DURATION_MS = 1_500;
 
+/** Window the catalogue's "players (30 days)" figure is counted over. */
+const POPULARITY_WINDOW_DAYS = 30;
+
 /** Frames per second above which input is not human. */
 const MAX_HUMAN_FRAMES_PER_SECOND = 40;
 
@@ -68,18 +72,8 @@ const SCORE_DISCREPANCY_TOLERANCE_BPS = 500; // 5%
 /** Distinct accounts sharing one device fingerprint before it is suspicious. */
 const MAX_ACCOUNTS_PER_DEVICE = 3;
 
-interface ScoringConfig {
-  /** Points of score per unit of telemetry value on a scoring frame. */
-  scorePerUnit?: number;
-  /** Telemetry event code that carries score. */
-  scoreEvent?: number;
-  /** Maximum score the game can produce in one session, whatever the frames. */
-  maxScore?: number;
-  /** Score awarded per second survived, for endless titles. */
-  scorePerSecond?: number;
-  /** Points awarded per unit of server score. */
-  pointsPerScore?: number;
-}
+/* The shape lives with the column it is stored in. */
+type ScoringConfig = GameScoringConfig;
 
 @Injectable()
 export class GamesService {
@@ -114,13 +108,46 @@ export class GamesService {
       .skip(q.skip)
       .take(q.limit)
       .getManyAndCount();
-    return paginate(rows.map(toGameView), total, q);
+
+    const players = await this.playersByGame(rows.map((r) => r.id));
+    return paginate(
+      rows.map((r) => toGameView(r, players.get(r.id) ?? 0)),
+      total,
+      q,
+    );
   }
 
   async bySlug(slug: string): Promise<GameResponse> {
     const row = await this.games.findOne({ where: { slug } });
     if (!row) throw new NotFoundException("Game not found");
-    return toGameView(row);
+    const players = await this.playersByGame([row.id]);
+    return toGameView(row, players.get(row.id) ?? 0);
+  }
+
+  /**
+   * Distinct members who have completed a validated session per game, over the
+   * popularity window.
+   *
+   * Counted on read rather than kept in a column. `games.players30d` is a
+   * denormalised counter that nothing in the codebase ever wrote, so it sat at
+   * zero forever - which made the lobby's default "Most played (30 days)" sort a
+   * no-op and printed "0 players" under every title in a live catalogue. A
+   * thirty-day window over an indexed session table is cheap, and there is no
+   * counter left to drift out of step with the sessions it claims to count.
+   */
+  private async playersByGame(gameIds: string[]): Promise<Map<string, number>> {
+    if (gameIds.length === 0) return new Map();
+    const since = new Date(Date.now() - POPULARITY_WINDOW_DAYS * 86_400_000);
+    const rows = await this.sessions
+      .createQueryBuilder("s")
+      .select("s.gameId", "gameId")
+      .addSelect("COUNT(DISTINCT s.userId)", "players")
+      .where("s.gameId IN (:...gameIds)", { gameIds })
+      .andWhere("s.status = :status", { status: "validated" })
+      .andWhere("s.createdAt >= :since", { since })
+      .groupBy("s.gameId")
+      .getRawMany<{ gameId: string; players: string }>();
+    return new Map(rows.map((r) => [r.gameId, Number(r.players) || 0]));
   }
 
   async genres(): Promise<string[]> {
@@ -182,7 +209,11 @@ export class GamesService {
         throw new ConflictException({
           code: "SESSION_ALREADY_OPEN",
           message: "Finish or abandon your open session for this game first",
-          ref: open.ref,
+          /* In `details`, which is the field the error contract actually carries
+           * through to the client — a top-level key here was dropped by the
+           * exception filter, so the UI knew a session was open but not which
+           * one, and could not offer to abandon it. */
+          details: { ref: open.ref },
         });
       }
       open.status = "abandoned";
@@ -247,6 +278,38 @@ export class GamesService {
    * cannot hold an HTTP connection, and so a burst of submissions is absorbed
    * rather than dropped.
    */
+  /**
+   * Gives up an open session without submitting it.
+   *
+   * `startSession` refuses a second open session on the same title and tells the
+   * member to "finish or abandon" the first — advice with nowhere to act on it
+   * until this existed. Closing a tab mid-game left the title locked for the
+   * full six-hour expiry window, and the only instruction on screen was one the
+   * API would not honour.
+   *
+   * Abandoning FORFEITS the session: nothing is scored and nothing is credited,
+   * so this is not a way to retry a bad run for free — it costs the run. That is
+   * what keeps the one-open-session rule doing its job, which is to stop a member
+   * holding several sessions open and submitting only the best.
+   */
+  async abandonSession(userId: string, ref: string): Promise<SessionResponse> {
+    const session = await this.sessions.findOne({ where: { ref } });
+    if (!session || session.userId !== userId) {
+      throw new NotFoundException("Session not found");
+    }
+    if (session.status !== "open") {
+      /* Already finished, expired or submitted. Idempotent on purpose: two
+       * clicks on "abandon" must not turn into an error the player has to read. */
+      return toSessionView(session);
+    }
+    session.status = "abandoned";
+    session.endedAt = new Date();
+    session.rejectionReason = "Abandoned by the player";
+    await this.sessions.save(session);
+    this.log.log(`session ${session.ref} abandoned by its owner`);
+    return toSessionView(session);
+  }
+
   async submitSession(
     userId: string,
     ref: string,
@@ -695,7 +758,11 @@ export class GamesService {
       ip,
     });
 
-    return toGameView(saved);
+    /* An admin upsert response: the popularity figure is a read-model concern
+     * and a freshly created title has no sessions, so it is resolved the same
+     * way the catalogue resolves it. */
+    const players = await this.playersByGame([saved.id]);
+    return toGameView(saved, players.get(saved.id) ?? 0);
   }
 
   /** Points rules for a game, newest version first. */
@@ -725,7 +792,7 @@ const FATAL_REASONS: Record<string, string> = {
   score_discrepancy: "The reported score does not match the replayed gameplay",
 };
 
-function toGameView(g: Game): GameResponse {
+function toGameView(g: Game, players30d: number): GameResponse {
   return {
     id: g.id,
     slug: g.slug,
@@ -741,7 +808,7 @@ function toGameView(g: Game): GameResponse {
     sessionPointsCap: g.sessionPointsCap,
     active: g.active,
     rating: g.rating,
-    players30d: g.players30d,
+    players30d,
   };
 }
 

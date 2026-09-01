@@ -90,6 +90,21 @@ export class GamesController {
     return this.games.startSession(user.id, dto, ip);
   }
 
+  @Post("sessions/:ref/abandon")
+  @HttpCode(200)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: "Give up an open session without submitting it",
+    description:
+      "Forfeits the session: nothing is scored and nothing is credited. This is what makes the " +
+      "one-open-session-per-title rule actionable — without it, closing a tab mid-game locked the " +
+      "title until the session expired. Idempotent on a session that is already closed.",
+  })
+  @ApiOkResponse({ type: SessionResponse })
+  abandon(@CurrentUser() user: AuthUser, @Param("ref") ref: string): Promise<SessionResponse> {
+    return this.games.abandonSession(user.id, ref);
+  }
+
   @Post("sessions/:ref/submit")
   @HttpCode(202)
   @ApiBearerAuth()
