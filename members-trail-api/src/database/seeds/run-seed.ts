@@ -21,6 +21,7 @@ import { COMMISSION_ELIGIBLE_STREAMS, ConfigKeys } from "@/modules/economy-confi
 import { streamToTrigger } from "@/modules/referral/commission-plan.service";
 import { defaultNotificationMatrix } from "@/modules/auth/auth.service";
 import { Ref, toDbAmount } from "@/common/utils";
+import { assertSplitTotals } from "@/modules/tournaments/tournaments.service";
 import type { CommissionTrigger } from "@/database/entities";
 import {
   Achievement, CommissionPlan, ConversionRate, FraudRule, Game, LegalDocument,
@@ -397,6 +398,12 @@ async function main(): Promise<void> {
       note(`tournament ${t.slug}`, false);
       continue;
     }
+    /* The platform's own validator, run on seed data too.
+     * Shares are basis points totalling 10,000; written as percentages they
+     * silently mint events that pay 1% of their pool. A seed that ships a
+     * mispriced event is worse than a seed that fails. */
+    assertSplitTotals(t.prizeSplit);
+
     const startsAt = new Date(Date.now() + t.startsInDays * 86_400_000);
     const endsAt = new Date(startsAt.getTime() + t.runsForDays * 86_400_000);
     await tournaments.save(tournaments.create({
@@ -412,6 +419,12 @@ async function main(): Promise<void> {
       status: t.status,
       format: t.format,
       prizeSplit: t.prizeSplit,
+      /* Locked, because the split above IS the published one. Registration
+       * refuses an event whose split is not locked — the rule is that the
+       * division of the pool is fixed before any money changes hands — so a
+       * seeded event without this is "live" and rejects every entry with
+       * PRIZE_SPLIT_NOT_PUBLISHED. */
+      prizeSplitLockedAt: startsAt,
     }));
     note(`tournament ${t.slug}`, true);
   }

@@ -59,7 +59,19 @@ export class StartSessionRequest {
   @IsIn(SESSION_MODES)
   mode!: SessionMode;
 
-  @ApiPropertyOptional({ description: "Required when mode is tournament" })
+  /**
+   * The tournament, by its public reference.
+   *
+   * Every other tournament route is addressed by ref (`/tournaments/:ref/...`),
+   * and the read model deliberately exposes the ref rather than the uuid — so a
+   * uuid-only field here was a field no browser client could populate. Both are
+   * accepted; the ref is the one to use.
+   */
+  @ApiPropertyOptional({ description: "Required when mode is tournament, e.g. TRN-XZ31F0J1" })
+  @IsOptional() @IsString() @MinLength(4) @MaxLength(32)
+  tournamentRef?: string;
+
+  @ApiPropertyOptional({ deprecated: true, description: "Legacy: prefer tournamentRef" })
   @IsOptional() @IsUUID()
   tournamentId?: string;
 
