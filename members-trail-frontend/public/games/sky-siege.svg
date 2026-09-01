@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 300" width="480" height="300" role="img" aria-label="Sky Siege cover art">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="hsl(190 48% 15%)"/>
+      <stop offset="1" stop-color="hsl(236 52% 7%)"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.14" cy="0.08" r="0.95">
+      <stop offset="0" stop-color="hsl(190 92% 60%)" stop-opacity="0.85"/>
+      <stop offset="0.6" stop-color="hsl(190 92% 60%)" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="0.9" cy="0.95" r="0.8">
+      <stop offset="0" stop-color="hsl(236 88% 50%)" stop-opacity="0.75"/>
+      <stop offset="0.65" stop-color="hsl(236 88% 50%)" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="hatch" width="16" height="16" patternTransform="rotate(115)" patternUnits="userSpaceOnUse">
+      <line x1="0" y1="0" x2="0" y2="16" stroke="#fff" stroke-opacity="0.055" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="480" height="300" fill="url(#bg)"/>
+  <rect width="480" height="300" fill="url(#glow)"/>
+  <rect width="480" height="300" fill="url(#glow2)"/>
+  <rect width="480" height="300" fill="url(#hatch)"/>
+  <circle cx="452" cy="-14" r="80" fill="none" stroke="#fff" stroke-opacity="0.16"/>
+  <circle cx="24" cy="318" r="88" fill="none" stroke="#fff" stroke-opacity="0.12"/>
+  <g stroke-linecap="round" stroke-linejoin="round">
+    <path d="M40 262h400" stroke="#fff" stroke-opacity="0.18" stroke-width="2"/>
+    <rect x="96" y="198" width="34" height="64" rx="6" fill="hsl(0 0% 100%)" fill-opacity="0.10" stroke="#fff" stroke-opacity="0.14"/>
+    <rect x="150" y="152" width="34" height="110" rx="6" fill="hsl(0 0% 100%)" fill-opacity="0.10" stroke="#fff" stroke-opacity="0.14"/>
+    <rect x="204" y="176" width="34" height="86" rx="6" fill="hsl(0 0% 100%)" fill-opacity="0.10" stroke="#fff" stroke-opacity="0.14"/>
+    <rect x="258" y="130" width="34" height="132" rx="6" fill="hsl(0 0% 100%)" fill-opacity="0.10" stroke="#fff" stroke-opacity="0.14"/>
+    <rect x="312" y="166" width="34" height="96" rx="6" fill="hsl(0 0% 100%)" fill-opacity="0.10" stroke="#fff" stroke-opacity="0.14"/>
+    <rect x="366" y="190" width="34" height="72" rx="6" fill="hsl(0 0% 100%)" fill-opacity="0.10" stroke="#fff" stroke-opacity="0.14"/>
+    <circle cx="120" cy="84" r="13" fill="hsl(190 95% 68%)" fill-opacity="0.9"/>
+    <circle cx="120" cy="84" r="24" fill="none" stroke="hsl(190 95% 68%)" stroke-opacity="0.45" stroke-width="2"/>
+    <circle cx="232" cy="60" r="13" fill="hsl(190 95% 68%)" fill-opacity="0.9"/>
+    <circle cx="232" cy="60" r="24" fill="none" stroke="hsl(190 95% 68%)" stroke-opacity="0.45" stroke-width="2"/>
+    <circle cx="340" cy="104" r="13" fill="hsl(190 95% 68%)" fill-opacity="0.9"/>
+    <circle cx="340" cy="104" r="24" fill="none" stroke="hsl(190 95% 68%)" stroke-opacity="0.45" stroke-width="2"/>
+    <path d="M120 97 L232 73 L340 117" stroke="hsl(190 95% 68%)" stroke-opacity="0.55" stroke-width="2" stroke-dasharray="7 7" fill="none"/>  </g>
+</svg>
