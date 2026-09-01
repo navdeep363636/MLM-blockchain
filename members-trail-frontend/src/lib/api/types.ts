@@ -635,13 +635,23 @@ export interface ConversionSummary {
 
 /* ---------------------------------- legal --------------------------------- */
 
+/**
+ * Two endpoints serve this shape and they do not agree on every field: the
+ * public reader sends a published document, the admin list sends drafts and
+ * archived versions too. Anything only one of them guarantees is optional here,
+ * so a component has to decide what an absent value looks like instead of
+ * finding out at runtime. `updatedAt` was typed as required and never sent by
+ * the admin endpoint at all, which cost the whole of /admin/cms.
+ */
 export interface LegalDocumentResponse {
   slug: string;
   title: string;
   version: string;
   status: string;
-  updatedAt: string;
-  effectiveFrom: string;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+  publishedAt?: string | null;
+  effectiveFrom?: string | null;
   materialChange: boolean;
   summary?: string | null;
   sections?: { heading: string; body: string[] }[] | null;
