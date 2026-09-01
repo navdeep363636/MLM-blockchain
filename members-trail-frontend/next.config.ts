@@ -22,6 +22,17 @@ const nextConfig: NextConfig = {
 
   experimental: {
     /*
+     * NOT enabled: `turbopackPersistentCaching` would let Turbopack's dev
+     * compile cache survive a `next dev` restart instead of being rebuilt
+     * from zero every time (a crash, an `.env` edit, a branch switch). It is
+     * gated to Next.js canary builds only — enabling it on this project's
+     * stable 15.5.23 throws `CanaryOnlyError` and crashes the dev server on
+     * startup, confirmed by actually running it. Revisit if this project
+     * moves to `next@canary`; until then `scripts/warm-dev.mjs` is the
+     * mitigation for the "same route recompiles after every restart" cost.
+     */
+
+    /*
      * Client router cache lifetimes.
      *
      * Next 15 ships `dynamic: 0`, which means a segment rendered dynamically is
