@@ -41,6 +41,9 @@ export const qk = {
   games: () => ["games"] as const,
   game: (slug: string) => ["games", slug] as const,
   tournaments: () => ["tournaments"] as const,
+  /* Whose entries these are is the caller's; the key is per-session because the
+     whole cache is cleared on sign-out. */
+  myTournamentEntries: () => ["tournaments", "mine"] as const,
   tournament: (ref: string) => ["tournaments", ref] as const,
   leaderboard: (metric?: string, period?: string) =>
     ["leaderboard", metric ?? "points", period ?? "weekly"] as const,

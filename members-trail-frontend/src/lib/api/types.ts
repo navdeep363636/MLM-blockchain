@@ -657,6 +657,22 @@ export interface LegalDocumentResponse {
   sections?: { heading: string; body: string[] }[] | null;
 }
 
+/** One row of `/tournaments/mine`: this member's entry in one event. */
+export interface TournamentEntryResponse {
+  tournamentId: string;
+  /** Public reference, which is what `Tournament.id` carries in the UI. */
+  tournamentRef: string;
+  tournamentName: string;
+  paidAmount: string;
+  bestScore: number | null;
+  rank: number | null;
+  prizeAmount: string;
+  prizePaidAt: string | null;
+  disqualified: boolean;
+  disqualificationReason: string | null;
+  joinedAt: string;
+}
+
 /* ---------------------------------- public -------------------------------- */
 
 export interface PublicConfig {

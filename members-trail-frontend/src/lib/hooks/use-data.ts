@@ -50,8 +50,8 @@ import type {
   RevenueByStreamPoint, RolePermissionResponse, StaffIdentity, StaffMemberResponse,
   StakePositionsResponse, StakingPoolResponse, StakingRewardResponse, StakingTvlPoint,
   StoreItemResponse, TicketResponse, TournamentResponse, TransactionResponse, TreasuryDashboard,
-  TreasuryInflowResponse, TreasuryOutflowResponse, WalletAddressResponse,
-  WithdrawalResponse,
+  TournamentEntryResponse, TreasuryInflowResponse, TreasuryOutflowResponse,
+  WalletAddressResponse, WithdrawalResponse,
 } from "@/lib/api/types";
 import { useAuth } from "@/lib/auth/auth-context";
 import type {
@@ -346,6 +346,23 @@ export const useGames = (): Resource<Game[]> =>
 
 export const useTournaments = (): Resource<Tournament[]> =>
   useSpec(Q.tournaments, [] as Tournament[]);
+
+/**
+ * This member's tournament entries.
+ *
+ * The tournament list cannot answer "have I entered?" — that is deliberately not
+ * on the public read model — and until this existed nothing asked. The hub tracked
+ * registration in component state only, so on any page load a member who had
+ * already paid was shown "Enter for 3.00 MTT" again and had no route to a ranked
+ * session at all.
+ */
+export const useMyTournamentEntries = (): Resource<TournamentEntryResponse[]> =>
+  useAuthedResource(
+    qk.myTournamentEntries(),
+    async () => page(await api.get<TournamentEntryResponse[]>("/tournaments/mine")),
+    [] as TournamentEntryResponse[],
+    { staleTime: FRESH.ledger },
+  );
 
 /**
  * A leaderboard.
