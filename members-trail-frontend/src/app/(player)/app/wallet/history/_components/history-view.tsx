@@ -9,6 +9,7 @@ import {
   Select, StatTile, StatusPill, type Column,
 } from "@/components/ui";
 import { useBalances, useTransactions } from "@/lib/hooks/use-data";
+import { useInFlightWithdrawals } from "@/lib/wallet/in-flight-withdrawals";
 import { MTT_SYMBOL, txUrl } from "@/lib/web3";
 import { cn, csvDownload, formatCurrency, formatDate, formatToken, shortenHash } from "@/lib/utils";
 import type { Transaction, TxType } from "@/types";
@@ -44,8 +45,17 @@ type Range = "30d" | "90d" | "1y" | "all";
 const RANGE_DAYS: Record<Range, number> = { "30d": 30, "90d": 90, "1y": 365, all: 100_000 };
 
 export function HistoryView() {
-  const { data: txs, isLoading } = useTransactions();
+  const { data: settled, isLoading } = useTransactions();
   const { data: balances } = useBalances();
+  /* A requested withdrawal has already left the available balance but has no
+     settled transaction until its payout lands, so it would otherwise be missing
+     from this page for the whole cooling-off window. */
+  const { rows: inFlight, isLoading: loadingWithdrawals } = useInFlightWithdrawals();
+
+  const txs = useMemo(
+    () => [...inFlight, ...settled].sort((a, b) => Date.parse(b.date) - Date.parse(a.date)),
+    [inFlight, settled],
+  );
   const referenceNow = useReferenceNow();
 
   const [range, setRange] = useState<Range>("90d");
@@ -218,7 +228,7 @@ export function HistoryView() {
           columns={columns}
           rows={filtered}
           keyOf={(t) => t.id}
-          loading={isLoading}
+          loading={isLoading || loadingWithdrawals}
           pageSize={15}
           onRowClick={setDetail}
           caption="Complete financial activity ledger with on-chain proof"
