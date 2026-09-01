@@ -105,7 +105,17 @@ async function openSessionRef(gameId: string): Promise<string | null> {
   }
 }
 
-export function useGameSession(gameId: string | null, mode: "free" | "paid" = "free"): GameSessionState {
+/**
+ * @param tournamentRef Opens a RANKED session against that event when set.
+ *   The server checks the entry, the title and the window; this only names it.
+ *   Without this the loop was broken in the worst direction: a member could pay
+ *   an entry fee and had no way to play a session that counted toward it, so
+ *   their best score stayed zero and settlement paid them nothing.
+ */
+export function useGameSession(
+  gameId: string | null,
+  tournamentRef: string | null = null,
+): GameSessionState {
   const qc = useQueryClient();
   const [stage, setStage] = useState<SessionStage>("idle");
   const [seed, setSeed] = useState<string | null>(null);
@@ -137,10 +147,11 @@ export function useGameSession(gameId: string | null, mode: "free" | "paid" = "f
     setBlockedByOpenRef(null);
   }, []);
 
-  /* A change of title invalidates everything about the open session. */
+  /* A change of title — or of which event the session is for — invalidates
+   * everything about the one that is open. */
   useEffect(() => {
     reset();
-  }, [gameId, reset]);
+  }, [gameId, tournamentRef, reset]);
 
   const begin = useCallback(async () => {
     if (!gameId) return;
@@ -150,7 +161,11 @@ export function useGameSession(gameId: string | null, mode: "free" | "paid" = "f
     setBlockedByOpenRef(null);
     setScore(0);
     try {
-      const res = await api.post<StartResponse>("/games/sessions", { gameId, mode });
+      const res = await api.post<StartResponse>("/games/sessions", {
+        gameId,
+        mode: tournamentRef ? "tournament" : "free",
+        ...(tournamentRef ? { tournamentRef } : {}),
+      });
       if (!alive.current) return;
       open.current = { ref: res.ref, token: res.sessionToken };
       setSeed(res.seed);
@@ -174,7 +189,7 @@ export function useGameSession(gameId: string | null, mode: "free" | "paid" = "f
       setError(e instanceof Error ? e.message : "Could not open a session");
       setStage("error");
     }
-  }, [gameId, mode]);
+  }, [gameId, tournamentRef]);
 
   const abandonAndStart = useCallback(async () => {
     const ref = blockedByOpenRef;
