@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 300" width="480" height="300" role="img" aria-label="Word Vault cover art">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="hsl(233 48% 15%)"/>
+      <stop offset="1" stop-color="hsl(279 52% 7%)"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.14" cy="0.08" r="0.95">
+      <stop offset="0" stop-color="hsl(233 92% 60%)" stop-opacity="0.85"/>
+      <stop offset="0.6" stop-color="hsl(233 92% 60%)" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="0.9" cy="0.95" r="0.8">
+      <stop offset="0" stop-color="hsl(279 88% 50%)" stop-opacity="0.75"/>
+      <stop offset="0.65" stop-color="hsl(279 88% 50%)" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="hatch" width="16" height="16" patternTransform="rotate(115)" patternUnits="userSpaceOnUse">
+      <line x1="0" y1="0" x2="0" y2="16" stroke="#fff" stroke-opacity="0.055" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="480" height="300" fill="url(#bg)"/>
+  <rect width="480" height="300" fill="url(#glow)"/>
+  <rect width="480" height="300" fill="url(#glow2)"/>
+  <rect width="480" height="300" fill="url(#hatch)"/>
+  <circle cx="452" cy="-14" r="80" fill="none" stroke="#fff" stroke-opacity="0.16"/>
+  <circle cx="24" cy="318" r="88" fill="none" stroke="#fff" stroke-opacity="0.12"/>
+  <g stroke-linecap="round" stroke-linejoin="round">
+    <rect x="46" y="118" width="42" height="50" rx="9" fill="hsl(233 95% 68%)" fill-opacity="0.9" stroke="#fff" stroke-opacity="0.16"/>
+    <text x="67" y="152" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="24" font-weight="700" fill="hsl(0 0% 10%)" fill-opacity="0.85">T</text>
+    <rect x="96" y="118" width="42" height="50" rx="9" fill="hsl(0 0% 100%)" fill-opacity="0.1" stroke="#fff" stroke-opacity="0.16"/>
+    <text x="117" y="152" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="24" font-weight="700" fill="#fff" fill-opacity="0.55">R</text>
+    <rect x="146" y="118" width="42" height="50" rx="9" fill="hsl(0 0% 100%)" fill-opacity="0.1" stroke="#fff" stroke-opacity="0.16"/>
+    <text x="167" y="152" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="24" font-weight="700" fill="#fff" fill-opacity="0.55">I</text>
+    <rect x="196" y="118" width="42" height="50" rx="9" fill="hsl(233 95% 68%)" fill-opacity="0.9" stroke="#fff" stroke-opacity="0.16"/>
+    <text x="217" y="152" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="24" font-weight="700" fill="hsl(0 0% 10%)" fill-opacity="0.85">A</text>
+    <rect x="246" y="118" width="42" height="50" rx="9" fill="hsl(0 0% 100%)" fill-opacity="0.1" stroke="#fff" stroke-opacity="0.16"/>
+    <text x="267" y="152" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="24" font-weight="700" fill="#fff" fill-opacity="0.55">N</text>
+    <rect x="296" y="118" width="42" height="50" rx="9" fill="hsl(0 0% 100%)" fill-opacity="0.1" stroke="#fff" stroke-opacity="0.16"/>
+    <text x="317" y="152" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="24" font-weight="700" fill="#fff" fill-opacity="0.55">G</text>
+    <rect x="346" y="118" width="42" height="50" rx="9" fill="hsl(233 95% 68%)" fill-opacity="0.9" stroke="#fff" stroke-opacity="0.16"/>
+    <text x="367" y="152" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="24" font-weight="700" fill="hsl(0 0% 10%)" fill-opacity="0.85">L</text>
+    <rect x="396" y="118" width="42" height="50" rx="9" fill="hsl(0 0% 100%)" fill-opacity="0.1" stroke="#fff" stroke-opacity="0.16"/>
+    <text x="417" y="152" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="24" font-weight="700" fill="#fff" fill-opacity="0.55">E</text>
+    <path d="M67 190 L217 190 L367 190" stroke="hsl(233 95% 68%)" stroke-opacity="0.4" stroke-width="2" stroke-dasharray="6 8" fill="none"/>
+    <text x="240" y="228" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="15" font-weight="600" fill="#fff" fill-opacity="0.42">7 letters · 70 words</text>  </g>
+</svg>
