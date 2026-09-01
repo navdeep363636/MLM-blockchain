@@ -353,6 +353,7 @@ function toLegalView(d: LegalDocument): LegalDocumentResponse {
     authoredById: d.authoredById ?? null,
     approvedById: d.approvedById ?? null,
     createdAt: d.createdAt.toISOString(),
+    updatedAt: d.updatedAt.toISOString(),
   };
 }
 

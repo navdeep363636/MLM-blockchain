@@ -39,6 +39,10 @@ export class LegalDocumentResponse {
   @ApiPropertyOptional({ nullable: true }) authoredById!: string | null;
   @ApiPropertyOptional({ nullable: true }) approvedById!: string | null;
   @ApiProperty() createdAt!: string;
+  /* The admin CMS list renders "updated <time ago>" against this. It was on the
+   * entity all along and simply never left the server, so the column read as
+   * undefined in the browser and took the whole screen down with it. */
+  @ApiProperty() updatedAt!: string;
 }
 
 export class DraftLegalRequest {

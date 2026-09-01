@@ -379,9 +379,14 @@ export interface LegalDocument {
   slug: string;
   title: string;
   version: string;
-  status: "draft" | "legal_review" | "published";
-  updatedAt: string;
-  effectiveFrom: string;
+  /* "archived" is a state the admin list serves and this union used to omit,
+   * so a superseded version arrived typed as something it is not. */
+  status: "draft" | "legal_review" | "published" | "archived";
+  /* Nullable because a draft has neither: nothing has been published, and no
+   * effective date has been chosen yet. Both render through formatDate/timeAgo,
+   * which show an em dash for an absent value. */
+  updatedAt: string | null;
+  effectiveFrom: string | null;
   /** Material changes force re-acceptance on next login. */
   materialChange: boolean;
   summary: string;

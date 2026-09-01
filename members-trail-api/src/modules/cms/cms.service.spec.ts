@@ -20,7 +20,10 @@ function repo() {
     findOne: jest.fn(),
     find: jest.fn(async (..._a: unknown[]): Promise<unknown[]> => []),
     save: jest.fn(async (x: unknown) => ({
-      id: "doc-1", createdAt: new Date("2026-02-01T00:00:00Z"), ...(x as object),
+      id: "doc-1",
+      createdAt: new Date("2026-02-01T00:00:00Z"),
+      updatedAt: new Date("2026-02-01T00:00:00Z"),
+      ...(x as object),
     })),
     create: jest.fn((x: unknown) => x),
   };
@@ -40,6 +43,7 @@ const REVIEWED = {
   authoredById: "legal-1",
   approvedById: null as string | null,
   createdAt: new Date("2026-02-01T00:00:00Z"),
+  updatedAt: new Date("2026-02-03T09:00:00Z"),
 };
 
 describe("CmsService", () => {
