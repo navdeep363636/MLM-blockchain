@@ -12,6 +12,7 @@ import {
 import {
   useBalances, useCurrentUser, useTransactions, useWalletAddresses, useWithdrawalLimits,
 } from "@/lib/hooks/use-data";
+import { useInFlightWithdrawals } from "@/lib/wallet/in-flight-withdrawals";
 import {
   useAddWalletAddress, useAddressChallenge, useRequestWithdrawal, type SourceTag,
 } from "@/lib/hooks/use-mutations";
@@ -84,8 +85,20 @@ export function WithdrawView() {
   const [submitted, setSubmitted] = useState(false);
   const [cancelling, setCancelling] = useState<Transaction | null>(null);
 
-  const withdrawals = useMemo(() => txs.filter((t) => t.type === "withdrawal"), [txs]);
-  const pendingCount = withdrawals.filter((t) => t.status === "pending" || t.status === "processing").length;
+  /* Settled withdrawals come from the ledger; the ones still in flight do not
+     exist there yet. Listing only the ledger meant the row the member had just
+     created was absent from the very page they created it on. */
+  const { rows: inFlight } = useInFlightWithdrawals();
+  const withdrawals = useMemo(
+    () => [...inFlight, ...txs.filter((t) => t.type === "withdrawal")]
+      .sort((a, b) => Date.parse(b.date) - Date.parse(a.date)),
+    [inFlight, txs],
+  );
+  /* Anything not finished counts as outstanding — a request sitting in
+     cooling_off or review is exactly what the member wants counted here. */
+  const pendingCount = withdrawals.filter(
+    (t) => !["completed", "cancelled", "rejected", "failed"].includes(t.status),
+  ).length;
 
   /* Rolling 30-day usage against the tier limit. */
   const used30d = useMemo(() => {

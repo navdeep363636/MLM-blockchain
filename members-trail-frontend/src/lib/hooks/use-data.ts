@@ -51,6 +51,7 @@ import type {
   StakePositionsResponse, StakingPoolResponse, StakingRewardResponse, StakingTvlPoint,
   StoreItemResponse, TicketResponse, TournamentResponse, TransactionResponse, TreasuryDashboard,
   TreasuryInflowResponse, TreasuryOutflowResponse, WalletAddressResponse,
+  WithdrawalResponse,
 } from "@/lib/api/types";
 import { useAuth } from "@/lib/auth/auth-context";
 import type {
@@ -555,6 +556,23 @@ export const useWalletAddresses = (): Resource<WalletAddressResponse[]> =>
        withdraw page calls .filter on this, and an unexpected object took the whole
        route to its error boundary rather than showing an empty list. */
     async () => page(await api.get<WalletAddressResponse[]>("/wallet/addresses")),
+    [],
+    { staleTime: FRESH.money },
+  );
+
+/**
+ * Withdrawal requests, including the ones still in flight.
+ *
+ * `GET /wallet/transactions` is the SETTLED ledger — a withdrawal only earns a
+ * row there when its payout completes. So between requesting one and it settling
+ * (a 48-hour cooling-off window, then compliance, then the chain) the member's
+ * available balance has already dropped and nothing appears in their history at
+ * all. This endpoint has always served those in-flight rows and nothing read it.
+ */
+export const useWithdrawals = (): Resource<WithdrawalResponse[]> =>
+  useAuthedResource(
+    qk.withdrawals(),
+    async () => page(await api.get<WithdrawalResponse[]>("/wallet/withdrawals")),
     [],
     { staleTime: FRESH.money },
   );
