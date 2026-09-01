@@ -256,15 +256,43 @@ export const useRegisterForTournament = () =>
  * against it. So the UI starts a session and submits to it; it never reports
  * points.
  */
+/*
+ * These two describe the wire format and nothing else. The lifecycle around them
+ * - the seed, the one-time token, the telemetry stream, and polling until the
+ * server has replayed the session - lives in `lib/games/session.ts`, because
+ * getting any one of those wrong means a session that scores zero.
+ *
+ * The payloads were previously `{ gameId, entryType }` and
+ * `{ ref, score, durationSeconds }`, none of which the API accepts. Nothing
+ * called them, so nothing failed; the play screen simply never submitted
+ * anything, and gameplay credited no Points at all.
+ */
 export const useStartGameSession = () =>
-  useAction<{ gameId: string; entryType?: string }, { ref: string; [k: string]: unknown }>(
+  useAction<
+    { gameId: string; mode: "free" | "paid" | "tournament" | "demo"; tournamentId?: string },
+    {
+      ref: string; sessionId: string; seed: string; sessionToken: string;
+      startedAt: string; pointsHeadroom: number; sessionCap: number;
+    }
+  >(
     (v) => api.post("/games/sessions", v),
     [qk.games()],
   );
 
 export const useSubmitGameSession = () =>
-  useAction<{ ref: string; score: number; durationSeconds?: number }, Record<string, unknown>>(
-    (v) => api.post(`/games/sessions/${v.ref}/submit`, v),
+  useAction<
+    {
+      ref: string;
+      /** Issued once when the session opened. Proves the submission is this session's. */
+      sessionToken: string;
+      /** What the client claims. Never credited directly - the server replays instead. */
+      clientScore: number;
+      durationMs: number;
+      telemetry: { t: number; e: number; v: number }[];
+    },
+    { ref: string; status: string; queued: boolean; clientScore: number }
+  >(
+    ({ ref, ...body }) => api.post(`/games/sessions/${ref}/submit`, body),
     [qk.points(), qk.quests(), qk.leaderboard(), qk.balance()],
   );
 

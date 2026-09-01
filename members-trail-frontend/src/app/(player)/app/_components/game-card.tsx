@@ -32,7 +32,7 @@ export function GameCard({
       )}
     >
       <div className="relative">
-        <GameArt hue={game.thumbnailHue} title={game.title} />
+        <GameArt hue={game.thumbnailHue} slug={game.slug} title={game.title} />
         <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
           {game.entryType !== "paid" && <Badge tone="good" dot>Free entry</Badge>}
           {game.entryType !== "free" && (
@@ -54,10 +54,16 @@ export function GameCard({
             <h3 className="truncate font-display text-base font-semibold text-text-primary">{game.title}</h3>
             <p className="mt-0.5 text-xs font-medium uppercase tracking-wider text-text-muted">{game.genre}</p>
           </div>
-          <span className="tnum inline-flex shrink-0 items-center gap-1 rounded-lg bg-surface-3 px-2 py-1 text-xs font-semibold text-text-secondary">
-            <Star className="size-3 fill-current text-[var(--accent)]" />
-            {game.rating.toFixed(1)}
-          </span>
+          {/* No review system exists yet, so an unrated title has a rating of
+              exactly 0 - and a star chip reading "0.0" on every card in the
+              catalogue reads as one-star titles, not as missing data. Show the
+              chip when there is something to show. */}
+          {game.rating > 0 && (
+            <span className="tnum inline-flex shrink-0 items-center gap-1 rounded-lg bg-surface-3 px-2 py-1 text-xs font-semibold text-text-secondary">
+              <Star className="size-3 fill-current text-[var(--accent)]" />
+              {game.rating.toFixed(1)}
+            </span>
+          )}
         </div>
 
         <p className="mt-2.5 line-clamp-2 text-sm leading-relaxed text-text-muted">{game.blurb}</p>

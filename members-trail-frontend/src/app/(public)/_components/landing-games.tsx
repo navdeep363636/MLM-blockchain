@@ -47,6 +47,7 @@ export function FeaturedGames() {
                 <div className="overflow-hidden">
                   <GameArt
                     hue={g.thumbnailHue}
+                    slug={g.slug}
                     title={g.title}
                     className="transition-transform duration-[var(--dur-cinema)] ease-[var(--ease-tide)] group-hover:scale-[1.06] motion-reduce:transform-none"
                   />

@@ -129,6 +129,18 @@ export function formatDuration(seconds: number) {
   return parts.join(" ");
 }
 
+/**
+ * A game clock: m:ss.
+ *
+ * `formatDuration` has minute resolution, which is right for a staking term and
+ * useless for a sixty-second session — it renders the whole run as "00m" and
+ * then "0m". A player watching the last ten seconds needs to see them.
+ */
+export function formatClock(seconds: number) {
+  const s = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
 export function daysLabel(days: number) {
   return days === 0 ? "Flexible" : `${days} days`;
 }
