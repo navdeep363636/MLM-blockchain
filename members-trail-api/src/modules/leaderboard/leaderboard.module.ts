@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
-import { LeaderboardSnapshot, User } from "@/database/entities";
+import { GameSession, LeaderboardSnapshot, User } from "@/database/entities";
 import { LeaderboardController } from "./leaderboard.controller";
 import { LeaderboardService } from "./leaderboard.service";
 
@@ -11,7 +11,7 @@ import { LeaderboardService } from "./leaderboard.service";
  * cron persists and prunes them. Nothing writes a score from a client route.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([LeaderboardSnapshot, User])],
+  imports: [TypeOrmModule.forFeature([LeaderboardSnapshot, User, GameSession])],
   controllers: [LeaderboardController],
   providers: [LeaderboardService],
   exports: [LeaderboardService],
