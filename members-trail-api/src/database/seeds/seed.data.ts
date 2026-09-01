@@ -1,3 +1,4 @@
+import type { GameScoringConfig } from "@/database/entities/game.entity";
 /* ============================================================================
  * Seed data.
  *
@@ -16,6 +17,22 @@
  * to be derivable from an immutable entry.
  * ========================================================================== */
 
+/**
+ * How the server turns a submitted telemetry stream into a score, and a score
+ * into Points. Every title needs one: `GamesService.replay` reads
+ * `scoringConfig` and a title without one scores every session at the default
+ * rate regardless of what its Points band says, which is how a catalogue ends
+ * up crediting the same 180 Points for a perfect run and a mediocre one.
+ *
+ * `pointsPerScore` is set per title so that a near-perfect session lands at the
+ * top of that title's declared band and an average one lands mid-band.
+ * `maxScore` is a hard replay ceiling - twice what the engine can plausibly
+ * produce - so a forged telemetry stream cannot mint an unbounded score.
+ */
+export type ScoringConfigSeed = Required<
+  Pick<GameScoringConfig, "scoreEvent" | "scorePerUnit" | "maxScore" | "pointsPerScore">
+>;
+
 export interface GameSeed {
   slug: string;
   title: string;
@@ -29,51 +46,158 @@ export interface GameSeed {
   dailyPointsCap: number;
   sessionPointsCap: number;
   active: boolean;
+  scoringConfig: ScoringConfigSeed;
 }
 
 /** The eight launch titles. Hue and caps are fixed values, not random ones. */
+/**
+ * A scheduled event on a title, expressed relative to the seed run so the
+ * catalogue is never seeded into the past.
+ *
+ * The tournament hub shipped with nothing in it, which reads as a broken screen
+ * rather than an empty calendar - and the lobby's "upcoming events" strip, the
+ * paid-entry story and the prize-split disclosure all had nothing to render.
+ * Every fee here is real revenue: it books to the Revenue Treasury, which is the
+ * only pot that funds staking yield and referral commission.
+ */
+export interface TournamentSeed {
+  slug: string;
+  gameSlug: string;
+  name: string;
+  /** Days from the seed run until the doors open. Negative means already live. */
+  startsInDays: number;
+  /** How long the event runs, in days. */
+  runsForDays: number;
+  entryFee: string;
+  prizePool: string;
+  maxParticipants: number;
+  status: "scheduled" | "live";
+  format: string;
+  prizeSplit: { place: string; share: number }[];
+}
+
+const TOP_HEAVY: { place: string; share: number }[] = [
+  { place: "1st", share: 40 },
+  { place: "2nd", share: 22 },
+  { place: "3rd", share: 13 },
+  { place: "4th-10th", share: 17 },
+  { place: "11th-50th", share: 8 },
+];
+
+const FLAT_FIELD: { place: string; share: number }[] = [
+  { place: "1st", share: 25 },
+  { place: "2nd", share: 17 },
+  { place: "3rd", share: 12 },
+  { place: "4th-20th", share: 28 },
+  { place: "21st-100th", share: 18 },
+];
+
+export const TOURNAMENTS: TournamentSeed[] = [
+  {
+    slug: "cipher-weekly-ranked", gameSlug: "cipher-break",
+    name: "Cipher Break — Weekly Ranked",
+    startsInDays: -1, runsForDays: 6, entryFee: "0", prizePool: "12000",
+    maxParticipants: 5_000, status: "live",
+    format: "Free entry. Best single validated session over the week; ties broken by earliest submission.",
+    prizeSplit: FLAT_FIELD,
+  },
+  {
+    slug: "neon-rush-midnight-sprint", gameSlug: "neon-rush",
+    name: "Neon Rush — Midnight Sprint",
+    startsInDays: 2, runsForDays: 1, entryFee: "5", prizePool: "4000",
+    maxParticipants: 1_200, status: "scheduled",
+    format: "Single 24-hour window. Highest server-validated score takes the pool.",
+    prizeSplit: TOP_HEAVY,
+  },
+  {
+    slug: "turbo-drift-time-trial", gameSlug: "turbo-drift",
+    name: "Turbo Drift — Circuit Time Trial",
+    startsInDays: 5, runsForDays: 3, entryFee: "8", prizePool: "9000",
+    maxParticipants: 800, status: "scheduled",
+    format: "Three tracks, one ranked lap each. Aggregate of your three best validated laps.",
+    prizeSplit: TOP_HEAVY,
+  },
+  {
+    slug: "block-forge-open", gameSlug: "block-forge",
+    name: "Block Forge — Season Open",
+    startsInDays: 9, runsForDays: 14, entryFee: "12", prizePool: "25000",
+    maxParticipants: 2_000, status: "scheduled",
+    format: "Fortnight-long ladder. Your top five validated sessions count; the rest are ignored.",
+    prizeSplit: FLAT_FIELD,
+  },
+  {
+    slug: "word-vault-daily-board", gameSlug: "word-vault",
+    name: "Word Vault — Daily Board",
+    startsInDays: 0, runsForDays: 1, entryFee: "3", prizePool: "1500",
+    maxParticipants: 3_000, status: "live",
+    format: "Everyone plays the same seeded board. One ranked attempt per member per day.",
+    prizeSplit: FLAT_FIELD,
+  },
+];
+
 export const GAMES: GameSeed[] = [
   {
     slug: "neon-rush", title: "Neon Rush", genre: "Arcade",
     blurb: "Endless runner through a synth-lit city. Reflex scoring with combo multipliers.",
     thumbnailHue: 18, pointsPerSessionMin: 90, pointsPerSessionMax: 620,
     entryType: "both", entryFee: "5", dailyPointsCap: 3_000, sessionPointsCap: 900, active: true,
+    /* Event 2 carries a score delta already expressed in score units, so
+     * scorePerUnit is 1 and the replay is a plain sum of the stream. */
+    scoringConfig: { scoreEvent: 2, scorePerUnit: 1, maxScore: 12000, pointsPerScore: 0.1033 },
   },
   {
     slug: "cipher-break", title: "Cipher Break", genre: "Puzzle",
     blurb: "Timed logic puzzles. Pure skill, no randomness — the flagship ranked title.",
     thumbnailHue: 61, pointsPerSessionMin: 120, pointsPerSessionMax: 780,
     entryType: "free", entryFee: "0", dailyPointsCap: 4_000, sessionPointsCap: 1_100, active: true,
+    /* Event 2 carries a score delta already expressed in score units, so
+     * scorePerUnit is 1 and the replay is a plain sum of the stream. */
+    scoringConfig: { scoreEvent: 2, scorePerUnit: 1, maxScore: 12000, pointsPerScore: 0.13 },
   },
   {
     slug: "turbo-drift", title: "Turbo Drift", genre: "Racing",
     blurb: "Time-trial circuit racing with ghost replays and weekly track rotation.",
     thumbnailHue: 104, pointsPerSessionMin: 100, pointsPerSessionMax: 560,
     entryType: "both", entryFee: "8", dailyPointsCap: 3_000, sessionPointsCap: 800, active: true,
+    /* Event 2 carries a score delta already expressed in score units, so
+     * scorePerUnit is 1 and the replay is a plain sum of the stream. */
+    scoringConfig: { scoreEvent: 2, scorePerUnit: 1, maxScore: 12000, pointsPerScore: 0.0933 },
   },
   {
     slug: "block-forge", title: "Block Forge", genre: "Strategy",
     blurb: "Tile-placement builder. Deep scoring ceiling rewards long-term mastery.",
     thumbnailHue: 147, pointsPerSessionMin: 140, pointsPerSessionMax: 900,
     entryType: "both", entryFee: "12", dailyPointsCap: 4_500, sessionPointsCap: 1_300, active: true,
+    /* Event 2 carries a score delta already expressed in score units, so
+     * scorePerUnit is 1 and the replay is a plain sum of the stream. */
+    scoringConfig: { scoreEvent: 2, scorePerUnit: 1, maxScore: 12000, pointsPerScore: 0.15 },
   },
   {
     slug: "sky-siege", title: "Sky Siege", genre: "Action",
     blurb: "Wave-defence shooter with escalating difficulty tiers.",
     thumbnailHue: 190, pointsPerSessionMin: 110, pointsPerSessionMax: 640,
     entryType: "free", entryFee: "0", dailyPointsCap: 3_200, sessionPointsCap: 950, active: true,
+    /* Event 2 carries a score delta already expressed in score units, so
+     * scorePerUnit is 1 and the replay is a plain sum of the stream. */
+    scoringConfig: { scoreEvent: 2, scorePerUnit: 1, maxScore: 12000, pointsPerScore: 0.1067 },
   },
   {
     slug: "word-vault", title: "Word Vault", genre: "Word",
     blurb: "Vocabulary sprints with daily seeded boards — everyone plays the same board.",
     thumbnailHue: 233, pointsPerSessionMin: 80, pointsPerSessionMax: 480,
     entryType: "both", entryFee: "3", dailyPointsCap: 2_500, sessionPointsCap: 700, active: true,
+    /* Event 2 carries a score delta already expressed in score units, so
+     * scorePerUnit is 1 and the replay is a plain sum of the stream. */
+    scoringConfig: { scoreEvent: 2, scorePerUnit: 1, maxScore: 12000, pointsPerScore: 0.08 },
   },
   {
     slug: "hex-tactics", title: "Hex Tactics", genre: "Strategy",
     blurb: "Turn-based skirmish on hex grids. Elo-rated ladder.",
     thumbnailHue: 276, pointsPerSessionMin: 150, pointsPerSessionMax: 850,
     entryType: "both", entryFee: "15", dailyPointsCap: 5_000, sessionPointsCap: 1_400, active: true,
+    /* Event 2 carries a score delta already expressed in score units, so
+     * scorePerUnit is 1 and the replay is a plain sum of the stream. */
+    scoringConfig: { scoreEvent: 2, scorePerUnit: 1, maxScore: 12000, pointsPerScore: 0.1417 },
   },
   {
     slug: "pulse-beat", title: "Pulse Beat", genre: "Rhythm",
@@ -83,6 +207,9 @@ export const GAMES: GameSeed[] = [
     /* Inactive on purpose: the admin catalogue needs one disabled row to prove
      * the active filter works, and gameplay routes must refuse it. */
     active: false,
+    /* Event 2 carries a score delta already expressed in score units, so
+     * scorePerUnit is 1 and the replay is a plain sum of the stream. */
+    scoringConfig: { scoreEvent: 2, scorePerUnit: 1, maxScore: 12000, pointsPerScore: 0.1167 },
   },
 ];
 

@@ -24,11 +24,11 @@ import { Ref, toDbAmount } from "@/common/utils";
 import type { CommissionTrigger } from "@/database/entities";
 import {
   Achievement, CommissionPlan, ConversionRate, FraudRule, Game, LegalDocument,
-  NotificationPreference, Quest, RolePermission, StakingPool, StoreItem, User,
+  NotificationPreference, Quest, RolePermission, StakingPool, StoreItem, Tournament, User,
   UserBalance,
 } from "@/database/entities";
 import {
-  ACHIEVEMENTS, FRAUD_RULES, GAMES, POOLS, QUESTS, ROLE_PERMISSIONS, STORE_ITEMS,
+  ACHIEVEMENTS, FRAUD_RULES, GAMES, POOLS, QUESTS, ROLE_PERMISSIONS, STORE_ITEMS, TOURNAMENTS,
 } from "./seed.data";
 
 /* ============================================================================
@@ -358,12 +358,62 @@ async function main(): Promise<void> {
     const existing = await games.findOne({ where: { slug: g.slug } });
     if (existing) {
       gameIdBySlug[g.slug] = existing.id;
-      note(`game ${g.slug}`, false);
+      /* Scoring config is operator-owned platform configuration, not member
+       * data, so it is reconciled on every run rather than left at whatever the
+       * row was first created with. A catalogue that predates the config shipped
+       * with a null here, and a null config scores every session at the default
+       * rate - identical Points for a perfect run and a poor one. */
+      const desired = JSON.stringify(g.scoringConfig);
+      if (JSON.stringify(existing.scoringConfig ?? null) !== desired) {
+        existing.scoringConfig = g.scoringConfig;
+        await games.save(existing);
+        note(`game ${g.slug} scoring config`, true);
+      } else {
+        note(`game ${g.slug}`, false);
+      }
       continue;
     }
     const saved = await games.save(games.create({ ...g, entryFee: toDbAmount(g.entryFee) }));
     gameIdBySlug[g.slug] = saved.id;
     note(`game ${g.slug}`, true);
+  }
+
+  /* ==================================================================== *
+   * 7b. Tournaments
+   * ==================================================================== */
+
+  const tournaments = ds.getRepository(Tournament);
+  for (const t of TOURNAMENTS) {
+    const gameId = gameIdBySlug[t.gameSlug];
+    if (!gameId) {
+      note(`tournament ${t.slug} (no such game: ${t.gameSlug})`, false);
+      continue;
+    }
+    /* Matched on (gameId, name) rather than a slug, because the entity has no
+     * slug column - a tournament is identified by its human ref, which is
+     * generated, so the seed needs its own idempotency key. */
+    const existing = await tournaments.findOne({ where: { gameId, name: t.name } });
+    if (existing) {
+      note(`tournament ${t.slug}`, false);
+      continue;
+    }
+    const startsAt = new Date(Date.now() + t.startsInDays * 86_400_000);
+    const endsAt = new Date(startsAt.getTime() + t.runsForDays * 86_400_000);
+    await tournaments.save(tournaments.create({
+      ref: Ref.tournament(),
+      gameId,
+      name: t.name,
+      startsAt,
+      endsAt,
+      entryFee: toDbAmount(t.entryFee),
+      prizePool: toDbAmount(t.prizePool),
+      participants: 0,
+      maxParticipants: t.maxParticipants,
+      status: t.status,
+      format: t.format,
+      prizeSplit: t.prizeSplit,
+    }));
+    note(`tournament ${t.slug}`, true);
   }
 
   /* ==================================================================== *
