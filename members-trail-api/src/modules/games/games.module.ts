@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { BullModule } from "@nestjs/bullmq";
-import { Game, GameSession, PointsRule, User } from "@/database/entities";
+import { Game, GameSession, PointsRule, Tournament, TournamentEntry, User } from "@/database/entities";
 import { Queues } from "@/queues/queue.constants";
 import { AuditModule } from "@/modules/audit/audit.module";
 import { PointsModule } from "@/modules/points/points.module";
@@ -18,7 +18,7 @@ import { GamesService } from "./games.service";
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Game, GameSession, PointsRule, User]),
+    TypeOrmModule.forFeature([Game, GameSession, PointsRule, Tournament, TournamentEntry, User]),
     BullModule.registerQueue({ name: Queues.GameValidation }),
     AuditModule,
     PointsModule,

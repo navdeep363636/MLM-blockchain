@@ -2,7 +2,7 @@ import { ForbiddenException } from "@nestjs/common";
 import { getQueueToken } from "@nestjs/bullmq";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { Test } from "@nestjs/testing";
-import { Game, GameSession, PointsRule, User } from "@/database/entities";
+import { Game, GameSession, PointsRule, Tournament, TournamentEntry, User } from "@/database/entities";
 import { EventBusService } from "@/events";
 import { Queues } from "@/queues/queue.constants";
 import { CryptoService } from "@/common/crypto/crypto.service";
@@ -88,6 +88,8 @@ describe("GamesService", () => {
   let svc: GamesService;
   let games: ReturnType<typeof repo>;
   let sessions: ReturnType<typeof repo>;
+  let tournaments: ReturnType<typeof repo>;
+  let entries: ReturnType<typeof repo>;
   let rules: ReturnType<typeof repo>;
   let users: ReturnType<typeof repo>;
   let points: { credit: jest.Mock; headroom: jest.Mock };
@@ -99,6 +101,8 @@ describe("GamesService", () => {
   beforeEach(async () => {
     games = repo();
     sessions = repo();
+    tournaments = repo();
+    entries = repo();
     rules = repo();
     users = repo();
 
@@ -122,6 +126,8 @@ describe("GamesService", () => {
         GamesService,
         { provide: getRepositoryToken(Game), useValue: games },
         { provide: getRepositoryToken(GameSession), useValue: sessions },
+        { provide: getRepositoryToken(Tournament), useValue: tournaments },
+        { provide: getRepositoryToken(TournamentEntry), useValue: entries },
         { provide: getRepositoryToken(PointsRule), useValue: rules },
         { provide: getRepositoryToken(User), useValue: users },
         { provide: PointsService, useValue: points },
@@ -142,6 +148,88 @@ describe("GamesService", () => {
   /* ==================================================================== *
    * Start
    * ==================================================================== */
+
+  describe("startSession — tournament guards", () => {
+    /* Prize money is settled from these rows. Every one of these checks was
+     * absent, and all of it was verified against a live server first: a member
+     * registered for the 3 MTT Word Vault event could open a TOURNAMENT session
+     * on Hex Tactics against that event, and could name a tournament that did
+     * not exist at all. Both were accepted and persisted. */
+    const TOURNAMENT = {
+      id: "trn-1",
+      ref: "TRN-AAA",
+      gameId: "game-1",
+      startsAt: new Date(Date.now() - 3_600_000),
+      endsAt: new Date(Date.now() + 3_600_000),
+      settledAt: null as Date | null,
+    };
+
+    beforeEach(() => {
+      tournaments.findOne.mockResolvedValue({ ...TOURNAMENT });
+      entries.findOne.mockResolvedValue({ id: "entry-1", userId: "u1", disqualified: false });
+      sessions.findOne.mockResolvedValue(null);
+    });
+
+    const start = (over: Record<string, unknown> = {}) =>
+      svc.startSession("u1", { gameId: "game-1", mode: "tournament", tournamentRef: "TRN-AAA", ...over } as never, "1.2.3.4");
+
+    it("opens a ranked session for a paid, in-window entrant", async () => {
+      const r = await start();
+      expect(r.ref).toBeDefined();
+      const saved = sessions.save.mock.calls[0][0] as Record<string, unknown>;
+      expect(saved.tournamentId).toBe("trn-1");
+    });
+
+    it("refuses a tournament that does not exist", async () => {
+      tournaments.findOne.mockResolvedValue(null);
+      await expect(start()).rejects.toThrow();
+      expect(sessions.save).not.toHaveBeenCalled();
+    });
+
+    it("refuses a session on a different title than the tournament runs on", async () => {
+      /* The prize-stealing case: a higher-ceiling game ranked against a field
+       * playing something else. */
+      await expect(start({ gameId: "game-other" })).rejects.toThrow();
+      expect(sessions.save).not.toHaveBeenCalled();
+    });
+
+    it("refuses a member who never entered", async () => {
+      entries.findOne.mockResolvedValue(null);
+      await expect(start()).rejects.toThrow(ForbiddenException);
+      expect(sessions.save).not.toHaveBeenCalled();
+    });
+
+    it("refuses a disqualified entry", async () => {
+      entries.findOne.mockResolvedValue({ id: "entry-1", userId: "u1", disqualified: true });
+      await expect(start()).rejects.toThrow(ForbiddenException);
+    });
+
+    it("refuses play before it opens and after it closes", async () => {
+      tournaments.findOne.mockResolvedValue({ ...TOURNAMENT, startsAt: new Date(Date.now() + 60_000) });
+      await expect(start()).rejects.toThrow();
+
+      tournaments.findOne.mockResolvedValue({ ...TOURNAMENT, endsAt: new Date(Date.now() - 60_000) });
+      await expect(start()).rejects.toThrow();
+    });
+
+    it("refuses a settled tournament — the standings are final", async () => {
+      tournaments.findOne.mockResolvedValue({ ...TOURNAMENT, settledAt: new Date() });
+      await expect(start()).rejects.toThrow();
+    });
+
+    it("refuses a tournament reference on a free session", async () => {
+      /* Otherwise unpaid play could be filed against a paid field. */
+      await expect(
+        svc.startSession("u1", { gameId: "game-1", mode: "free", tournamentRef: "TRN-AAA" } as never, null),
+      ).rejects.toThrow();
+    });
+
+    it("requires a reference when the mode is tournament", async () => {
+      await expect(
+        svc.startSession("u1", { gameId: "game-1", mode: "tournament" } as never, null),
+      ).rejects.toThrow();
+    });
+  });
 
   describe("abandonSession", () => {
     /* startSession tells the member to "finish or abandon" and, until this

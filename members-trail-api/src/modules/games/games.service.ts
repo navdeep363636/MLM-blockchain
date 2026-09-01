@@ -7,7 +7,7 @@ import { InjectQueue } from "@nestjs/bullmq";
 import type { Queue } from "bullmq";
 import { Repository } from "typeorm";
 import { randomBytes } from "node:crypto";
-import { Game, GameSession, PointsRule, User } from "@/database/entities";
+import { Game, GameSession, PointsRule, Tournament, TournamentEntry, User } from "@/database/entities";
 import type { GameScoringConfig } from "@/database/entities/game.entity";
 import { EventBusService, Events } from "@/events";
 import { Jobs, Queues, jobKey } from "@/queues/queue.constants";
@@ -82,6 +82,8 @@ export class GamesService {
   constructor(
     @InjectRepository(Game) private readonly games: Repository<Game>,
     @InjectRepository(GameSession) private readonly sessions: Repository<GameSession>,
+    @InjectRepository(Tournament) private readonly tournaments: Repository<Tournament>,
+    @InjectRepository(TournamentEntry) private readonly entries: Repository<TournamentEntry>,
     @InjectRepository(PointsRule) private readonly rules: Repository<PointsRule>,
     @InjectRepository(User) private readonly users: Repository<User>,
     private readonly points: PointsService,
@@ -191,10 +193,25 @@ export class GamesService {
       });
     }
 
-    if (dto.mode === "tournament" && !dto.tournamentId) {
+    let tournamentId: string | null = null;
+
+    if (dto.mode === "tournament") {
+      if (!dto.tournamentRef && !dto.tournamentId) {
+        throw new BadRequestException({
+          code: "TOURNAMENT_REQUIRED",
+          message: "A tournament reference is required for a tournament session",
+        });
+      }
+      tournamentId = await this.assertTournamentEntry(userId, dto.gameId, {
+        ref: dto.tournamentRef,
+        id: dto.tournamentId,
+      });
+    } else if (dto.tournamentRef || dto.tournamentId) {
+      /* A tournamentId on a free session is either a mistake or an attempt to
+       * have unpaid play ranked. Neither should be quietly stored. */
       throw new BadRequestException({
-        code: "TOURNAMENT_REQUIRED",
-        message: "A tournament id is required for a tournament session",
+        code: "TOURNAMENT_MODE_REQUIRED",
+        message: "A tournament reference is only valid on a tournament session",
       });
     }
 
@@ -231,7 +248,7 @@ export class GamesService {
         ref: Ref.gameSession(),
         userId,
         gameId: dto.gameId,
-        tournamentId: dto.tournamentId ?? null,
+        tournamentId,
         mode: dto.mode,
         seed,
         sessionSecret: this.crypto.hmac(token),
@@ -253,7 +270,7 @@ export class GamesService {
       ref: row.ref,
       gameId: dto.gameId,
       mode: dto.mode,
-      tournamentId: dto.tournamentId ?? null,
+      tournamentId,
     });
 
     return {
@@ -278,6 +295,84 @@ export class GamesService {
    * cannot hold an HTTP connection, and so a burst of submissions is absorbed
    * rather than dropped.
    */
+  /**
+   * Everything that must be true before a session can be ranked in a tournament.
+   *
+   * None of this was checked. `startSession` took `mode` and `tournamentId` from
+   * the request body and stored them, and `rank()` then ranked any session
+   * carrying that id. Verified against a live server before this was written:
+   *
+   *  • Registered for the 3 MTT Word Vault event, then opened a TOURNAMENT
+   *    session on Hex Tactics against that event's id. Accepted. Hex Tactics has
+   *    a far higher score ceiling, so the score would have ranked — and paid —
+   *    against a field playing a different game.
+   *  • Opened a tournament session against a well-formed but non-existent
+   *    tournament id. Accepted and persisted.
+   *
+   * Prize money is settled from these rows, so every one of these has to be a
+   * server-side check. A client that decides which tournament its score belongs
+   * to decides who gets paid.
+   */
+  private async assertTournamentEntry(
+    userId: string,
+    gameId: string,
+    lookup: { ref?: string; id?: string },
+  ): Promise<string> {
+    const tournament = lookup.ref
+      ? await this.tournaments.findOne({ where: { ref: lookup.ref } })
+      : await this.tournaments.findOne({ where: { id: lookup.id } });
+    if (!tournament) {
+      throw new NotFoundException({
+        code: "TOURNAMENT_NOT_FOUND",
+        message: "That tournament does not exist",
+      });
+    }
+
+    if (tournament.gameId !== gameId) {
+      throw new BadRequestException({
+        code: "TOURNAMENT_GAME_MISMATCH",
+        message: "That tournament is not running on this title",
+      });
+    }
+
+    if (tournament.settledAt) {
+      throw new ConflictException({
+        code: "TOURNAMENT_SETTLED",
+        message: "This tournament has been settled and its standings are final",
+      });
+    }
+
+    const now = Date.now();
+    if (now < tournament.startsAt.getTime()) {
+      throw new ConflictException({
+        code: "TOURNAMENT_NOT_STARTED",
+        message: "This tournament has not opened yet",
+      });
+    }
+    if (now > tournament.endsAt.getTime()) {
+      throw new ConflictException({
+        code: "TOURNAMENT_ENDED",
+        message: "This tournament has closed",
+      });
+    }
+
+    const entry = await this.entries.findOne({ where: { tournamentId: tournament.id, userId } });
+    if (!entry) {
+      throw new ForbiddenException({
+        code: "TOURNAMENT_NOT_ENTERED",
+        message: "Register for this tournament before playing a ranked session",
+      });
+    }
+    if (entry.disqualified) {
+      throw new ForbiddenException({
+        code: "TOURNAMENT_ENTRY_DISQUALIFIED",
+        message: "This entry has been disqualified and cannot score",
+      });
+    }
+
+    return tournament.id;
+  }
+
   /**
    * Gives up an open session without submitting it.
    *
@@ -455,6 +550,41 @@ export class GamesService {
         flags,
       });
 
+      /* Audited, because this is an accusation.
+       *
+       * A rejected session credits nothing and tells the member their play was
+       * not trusted. Until now the only trace of that was a log line and the
+       * session row itself — nothing in `audit_logs`, which is the table an
+       * operator, a dispute or a regulator actually reads. The evidence goes with
+       * it: both scores, the frame count and every flag that fired, so the
+       * decision can be defended or overturned months later without the original
+       * telemetry.
+       *
+       * A clean session is deliberately NOT audited. That belongs in
+       * `points_ledger`, which already carries the credit, the running balance
+       * and the session id; one audit row per session per player would bury the
+       * exceptions this table exists to surface. */
+      await this.audit.record({
+        actorId: null,
+        action: "game.session.rejected",
+        targetType: "game_session",
+        targetId: session.id,
+        reason: session.rejectionReason,
+        after: {
+          ref: session.ref,
+          userId: session.userId,
+          gameId: session.gameId,
+          tournamentId: session.tournamentId ?? null,
+          mode: session.mode,
+          clientScore: params.clientScore,
+          serverScore: replay.score,
+          telemetryFrames: params.telemetry.length,
+          durationMs: params.durationMs,
+          fatalFlag: fatal,
+          flags,
+        },
+      });
+
       this.log.warn(`session ${session.ref} rejected: ${fatal}`);
       return {
         ref: session.ref,
@@ -499,6 +629,35 @@ export class GamesService {
     session.anomalyFlags = flags.length > 0 ? flags : null;
     session.rejectionReason = credited === 0 ? this.zeroReason(desired, capped) : null;
     await this.sessions.save(session);
+
+    /* A session that was paid but not clean. The flags did not rise to a refusal
+     * — a false positive that steals a real player's Points is also a failure —
+     * but a pattern across many such sessions is what fraud review looks for, and
+     * that pattern is invisible if each one only exists as a JSON column on one
+     * row. Audited for the same reason the rejection is: so the exceptions are
+     * findable in one place. */
+    if (flags.length > 0) {
+      await this.audit.record({
+        actorId: null,
+        action: "game.session.flagged",
+        targetType: "game_session",
+        targetId: session.id,
+        reason: `Paid with ${flags.length} anomaly flag(s) raised`,
+        after: {
+          ref: session.ref,
+          userId: session.userId,
+          gameId: session.gameId,
+          tournamentId: session.tournamentId ?? null,
+          mode: session.mode,
+          clientScore: params.clientScore,
+          serverScore: replay.score,
+          pointsAwarded: credited,
+          pointsCapped: capped,
+          cappedBy,
+          flags,
+        },
+      });
+    }
 
     await this.bus.publish(Events.GameSessionValidated, {
       userId: session.userId,

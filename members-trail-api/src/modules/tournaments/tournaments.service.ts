@@ -103,11 +103,12 @@ export class TournamentsService {
     const names = await this.tournaments.find({
       where: { id: In(rows.map((r) => r.tournamentId)) },
     });
-    const byId = new Map(names.map((t) => [t.id, t.name]));
+    const byId = new Map(names.map((t) => [t.id, t]));
 
     return rows.map((r) => ({
       tournamentId: r.tournamentId,
-      tournamentName: byId.get(r.tournamentId) ?? "Tournament",
+      tournamentRef: byId.get(r.tournamentId)?.ref ?? "",
+      tournamentName: byId.get(r.tournamentId)?.name ?? "Tournament",
       paidAmount: toDbAmount(r.paidAmount),
       bestScore: r.bestScore ?? null,
       rank: r.rank ?? null,
@@ -332,6 +333,16 @@ export class TournamentsService {
       .where("s.tournamentId = :tid", { tid: tournament.id })
       /* Validated only: a session under anti-cheat review has no score here. */
       .andWhere("s.status = :status", { status: "validated" })
+      /* The title and the window, asserted again at ranking time.
+       *
+       * startSession checks both before it opens a ranked session, but this is
+       * where the money is decided, so it does not take the row's word for it.
+       * Any session already on disk from before those checks existed - one
+       * pointing at a different game, or played outside the window - stops
+       * scoring here rather than being paid out. */
+      .andWhere("s.gameId = :gid", { gid: tournament.gameId })
+      .andWhere("s.startedAt >= :from", { from: tournament.startsAt })
+      .andWhere("s.startedAt <= :to", { to: tournament.endsAt })
       .andWhere("s.userId IN (:...ids)", { ids: eligible.map((e) => e.userId) })
       .groupBy("s.userId")
       .getRawMany<{ userId: string; best: string | null }>();
@@ -701,6 +712,7 @@ export class TournamentsService {
     const tournament = await this.tournaments.findOne({ where: { id: tournamentId } });
     return {
       tournamentId,
+      tournamentRef: tournament?.ref ?? "",
       tournamentName: tournament?.name ?? "Tournament",
       paidAmount: toDbAmount(entry.paidAmount),
       bestScore: entry.bestScore ?? null,
