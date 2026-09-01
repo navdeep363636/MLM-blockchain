@@ -11,6 +11,28 @@ import { BaseEntity, MONEY, decimalTransformer } from "./base.entity";
 
 export type EntryType = "free" | "paid" | "both";
 
+/**
+ * How a title turns a submitted telemetry stream into a score, and a score into
+ * Points. Read by `GamesService.replay`; see the seed data for the per-title
+ * values and why they are set the way they are.
+ *
+ * Typed rather than a bag of unknowns because every field here is load-bearing:
+ * a wrong `pointsPerScore` silently mis-credits every session of that title, and
+ * a missing `maxScore` removes the only bound on a forged stream.
+ */
+export interface GameScoringConfig {
+  /** Telemetry event code that carries score. */
+  scoreEvent?: number;
+  /** Score per unit of telemetry value on a scoring frame. */
+  scorePerUnit?: number;
+  /** Hard ceiling on the replayed score, whatever the frames claim. */
+  maxScore?: number;
+  /** Score awarded per second survived, for endless titles. */
+  scorePerSecond?: number;
+  /** Points per unit of server score, before the title's band is applied. */
+  pointsPerScore?: number;
+}
+
 @Entity("games")
 @Index("idx_game_active", ["active"])
 export class Game extends BaseEntity {
@@ -61,7 +83,7 @@ export class Game extends BaseEntity {
 
   /** Server-side scoring config: rules the validator uses to recompute a score. */
   @Column({ type: "json", nullable: true })
-  scoringConfig?: Record<string, unknown> | null;
+  scoringConfig?: GameScoringConfig | null;
 }
 
 /* ------------------------------- points rules ----------------------------- */

@@ -33,7 +33,7 @@ function repo() {
 
 function qb(raw: Record<string, unknown>) {
   const b: Record<string, unknown> = {};
-  for (const m of ["select", "addSelect", "where", "andWhere", "orderBy", "skip", "take"]) {
+  for (const m of ["select", "addSelect", "where", "andWhere", "orderBy", "groupBy", "limit", "skip", "take"]) {
     b[m] = jest.fn(() => b);
   }
   b.getRawOne = jest.fn(async () => raw);
@@ -142,6 +142,36 @@ describe("GamesService", () => {
   /* ==================================================================== *
    * Start
    * ==================================================================== */
+
+  describe("abandonSession", () => {
+    /* startSession tells the member to "finish or abandon" and, until this
+     * existed, there was no way to abandon: a closed tab locked the title for
+     * six hours behind advice the API would not honour. */
+    it("closes an open session as abandoned, scoring nothing", async () => {
+      sessions.findOne.mockResolvedValue({ ...OPEN_SESSION, status: "open", userId: "u1" });
+
+      const r = await svc.abandonSession("u1", OPEN_SESSION.ref);
+
+      const saved = sessions.save.mock.calls[0][0] as Record<string, unknown>;
+      expect(saved.status).toBe("abandoned");
+      expect(saved.rejectionReason).toBe("Abandoned by the player");
+      expect(r.pointsAwarded).toBe(0);
+    });
+
+    it("is idempotent once the session is closed", async () => {
+      sessions.findOne.mockResolvedValue({ ...OPEN_SESSION, status: "validated", userId: "u1" });
+
+      await expect(svc.abandonSession("u1", OPEN_SESSION.ref)).resolves.toBeDefined();
+      expect(sessions.save).not.toHaveBeenCalled();
+    });
+
+    it("will not let one member abandon another's session", async () => {
+      sessions.findOne.mockResolvedValue({ ...OPEN_SESSION, status: "open", userId: "someone-else" });
+
+      await expect(svc.abandonSession("u1", OPEN_SESSION.ref)).rejects.toThrow();
+      expect(sessions.save).not.toHaveBeenCalled();
+    });
+  });
 
   describe("startSession", () => {
     it("generates the seed and secret SERVER-side, returning the token exactly once", async () => {
