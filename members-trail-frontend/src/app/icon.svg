@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Members Trail">
+  <rect width="64" height="64" rx="14" fill="#14110f"/>
+  <!-- The trail: three rising steps, which is the whole proposition -
+       play, earn, stake - and reads at 16px as a mark rather than a picture. -->
+  <path d="M14 44h9v6h-9zM27.5 34h9v16h-9zM41 22h9v28h-9z" fill="#ef6f2a"/>
+  <circle cx="45.5" cy="15" r="4" fill="#fdfcfb"/>
+</svg>

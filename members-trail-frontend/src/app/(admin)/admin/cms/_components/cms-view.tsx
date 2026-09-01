@@ -26,6 +26,10 @@ const STATUS_META: Record<LegalDocument["status"], { label: string; tone: "neutr
   draft: { label: "Draft", tone: "neutral", Icon: FileText, step: 0 },
   legal_review: { label: "In legal review", tone: "warning", Icon: Scale, step: 1 },
   published: { label: "Published", tone: "good", Icon: CheckCircle2, step: 2 },
+  /* A superseded version. The admin list serves these alongside live ones, and
+   * without an entry here it fell through to the draft fallback below — an
+   * archived policy presented as work in progress. */
+  archived: { label: "Archived", tone: "neutral", Icon: FileText, step: 2 },
 };
 
 /* Indexed through here, never directly. `status` is whatever the API said, and a

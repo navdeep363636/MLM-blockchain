@@ -48,6 +48,9 @@ const STATUS: Record<
   draft: { label: "Structural draft", tone: "neutral", Icon: PenLine },
   legal_review: { label: "In legal review", tone: "warning", Icon: ShieldAlert },
   published: { label: "Published", tone: "good", Icon: CheckCircle2 },
+  /* Reachable: a member following an old link to a version that has since been
+   * replaced. Saying so is the point of showing it at all. */
+  archived: { label: "Superseded", tone: "neutral", Icon: PenLine },
 };
 
 export function LegalDoc({

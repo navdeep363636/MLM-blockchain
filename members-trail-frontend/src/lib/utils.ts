@@ -88,8 +88,17 @@ export function formatDate(d: Date | string | null | undefined, withTime = false
  */
 export const REFERENCE_NOW = Date.parse("2026-08-20T09:30:00Z");
 
-export function timeAgo(d: Date | string, nowMs: number = REFERENCE_NOW) {
+export function timeAgo(
+  d: Date | string | null | undefined,
+  nowMs: number = REFERENCE_NOW,
+) {
+  /* Same contract as formatDate, and for the same reason. A field the API did
+   * not send used to reach `undefined.getTime()` and throw during render, which
+   * an error boundary turns into a blank screen — one absent timestamp cost the
+   * whole of /admin/cms. A gap in the data renders as a gap. */
+  if (d === null || d === undefined) return "—";
   const date = typeof d === "string" ? new Date(d) : d;
+  if (Number.isNaN(date.getTime())) return "—";
   const s = Math.floor((nowMs - date.getTime()) / 1000);
   if (s < 60) return "just now";
   const units: [number, string][] = [
