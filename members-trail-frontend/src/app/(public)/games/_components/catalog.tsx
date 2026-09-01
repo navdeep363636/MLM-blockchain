@@ -73,7 +73,7 @@ export function PublicGameCatalog() {
             <RevealItem key={g.id}>
               <SpotlightCard className="group h-full overflow-hidden rounded-[var(--radius-card)] border border-border-subtle bg-surface-1 transition-colors duration-300 hover:border-[color-mix(in_oklab,var(--accent)_38%,var(--border-default))]">
                 <div className="relative">
-                  <GameArt hue={g.thumbnailHue} title={g.title} />
+                  <GameArt hue={g.thumbnailHue} slug={g.slug} title={g.title} />
                   <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
                     {g.entryType !== "paid" && <Badge tone="good" dot>Free entry</Badge>}
                     {g.entryType !== "free" && (
@@ -95,10 +95,13 @@ export function PublicGameCatalog() {
                       <h3 className="truncate font-display text-base font-semibold text-text-primary">{g.title}</h3>
                       <p className="mt-0.5 text-xs font-medium uppercase tracking-wider text-text-muted">{g.genre}</p>
                     </div>
-                    <span className="tnum inline-flex shrink-0 items-center gap-1 rounded-lg bg-surface-3 px-2 py-1 text-xs font-semibold text-text-secondary">
-                      <Star className="size-3 fill-current text-[var(--accent)]" />
-                      {g.rating.toFixed(1)}
-                    </span>
+                    {/* Hidden when unrated: see the note in game-card.tsx. */}
+                    {g.rating > 0 && (
+                      <span className="tnum inline-flex shrink-0 items-center gap-1 rounded-lg bg-surface-3 px-2 py-1 text-xs font-semibold text-text-secondary">
+                        <Star className="size-3 fill-current text-[var(--accent)]" />
+                        {g.rating.toFixed(1)}
+                      </span>
+                    )}
                   </div>
 
                   <p className="mt-2.5 line-clamp-2 text-sm leading-relaxed text-text-muted">{g.blurb}</p>

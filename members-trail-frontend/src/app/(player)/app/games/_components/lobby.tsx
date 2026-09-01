@@ -190,6 +190,14 @@ export function GameLobby() {
     [games],
   );
 
+  /* Offering "Highest rated" when no title carries a rating is a sort that
+     silently does nothing - the reader picks it, the grid does not move, and the
+     filter looks broken. It appears once ratings exist. */
+  const sorts = useMemo(
+    () => (games.some((g) => g.rating > 0) ? SORTS : SORTS.filter((s) => s.value !== "rating")),
+    [games],
+  );
+
   const shown = useMemo(() => {
     const filtered = games.filter((g) => {
       if (genre !== "all" && g.genre !== genre) return false;
@@ -298,7 +306,7 @@ export function GameLobby() {
           <Select
             value={sort}
             onChange={(e) => setSort(e.target.value as Sort)}
-            options={SORTS}
+            options={sorts}
             className="w-full sm:w-64"
             aria-label="Sort games"
           />

@@ -146,7 +146,7 @@ export function TournamentsView() {
               <RevealItem key={t.id}>
                 <SpotlightCard className="flex h-full flex-col overflow-hidden rounded-[var(--radius-card)] border border-border-subtle bg-surface-1">
                   <div className="relative">
-                    <GameArt hue={game?.thumbnailHue ?? 24} title={t.name} ratio="aspect-[21/8]" />
+                    <GameArt hue={game?.thumbnailHue ?? 24} slug={game?.slug} title={t.name} ratio="aspect-[21/8]" />
                     <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
                       {t.status === "live" && <Badge tone="good" dot>Live now</Badge>}
                       {t.entryFee === 0 && <Badge tone="brand">Free entry</Badge>}
