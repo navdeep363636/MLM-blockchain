@@ -1,7 +1,7 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, type OnApplicationBootstrap } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
-import { LeaderboardSnapshot, User } from "@/database/entities";
+import { GameSession, LeaderboardSnapshot, User } from "@/database/entities";
 import { RedisService } from "@/common/redis/redis.service";
 import { DbRoutinesService } from "@/database/routines/db-routines.service";
 import { CacheKeys } from "@/common/redis/cache.keys";
@@ -36,16 +36,57 @@ import type {
 /** Rows persisted per snapshot. Beyond this, a rank has no prize meaning. */
 const SNAPSHOT_DEPTH = 500;
 
+/** Members reinstated into a rebuilt live index. Same reasoning as the depth. */
+const REBUILD_DEPTH = 500;
+
 @Injectable()
-export class LeaderboardService {
+export class LeaderboardService implements OnApplicationBootstrap {
   private readonly log = new Logger(LeaderboardService.name);
 
   constructor(
     @InjectRepository(LeaderboardSnapshot) private readonly snapshots: Repository<LeaderboardSnapshot>,
     @InjectRepository(User) private readonly users: Repository<User>,
+    @InjectRepository(GameSession) private readonly sessions: Repository<GameSession>,
     private readonly redis: RedisService,
     private readonly routines: DbRoutinesService,
   ) {}
+
+  /**
+   * Reconciles every live index against the sessions on disk, once, at startup.
+   *
+   * `board()` rebuilds an index it finds EMPTY, which covers a clean flush. It
+   * cannot cover the more common state: a flush or eviction followed by a few
+   * validated sessions, which leaves a key that is present, plausible and short
+   * by everything that came before. Nothing reads as broken, the numbers are
+   * simply wrong, and they stay wrong for the life of the period.
+   *
+   * Boot is the one moment when a full recount is both safe and cheap - twelve
+   * aggregates over an indexed table, with no live reads racing them - so that is
+   * where it happens. Afterwards the increments carry on from a known-correct
+   * base.
+   *
+   * Failure here is logged, not thrown: a leaderboard that is briefly stale must
+   * not be the reason an API instance refuses to start.
+   */
+  async onApplicationBootstrap(): Promise<void> {
+    const metrics: LeaderboardMetric[] = ["points", "score", "sessions"];
+    const periods: LeaderboardPeriod[] = ["daily", "weekly", "monthly", "all_time"];
+    let total = 0;
+    try {
+      for (const metric of metrics) {
+        for (const period of periods) {
+          total += await this.rebuild(metric, period);
+        }
+      }
+      this.log.log(`leaderboard indexes reconciled from sessions at boot: ${total} rows`);
+    } catch (e) {
+      this.log.warn(
+        `leaderboard boot reconciliation failed, serving whatever the index holds: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+    }
+  }
 
   /* ==================================================================== *
    * Writes
@@ -114,7 +155,31 @@ export class LeaderboardService {
       };
     }
 
-    /* No live index: serve the persisted record. */
+    /* No live index. The persisted record is the next place to look - but if
+     * that is empty too, the board is not actually empty, it is unbuilt: Redis
+     * was flushed or evicted before any snapshot had been taken. Left alone,
+     * that state is permanent, because the snapshot cron snapshots the live
+     * index and would faithfully persist nothing, forever. So reconstruct the
+     * index from the sessions that produced it and read again. */
+    if (!(await this.hasSnapshot(metric, gameId, periodKey))) {
+      const restored = await this.rebuild(metric, period, gameId);
+      if (restored > 0) {
+        const rebuilt = await this.redis.zTop(key, 0, limit);
+        const rows = await this.decorate(
+          rebuilt.map((e, i) => ({ userId: e.member, score: Math.floor(e.score), rank: i + 1 })),
+          userId,
+        );
+        return {
+          metric, period, periodKey, rows,
+          you: await this.selfRowLive(key, userId, rows),
+          totalRanked: await this.redis.zCard(key),
+          resetsInSeconds: this.resetsIn(period),
+          source: "live",
+        };
+      }
+    }
+
+    /* Nothing to rebuild from either: serve the persisted record. */
     const snapshot = await this.snapshots.find({
       where: { metric: this.snapshotMetric(metric, gameId), periodKey },
       order: { rank: "ASC" },
@@ -184,9 +249,18 @@ export class LeaderboardService {
     const periodKey = this.periodKey(period);
     const snapshotMetric = this.snapshotMetric(metric, gameId);
 
-    const top = await this.redis.zTop(key, 0, SNAPSHOT_DEPTH);
+    let top = await this.redis.zTop(key, 0, SNAPSHOT_DEPTH);
+
+    /* An empty live index is ambiguous: either nobody has played this period, or
+     * Redis was lost. Persisting nothing is correct for the first and destructive
+     * for the second - it would write an authoritative "no standings" over a
+     * period that had them. Rebuild from the sessions first and let the answer
+     * come from disk. */
     if (top.length === 0) {
-      return { metric: snapshotMetric, periodKey, persisted: 0 };
+      const restored = await this.rebuild(metric, period, gameId);
+      if (restored === 0) return { metric: snapshotMetric, periodKey, persisted: 0 };
+      top = await this.redis.zTop(key, 0, SNAPSHOT_DEPTH);
+      if (top.length === 0) return { metric: snapshotMetric, periodKey, persisted: 0 };
     }
 
     /* One statement for the whole board.
@@ -339,6 +413,95 @@ export class LeaderboardService {
     const score = await this.redis.zScore(key, userId);
     const [row] = await this.decorate([{ userId, score: Math.floor(score ?? 0), rank: rank + 1 }], userId);
     return row ?? null;
+  }
+
+  private async hasSnapshot(
+    metric: LeaderboardMetric,
+    gameId: string | null,
+    periodKey: string,
+  ): Promise<boolean> {
+    const count = await this.snapshots.count({
+      where: { metric: this.snapshotMetric(metric, gameId), periodKey },
+    });
+    return count > 0;
+  }
+
+  /**
+   * Reconstructs a live index from the validated sessions behind it.
+   *
+   * This is the piece that makes the "Redis is a cache" claim at the top of this
+   * file true. Every score the index holds was derived from a `game_sessions`
+   * row that is still on disk, so the index is reproducible - and a board that
+   * can be reproduced is never lost, only cold.
+   *
+   * `wins` has no durable source yet (nothing writes a tournament placement), so
+   * it rebuilds to nothing rather than to a guess.
+   */
+  async rebuild(
+    metric: LeaderboardMetric,
+    period: LeaderboardPeriod,
+    gameId: string | null = null,
+  ): Promise<number> {
+    if (metric === "wins") return 0;
+
+    const since = this.periodStart(period);
+    const qb = this.sessions
+      .createQueryBuilder("s")
+      .select("s.userId", "userId")
+      .where("s.status = :status", { status: "validated" });
+
+    if (since) qb.andWhere("s.createdAt >= :since", { since });
+    if (gameId) qb.andWhere("s.gameId = :gameId", { gameId });
+
+    if (metric === "points") qb.addSelect("SUM(s.pointsAwarded)", "total");
+    else if (metric === "score") qb.addSelect("SUM(s.serverScore)", "total");
+    else qb.addSelect("COUNT(s.id)", "total");
+
+    const rows = await qb
+      .groupBy("s.userId")
+      .orderBy("total", "DESC")
+      .limit(REBUILD_DEPTH)
+      .getRawMany<{ userId: string; total: string | null }>();
+
+    const key = this.liveKey(metric, period, gameId);
+
+    /* Replace rather than merge. `record()` increments, so a key that survived
+     * partially - the usual state after an eviction - would end up double
+     * counting whatever it still held. The aggregate below is the whole truth
+     * for this period, so it becomes the whole key. */
+    await this.redis.del(key);
+
+    let written = 0;
+    for (const r of rows) {
+      const score = Math.floor(Number(r.total) || 0);
+      if (score <= 0) continue;
+      await this.redis.zAdd(key, score, r.userId);
+      written += 1;
+    }
+
+    if (written > 0) {
+      this.log.log(
+        `rebuilt ${this.snapshotMetric(metric, gameId)} ${this.periodKey(period)} from sessions: ${written} rows`,
+      );
+    }
+    return written;
+  }
+
+  /** Start of the current period in UTC, or null for all time. */
+  private periodStart(period: LeaderboardPeriod): Date | null {
+    const now = new Date();
+    if (period === "all_time") return null;
+    if (period === "daily") {
+      return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    }
+    if (period === "monthly") {
+      return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    }
+    /* ISO week: Monday is day 1, and Sunday reads as 7 rather than 0. */
+    const dow = now.getUTCDay() === 0 ? 7 : now.getUTCDay();
+    const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    monday.setUTCDate(monday.getUTCDate() - (dow - 1));
+    return monday;
   }
 
   private async selfRowSnapshot(
