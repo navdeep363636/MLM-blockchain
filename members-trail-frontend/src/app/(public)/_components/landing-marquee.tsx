@@ -29,7 +29,7 @@ export function GameMarquee() {
           ? Array.from({ length: 8 }, (_, i) => (
               <span key={i} className="shimmer h-9 w-36 shrink-0 rounded-full" aria-hidden />
             ))
-          : games.map((g) => <GameChip key={g.id} hue={g.thumbnailHue} title={g.title} />)}
+          : games.map((g) => <GameChip key={g.id} hue={g.thumbnailHue} slug={g.slug} title={g.title} />)}
       </Marquee>
 
       <Marquee speed={58} reverse className="py-1">

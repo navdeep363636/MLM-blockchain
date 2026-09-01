@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 300" width="480" height="300" role="img" aria-label="Hex Tactics cover art">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="hsl(276 48% 15%)"/>
+      <stop offset="1" stop-color="hsl(322 52% 7%)"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.14" cy="0.08" r="0.95">
+      <stop offset="0" stop-color="hsl(276 92% 60%)" stop-opacity="0.85"/>
+      <stop offset="0.6" stop-color="hsl(276 92% 60%)" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="0.9" cy="0.95" r="0.8">
+      <stop offset="0" stop-color="hsl(322 88% 50%)" stop-opacity="0.75"/>
+      <stop offset="0.65" stop-color="hsl(322 88% 50%)" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="hatch" width="16" height="16" patternTransform="rotate(115)" patternUnits="userSpaceOnUse">
+      <line x1="0" y1="0" x2="0" y2="16" stroke="#fff" stroke-opacity="0.055" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="480" height="300" fill="url(#bg)"/>
+  <rect width="480" height="300" fill="url(#glow)"/>
+  <rect width="480" height="300" fill="url(#glow2)"/>
+  <rect width="480" height="300" fill="url(#hatch)"/>
+  <circle cx="452" cy="-14" r="80" fill="none" stroke="#fff" stroke-opacity="0.16"/>
+  <circle cx="24" cy="318" r="88" fill="none" stroke="#fff" stroke-opacity="0.12"/>
+  <g stroke-linecap="round" stroke-linejoin="round">
+    <polygon points="173.0,81.0 173.0,111.0 147.0,126.0 121.0,111.0 121.0,81.0 147.0,66.0" fill="hsl(276 95% 68%)" fill-opacity="0.9" stroke="#fff" stroke-opacity="0.16"/>
+    <polygon points="235.0,81.0 235.0,111.0 209.0,126.0 183.0,111.0 183.0,81.0 209.0,66.0" fill="hsl(0 0% 100%)" fill-opacity="0.09" stroke="#fff" stroke-opacity="0.16"/>
+    <polygon points="297.0,81.0 297.0,111.0 271.0,126.0 245.0,111.0 245.0,81.0 271.0,66.0" fill="hsl(0 84% 62%)" fill-opacity="0.6" stroke="#fff" stroke-opacity="0.16"/>
+    <polygon points="359.0,81.0 359.0,111.0 333.0,126.0 307.0,111.0 307.0,81.0 333.0,66.0" fill="hsl(0 0% 100%)" fill-opacity="0.09" stroke="#fff" stroke-opacity="0.16"/>
+    <polygon points="142.0,137.0 142.0,167.0 116.0,182.0 90.0,167.0 90.0,137.0 116.0,122.0" fill="hsl(276 95% 68%)" fill-opacity="0.9" stroke="#fff" stroke-opacity="0.16"/>
+    <polygon points="204.0,137.0 204.0,167.0 178.0,182.0 152.0,167.0 152.0,137.0 178.0,122.0" fill="hsl(0 0% 100%)" fill-opacity="0.09" stroke="#fff" stroke-opacity="0.16"/>
+    <polygon points="266.0,137.0 266.0,167.0 240.0,182.0 214.0,167.0 214.0,137.0 240.0,122.0" fill="hsl(0 84% 62%)" fill-opacity="0.6" stroke="#fff" stroke-opacity="0.16"/>
+    <polygon points="328.0,137.0 328.0,167.0 302.0,182.0 276.0,167.0 276.0,137.0 302.0,122.0" fill="hsl(0 0% 100%)" fill-opacity="0.09" stroke="#fff" stroke-opacity="0.16"/>
+    <polygon points="390.0,137.0 390.0,167.0 364.0,182.0 338.0,167.0 338.0,137.0 364.0,122.0" fill="hsl(276 95% 68%)" fill-opacity="0.9" stroke="#fff" stroke-opacity="0.16"/>
+    <polygon points="173.0,193.0 173.0,223.0 147.0,238.0 121.0,223.0 121.0,193.0 147.0,178.0" fill="hsl(0 0% 100%)" fill-opacity="0.09" stroke="#fff" stroke-opacity="0.16"/>
+    <polygon points="235.0,193.0 235.0,223.0 209.0,238.0 183.0,223.0 183.0,193.0 209.0,178.0" fill="hsl(0 84% 62%)" fill-opacity="0.6" stroke="#fff" stroke-opacity="0.16"/>
+    <polygon points="297.0,193.0 297.0,223.0 271.0,238.0 245.0,223.0 245.0,193.0 271.0,178.0" fill="hsl(0 0% 100%)" fill-opacity="0.09" stroke="#fff" stroke-opacity="0.16"/>
+    <polygon points="359.0,193.0 359.0,223.0 333.0,238.0 307.0,223.0 307.0,193.0 333.0,178.0" fill="hsl(276 95% 68%)" fill-opacity="0.9" stroke="#fff" stroke-opacity="0.16"/>  </g>
+</svg>

@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 300" width="480" height="300" role="img" aria-label="Cipher Break cover art">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="hsl(61 48% 15%)"/>
+      <stop offset="1" stop-color="hsl(107 52% 7%)"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.14" cy="0.08" r="0.95">
+      <stop offset="0" stop-color="hsl(61 92% 60%)" stop-opacity="0.85"/>
+      <stop offset="0.6" stop-color="hsl(61 92% 60%)" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="0.9" cy="0.95" r="0.8">
+      <stop offset="0" stop-color="hsl(107 88% 50%)" stop-opacity="0.75"/>
+      <stop offset="0.65" stop-color="hsl(107 88% 50%)" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="hatch" width="16" height="16" patternTransform="rotate(115)" patternUnits="userSpaceOnUse">
+      <line x1="0" y1="0" x2="0" y2="16" stroke="#fff" stroke-opacity="0.055" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="480" height="300" fill="url(#bg)"/>
+  <rect width="480" height="300" fill="url(#glow)"/>
+  <rect width="480" height="300" fill="url(#glow2)"/>
+  <rect width="480" height="300" fill="url(#hatch)"/>
+  <circle cx="452" cy="-14" r="80" fill="none" stroke="#fff" stroke-opacity="0.16"/>
+  <circle cx="24" cy="318" r="88" fill="none" stroke="#fff" stroke-opacity="0.12"/>
+  <g stroke-linecap="round" stroke-linejoin="round">
+    <rect x="74" y="80" width="38" height="40" rx="7" fill="hsl(61 95% 68%)" fill-opacity="0.85" stroke="#fff" stroke-opacity="0.14"/>
+    <path d="M85 101 l6 7 l11 -14" stroke="hsl(0 0% 8%)" stroke-opacity="0.75" stroke-width="3" fill="none"/>
+    <rect x="121" y="80" width="38" height="40" rx="7" fill="hsl(0 0% 100%)" fill-opacity="0.09" stroke="#fff" stroke-opacity="0.14"/>
+    <circle cx="140" cy="100" r="5" fill="#fff" fill-opacity="0.3"/>
+    <rect x="168" y="80" width="38" height="40" rx="7" fill="hsl(0 0% 100%)" fill-opacity="0.09" stroke="#fff" stroke-opacity="0.14"/>
+    <circle cx="187" cy="100" r="5" fill="#fff" fill-opacity="0.3"/>
+    <rect x="215" y="80" width="38" height="40" rx="7" fill="hsl(61 95% 68%)" fill-opacity="0.85" stroke="#fff" stroke-opacity="0.14"/>
+    <path d="M226 101 l6 7 l11 -14" stroke="hsl(0 0% 8%)" stroke-opacity="0.75" stroke-width="3" fill="none"/>
+    <rect x="262" y="80" width="38" height="40" rx="7" fill="hsl(0 0% 100%)" fill-opacity="0.09" stroke="#fff" stroke-opacity="0.14"/>
+    <circle cx="281" cy="100" r="5" fill="#fff" fill-opacity="0.3"/>
+    <rect x="309" y="80" width="38" height="40" rx="7" fill="hsl(0 0% 100%)" fill-opacity="0.09" stroke="#fff" stroke-opacity="0.14"/>
+    <circle cx="328" cy="100" r="5" fill="#fff" fill-opacity="0.3"/>
+    <rect x="356" y="80" width="38" height="40" rx="7" fill="hsl(61 95% 68%)" fill-opacity="0.85" stroke="#fff" stroke-opacity="0.14"/>
+    <path d="M367 101 l6 7 l11 -14" stroke="hsl(0 0% 8%)" stroke-opacity="0.75" stroke-width="3" fill="none"/>
+    <rect x="74" y="134" width="38" height="40" rx="7" fill="hsl(0 0% 100%)" fill-opacity="0.09" stroke="#fff" stroke-opacity="0.14"/>
+    <circle cx="93" cy="154" r="5" fill="#fff" fill-opacity="0.3"/>
+    <rect x="121" y="134" width="38" height="40" rx="7" fill="hsl(0 0% 100%)" fill-opacity="0.09" stroke="#fff" stroke-opacity="0.14"/>
+    <circle cx="140" cy="154" r="5" fill="#fff" fill-opacity="0.3"/>
+    <rect x="168" y="134" width="38" height="40" rx="7" fill="hsl(61 95% 68%)" fill-opacity="0.85" stroke="#fff" stroke-opacity="0.14"/>
+    <path d="M179 155 l6 7 l11 -14" stroke="hsl(0 0% 8%)" stroke-opacity="0.75" stroke-width="3" fill="none"/>
+    <rect x="215" y="134" width="38" height="40" rx="7" fill="hsl(0 0% 100%)" fill-opacity="0.09" stroke="#fff" stroke-opacity="0.14"/>
+    <circle cx="234" cy="154" r="5" fill="#fff" fill-opacity="0.3"/>
+    <rect x="262" y="134" width="38" height="40" rx="7" fill="hsl(0 0% 100%)" fill-opacity="0.09" stroke="#fff" stroke-opacity="0.14"/>
+    <circle cx="281" cy="154" r="5" fill="#fff" fill-opacity="0.3"/>
+    <rect x="309" y="134" width="38" height="40" rx="7" fill="hsl(61 95% 68%)" fill-opacity="0.85" stroke="#fff" stroke-opacity="0.14"/>
+    <path d="M320 155 l6 7 l11 -14" stroke="hsl(0 0% 8%)" stroke-opacity="0.75" stroke-width="3" fill="none"/>
+    <rect x="356" y="134" width="38" height="40" rx="7" fill="hsl(0 0% 100%)" fill-opacity="0.09" stroke="#fff" stroke-opacity="0.14"/>
+    <circle cx="375" cy="154" r="5" fill="#fff" fill-opacity="0.3"/>
+    <rect x="74" y="188" width="38" height="40" rx="7" fill="hsl(0 0% 100%)" fill-opacity="0.09" stroke="#fff" stroke-opacity="0.14"/>
+    <circle cx="93" cy="208" r="5" fill="#fff" fill-opacity="0.3"/>
+    <rect x="121" y="188" width="38" height="40" rx="7" fill="hsl(61 95% 68%)" fill-opacity="0.85" stroke="#fff" stroke-opacity="0.14"/>
+    <path d="M132 209 l6 7 l11 -14" stroke="hsl(0 0% 8%)" stroke-opacity="0.75" stroke-width="3" fill="none"/>
+    <rect x="168" y="188" width="38" height="40" rx="7" fill="hsl(0 0% 100%)" fill-opacity="0.09" stroke="#fff" stroke-opacity="0.14"/>
+    <circle cx="187" cy="208" r="5" fill="#fff" fill-opacity="0.3"/>
+    <rect x="215" y="188" width="38" height="40" rx="7" fill="hsl(0 0% 100%)" fill-opacity="0.09" stroke="#fff" stroke-opacity="0.14"/>
+    <circle cx="234" cy="208" r="5" fill="#fff" fill-opacity="0.3"/>
+    <rect x="262" y="188" width="38" height="40" rx="7" fill="hsl(61 95% 68%)" fill-opacity="0.85" stroke="#fff" stroke-opacity="0.14"/>
+    <path d="M273 209 l6 7 l11 -14" stroke="hsl(0 0% 8%)" stroke-opacity="0.75" stroke-width="3" fill="none"/>
+    <rect x="309" y="188" width="38" height="40" rx="7" fill="hsl(0 0% 100%)" fill-opacity="0.09" stroke="#fff" stroke-opacity="0.14"/>
+    <circle cx="328" cy="208" r="5" fill="#fff" fill-opacity="0.3"/>
+    <rect x="356" y="188" width="38" height="40" rx="7" fill="hsl(0 0% 100%)" fill-opacity="0.09" stroke="#fff" stroke-opacity="0.14"/>
+    <circle cx="375" cy="208" r="5" fill="#fff" fill-opacity="0.3"/>  </g>
+</svg>

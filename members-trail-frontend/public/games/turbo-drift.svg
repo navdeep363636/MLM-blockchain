@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 300" width="480" height="300" role="img" aria-label="Turbo Drift cover art">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="hsl(104 48% 15%)"/>
+      <stop offset="1" stop-color="hsl(150 52% 7%)"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.14" cy="0.08" r="0.95">
+      <stop offset="0" stop-color="hsl(104 92% 60%)" stop-opacity="0.85"/>
+      <stop offset="0.6" stop-color="hsl(104 92% 60%)" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="0.9" cy="0.95" r="0.8">
+      <stop offset="0" stop-color="hsl(150 88% 50%)" stop-opacity="0.75"/>
+      <stop offset="0.65" stop-color="hsl(150 88% 50%)" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="hatch" width="16" height="16" patternTransform="rotate(115)" patternUnits="userSpaceOnUse">
+      <line x1="0" y1="0" x2="0" y2="16" stroke="#fff" stroke-opacity="0.055" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="480" height="300" fill="url(#bg)"/>
+  <rect width="480" height="300" fill="url(#glow)"/>
+  <rect width="480" height="300" fill="url(#glow2)"/>
+  <rect width="480" height="300" fill="url(#hatch)"/>
+  <circle cx="452" cy="-14" r="80" fill="none" stroke="#fff" stroke-opacity="0.16"/>
+  <circle cx="24" cy="318" r="88" fill="none" stroke="#fff" stroke-opacity="0.12"/>
+  <g stroke-linecap="round" stroke-linejoin="round">
+    <path d="M150 300 L196 40 M330 300 L284 40" stroke="#fff" stroke-opacity="0.2" stroke-width="3"/>
+    <rect x="234" y="60" width="5" height="20" rx="3" fill="#fff" fill-opacity="0.28"/>
+    <rect x="234" y="100" width="6" height="20" rx="3" fill="#fff" fill-opacity="0.28"/>
+    <rect x="234" y="140" width="7" height="20" rx="3" fill="#fff" fill-opacity="0.28"/>
+    <rect x="233" y="180" width="8" height="20" rx="3" fill="#fff" fill-opacity="0.28"/>
+    <rect x="232" y="220" width="9" height="20" rx="3" fill="#fff" fill-opacity="0.28"/>
+    <rect x="232" y="260" width="10" height="20" rx="3" fill="#fff" fill-opacity="0.28"/>
+    <path d="M204 250 l32 0 l10 26 l-52 0 z" fill="hsl(104 95% 68%)" fill-opacity="0.95"/>
+    <rect x="262" y="140" width="30" height="20" rx="5" fill="hsl(0 84% 62%)" fill-opacity="0.85"/>
+    <rect x="186" y="96" width="26" height="18" rx="5" fill="hsl(0 84% 62%)" fill-opacity="0.7"/>
+    <rect x="228" y="62" width="26" height="16" rx="5" fill="hsl(150 76% 52%)" fill-opacity="0.8"/>  </g>
+</svg>
