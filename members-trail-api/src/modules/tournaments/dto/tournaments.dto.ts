@@ -63,6 +63,11 @@ export class TournamentQuery extends PaginationQuery {
 
 export class EntryResponse {
   @ApiProperty() tournamentId!: string;
+  /* The public reference, because that is what every tournament route takes and
+   * what the read model on the list exposes. Without it a client holding this
+   * list could not match an entry to the tournament it belongs to — which is why
+   * the tournament hub kept offering "Enter" to members who had already paid. */
+  @ApiProperty() tournamentRef!: string;
   @ApiProperty() tournamentName!: string;
   @ApiProperty() paidAmount!: string;
   @ApiPropertyOptional({ nullable: true }) bestScore!: number | null;
