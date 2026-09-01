@@ -46,6 +46,24 @@ npm run typecheck   # tsc --noEmit, must exit 0
 npm start           # serve the production build
 ```
 
+### If you're about to click around, not edit code
+
+`next dev` compiles each route the first time it's requested — several seconds
+per route, paid again after every restart. Two ways around that, pick based on
+who's testing:
+
+- **Actively editing code?** Use `npm run dev:warm` instead of `npm run dev`.
+  It pre-compiles every route at startup so navigation is instant instead of
+  paying the cost on whichever page you happen to click first. It still takes
+  a couple of minutes to finish — **wait for the "✓ WARM" line in the terminal**
+  before testing; the server accepts connections almost immediately, well
+  before routes are actually compiled, and clicking before it's done just
+  moves the multi-second wait onto you.
+- **QA, a demo, a stakeholder, anyone not editing code?** Don't use `next dev`
+  at all — run `npm run build && npm start`. Production has none of this
+  compile-on-request behaviour (every route is prerendered; navigations there
+  are ~100ms), so it's both faster and a truer preview of what ships.
+
 ---
 
 ## Environment
