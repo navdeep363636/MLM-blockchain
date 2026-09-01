@@ -95,6 +95,33 @@ export class TreasuryService {
      */
     const commissionEligible = COMMISSION_ELIGIBLE_STREAMS.includes(dto.stream);
 
+    /**
+     * Whether this event is already settled, or is waiting for a batch.
+     *
+     * Reconciliation answers one question: did the money we recognised actually
+     * arrive? For a card or an IAP that is answered later, by matching a
+     * processor's settlement file — which is exactly what `reconcile()` is for,
+     * and why recognition starts unreconciled.
+     *
+     * An INTERNAL transfer has no such counterparty. A tournament entry fee or a
+     * store purchase paid from an MTT balance moved inside our own ledger, in the
+     * same transaction that produced this row; there is no statement to match and
+     * no batch that will ever arrive. Leaving those unreconciled had two
+     * consequences, both observed on a live server:
+     *
+     *  • `revenueByStream` files unreconciled revenue in its own bucket, so
+     *    tournament and store income never appeared in the platform revenue
+     *    figures at all.
+     *  • The commission engine gates on `reconciled`, so referral commission from
+     *    that revenue could never fan out — every job refused, forever.
+     *
+     * So an internal event is settled on recognition, and says so. External
+     * processors keep waiting for their batch, and the four-eyes control on
+     * `reconcile()` keeps guarding the only revenue where it means anything.
+     */
+    const settledOnRecognition = (dto.processor ?? null) === "internal";
+    const settledAt = settledOnRecognition ? occurredAt : null;
+
     const event = await this.revenue.save(
       this.revenue.create({
         ref: Ref.treasuryInflow().replace("TD-", "RE-"),
@@ -107,12 +134,15 @@ export class TreasuryService {
         processor: dto.processor ?? null,
         processorRef: dto.processorRef ?? null,
         occurredAt,
-        reconciled: false,
+        reconciled: settledOnRecognition,
+        settledAt,
         commissionEligible,
       }),
     );
 
-    /* Matching inflow, unreconciled until a settlement batch matches it. */
+    /* Matching inflow. Reconciled with the event it belongs to: an inflow that
+     * disagrees with its own revenue event about whether the money arrived is
+     * the kind of discrepancy the rollups then report as a real one. */
     await this.inflows.save(
       this.inflows.create({
         ref: Ref.treasuryInflow(),
@@ -123,10 +153,41 @@ export class TreasuryService {
         amountToTreasury: toTreasury,
         amountMtt: toDbAmount(dec(toTreasury).div(dec(alloc.fiatPerMtt || 1))),
         processorRef: dto.processorRef ?? null,
-        reconciled: false,
+        reconciled: settledOnRecognition,
+        reconciledAt: settledAt,
+        reconciliationNote: settledOnRecognition
+          ? "Internal ledger transfer — settled with the debit that produced it, so there is no settlement batch to match."
+          : null,
         periodKey: period,
       }),
     );
+
+    /* An event that reconciled itself has to say so in the audit table.
+     * `reconcile()` writes a `treasury.reconcile` row naming the operator who
+     * matched the batch; without this, internal revenue would appear reconciled
+     * with no record of who or what decided that, which is precisely the question
+     * an auditor asks first. */
+    if (settledOnRecognition) {
+      await this.audit.record({
+        actorId: null,
+        action: "treasury.revenue.settled_on_recognition",
+        targetType: "revenue_event",
+        targetId: event.id,
+        reason: "Internal ledger transfer: settled by the debit that produced it, so no settlement batch exists to match",
+        after: {
+          ref: event.ref,
+          stream: dto.stream,
+          userId: dto.userId,
+          grossAmount: toDbAmount(gross),
+          netAmount: net,
+          currency: dto.currency ?? "INR",
+          processor: dto.processor ?? null,
+          processorRef: dto.processorRef ?? null,
+          commissionEligible,
+          periodKey: period,
+        },
+      });
+    }
 
     await this.bus.publish(Events.RevenueRecognised, {
       revenueEventId: event.id,
