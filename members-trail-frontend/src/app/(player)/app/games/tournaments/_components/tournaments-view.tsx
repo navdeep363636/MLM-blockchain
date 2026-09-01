@@ -2,14 +2,14 @@
 
 import { useMemo, useState } from "react";
 import {
-  CalendarClock, Coins, Info, Landmark, ListOrdered, Ticket, Trophy, Users,
+  CalendarClock, Coins, Info, Landmark, ListOrdered, Play, Ticket, Trophy, Users,
 } from "lucide-react";
 import {
   Badge, Button, Callout, Checkbox, DataTable, EmptyState, Modal, PillTabs,
   ProgressBar, SkeletonCard, StatusPill, DetailRow, useToast, type Column,
 } from "@/components/ui";
 import { RevealGroup, RevealItem, SpotlightCard } from "@/components/fx";
-import { useGames, useLeaderboard, useTournaments } from "@/lib/hooks/use-data";
+import { useGames, useLeaderboard, useMyTournamentEntries, useTournaments } from "@/lib/hooks/use-data";
 import { useRegisterForTournament } from "@/lib/hooks/use-mutations";
 import { humanMessage } from "@/lib/api/errors";
 import { formatDate, formatNumber, formatToken } from "@/lib/utils";
@@ -24,6 +24,7 @@ export function TournamentsView() {
   const register = useRegisterForTournament();
   const { data: games } = useGames();
   const { data: leaderboard } = useLeaderboard();
+  const { data: myEntries } = useMyTournamentEntries();
   const toast = useToast();
 
   const [filter, setFilter] = useState<Filter>("live");
@@ -46,7 +47,14 @@ export function TournamentsView() {
 
   const shown = tournaments.filter((t) => t.status === filter);
 
-  const isRegistered = (t: Tournament) => registered[t.id] ?? t.registered ?? false;
+  /* Server first, then anything registered in this session, then the read model.
+     The local map only exists so the card updates before the refetch lands. */
+  const entered = useMemo(
+    () => new Set(myEntries.filter((e) => !e.disqualified).map((e) => e.tournamentRef)),
+    [myEntries],
+  );
+  const isRegistered = (t: Tournament) =>
+    entered.has(t.id) || (registered[t.id] ?? t.registered ?? false);
 
   const confirmEntry = async () => {
     if (!entering) return;
@@ -214,9 +222,24 @@ export function TournamentsView() {
                     <div className="mt-4 flex flex-wrap gap-2 pt-1">
                       {t.status !== "completed" && (
                         mine ? (
-                          <Button size="sm" variant="outline" disabled icon={<Ticket className="size-3.5" />}>
-                            Registered
-                          </Button>
+                          /* Registered and the event is running: the only thing
+                             left to do is play it. A disabled "Registered" chip
+                             was the whole of the entrant's experience — the fee
+                             was charged and there was no route to a session that
+                             counted toward the standings. */
+                          t.status === "live" && game ? (
+                            <Button
+                              size="sm"
+                              href={`/app/games/play?game=${game.slug}&tournament=${t.id}`}
+                              icon={<Play className="size-3.5" />}
+                            >
+                              Play ranked session
+                            </Button>
+                          ) : (
+                            <Button size="sm" variant="outline" disabled icon={<Ticket className="size-3.5" />}>
+                              Registered
+                            </Button>
+                          )
                         ) : (
                           <Button
                             size="sm"
