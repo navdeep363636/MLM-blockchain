@@ -59,7 +59,19 @@ interface Session {
 }
 
 let session: Session | null = null;
-let refreshInFlight: Promise<boolean> | null = null;
+let refreshInFlight: Promise<RefreshOutcome> | null = null;
+
+/**
+ * What a refresh attempt actually established.
+ *
+ * The distinction is the whole point. `signed-out` is the server saying this
+ * browser has no session; `unavailable` is the server saying nothing useful —
+ * a 429, a 502, a dropped connection. Collapsing the second into the first is
+ * what turned a rate limit into a logout: the refresh returned false, the
+ * session was cleared, and the route guard bounced a signed-in member to the
+ * login screen in the middle of a navigation.
+ */
+export type RefreshOutcome = "ok" | "signed-out" | "unavailable";
 
 /** Called by the auth provider whenever the session changes. */
 type SessionListener = (authenticated: boolean) => void;
@@ -109,14 +121,39 @@ export function hasSession(): boolean {
  */
 type RefreshBody = { tokens?: { accessToken?: string; expiresIn?: number } } | null;
 
+/** What the head script parks on `window`: the status as well as the body. */
+type RefreshAttempt = { status: number; body: RefreshBody };
+
+/**
+ * Statuses that mean "this browser is not signed in". Everything else — 429,
+ * 5xx, a status of 0 standing in for a network failure — leaves the existing
+ * session alone.
+ */
+function isSignedOut(status: number): boolean {
+  return status === 401 || status === 403;
+}
+
+/**
+ * Whether this browser looks like it holds a session at all.
+ *
+ * The refresh cookie is httpOnly, so the only readable evidence is `mt_session`,
+ * a value-free companion the server writes beside it. When it is absent there is
+ * nothing to exchange, and asking anyway is a round-trip on every public page
+ * plus a slice of a rate-limit allowance that a signed-in member will need.
+ */
+export function hasSessionHint(): boolean {
+  if (typeof document === "undefined") return false;
+  return document.cookie.includes("mt_session=1");
+}
+
 /**
  * The refresh the document head kicked off during HTML parse, if it is still
  * unclaimed. Claimed once: a refresh token is single-use, so a second POST would
  * invalidate the token this one just spent and read as reuse-as-breach.
  */
-function adoptHeadRefresh(): Promise<RefreshBody> | null {
+function adoptHeadRefresh(): Promise<RefreshAttempt> | null {
   if (typeof window === "undefined") return null;
-  const w = window as Window & { __mtSession?: Promise<RefreshBody> };
+  const w = window as Window & { __mtSession?: Promise<RefreshAttempt> | null };
   const p = w.__mtSession;
   if (!p) return null;
   delete w.__mtSession;
@@ -138,11 +175,16 @@ export function adoptHeadProfile(): Promise<unknown> | null {
   return p;
 }
 
-export async function refreshSession(): Promise<boolean> {
+export async function refreshSessionOutcome(): Promise<RefreshOutcome> {
   refreshInFlight ??= (async () => {
     try {
       const head = adoptHeadRefresh();
-      const body = head
+
+      /* Nothing parked by the head script and no cookie saying a session
+       * exists: this is an anonymous visitor, and the answer is already known. */
+      if (!head && !hasSessionHint()) return "signed-out";
+
+      const attempt: RefreshAttempt = head
         ? await head
         : await (async () => {
             const res = await fetch(`${API_BASE}/auth/refresh`, {
@@ -153,22 +195,28 @@ export async function refreshSession(): Promise<boolean> {
                * server-side precisely so a browser never has to hold it. */
               body: "{}",
             });
-            return res.ok ? ((await res.json()) as RefreshBody) : null;
+            const body = res.ok ? ((await res.json()) as RefreshBody) : null;
+            return { status: res.status, body };
           })();
-      if (!body) {
-        clearSession();
-        return false;
+
+      const token = attempt.body?.tokens?.accessToken;
+      if (token) {
+        setSession(token, attempt.body?.tokens?.expiresIn ?? 900);
+        return "ok";
       }
-      const token = body.tokens?.accessToken;
-      if (!token) {
+
+      /* A 200 with no token in it is a broken server, not a signed-out browser —
+       * but there is nothing to retry either, so treat it as unavailable and let
+       * whatever the member already has keep working. */
+      if (isSignedOut(attempt.status)) {
         clearSession();
-        return false;
+        return "signed-out";
       }
-      setSession(token, body.tokens?.expiresIn ?? 900);
-      return true;
+      return "unavailable";
     } catch {
-      clearSession();
-      return false;
+      /* fetch itself rejected: offline, DNS, a dropped TLS handshake. The
+       * session on the server is very probably still there. */
+      return "unavailable";
     } finally {
       /* Cleared in `finally` so a failed refresh does not wedge every later call
        * behind a permanently-rejected promise. */
@@ -177,6 +225,11 @@ export async function refreshSession(): Promise<boolean> {
   })();
 
   return refreshInFlight;
+}
+
+/** Back-compatible boolean form: did we end up holding a usable access token? */
+export async function refreshSession(): Promise<boolean> {
+  return (await refreshSessionOutcome()) === "ok";
 }
 
 /** Restores a session on page load. Safe to call when signed out. */
@@ -212,12 +265,35 @@ export const restoreSession = refreshSession;
  * firing a request during a server render would be one request per rendered
  * page, to no purpose.
  */
-let bootstrap: Promise<boolean> | null = null;
+let bootstrap: Promise<RefreshOutcome> | null = null;
 
-export function bootstrapSession(): Promise<boolean> {
-  if (typeof window === "undefined") return Promise.resolve(false);
-  bootstrap ??= refreshSession().catch(() => false);
+/** Backoff between page-load restore attempts, in ms. Three tries, then stop. */
+const BOOTSTRAP_RETRY_MS = [400, 1_200, 3_000] as const;
+
+/**
+ * The page-load session restore, with the one retry policy that matters.
+ *
+ * A `signed-out` answer is final — the visitor is anonymous, and asking again is
+ * noise. An `unavailable` answer is not an answer: the server was rate limiting,
+ * restarting or unreachable. Settling on "anonymous" there is what put a
+ * signed-in member on the login screen after a handful of page loads, so instead
+ * this backs off and asks again before giving up.
+ */
+export function bootstrapSessionOutcome(): Promise<RefreshOutcome> {
+  if (typeof window === "undefined") return Promise.resolve("signed-out");
+  bootstrap ??= (async () => {
+    for (let attempt = 0; ; attempt += 1) {
+      const outcome = await refreshSessionOutcome().catch<RefreshOutcome>(() => "unavailable");
+      if (outcome !== "unavailable" || attempt >= BOOTSTRAP_RETRY_MS.length) return outcome;
+      await new Promise((r) => setTimeout(r, BOOTSTRAP_RETRY_MS[attempt]));
+    }
+  })();
   return bootstrap;
+}
+
+/** Back-compatible boolean form. */
+export async function bootstrapSession(): Promise<boolean> {
+  return (await bootstrapSessionOutcome()) === "ok";
 }
 
 if (typeof window !== "undefined") {
@@ -307,9 +383,14 @@ async function request<T>(
    * and replay. `_retried` stops this recursing when the refresh itself yields a
    * token the server still rejects. */
   if (res.status === 401 && !opts.anonymous && !opts._retried) {
-    const ok = await refreshSession();
-    if (ok) return request<T>(method, path, body, { ...opts, _retried: true, idempotencyKey: headers["Idempotency-Key"] });
-    clearSession();
+    const outcome = await refreshSessionOutcome();
+    if (outcome === "ok") {
+      return request<T>(method, path, body, { ...opts, _retried: true, idempotencyKey: headers["Idempotency-Key"] });
+    }
+    /* `refreshSessionOutcome` has already cleared the session if the server said
+     * so. When it could not reach an answer — rate limited, gateway down — the
+     * session stays, this one call fails, and the next one tries again. Signing
+     * the member out here would turn a blip into a re-login. */
   }
 
   if (res.status === 204) return undefined as T;

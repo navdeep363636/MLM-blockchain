@@ -23,6 +23,17 @@ import {
 /** Name of the httpOnly cookie carrying the refresh token for browser clients. */
 const REFRESH_COOKIE = "mt_rt";
 
+/**
+ * A readable companion to the refresh cookie. It carries no token — only the
+ * fact that a session exists — because the refresh cookie is httpOnly and a
+ * browser therefore cannot tell a signed-in reload from an anonymous one. Every
+ * page load used to fire `POST /auth/refresh` to find out, including on the
+ * marketing site and the login screen itself, which spent the rate-limit
+ * allowance before anyone had signed in. With this the client only asks when
+ * there is something to ask about.
+ */
+const SESSION_HINT_COOKIE = "mt_session";
+
 /** 30 days, matching the refresh token's own lifetime. */
 const REFRESH_COOKIE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -165,7 +176,9 @@ export class AuthController {
   @Public()
   @Post("refresh")
   @HttpCode(HttpStatus.OK)
-  @Throttle({ default: { limit: 30, ttl: 15 * MIN } })
+  /* Keyed per session by UserThrottlerGuard, not per IP, so this is a ceiling on
+   * one browser: a page load every fifteen seconds for a quarter of an hour. */
+  @Throttle({ default: { limit: 60, ttl: 15 * MIN } })
   @ApiOperation({
     summary: "Rotate a refresh token",
     description:
@@ -446,6 +459,17 @@ export class AuthController {
       path: `/${process.env.API_PREFIX ?? "api"}/v1/auth`,
       maxAge: REFRESH_COOKIE_MAX_AGE_MS,
     });
+
+    /* Deliberately readable, and deliberately empty of anything worth stealing.
+     * Scoped to "/" because the client reads it on every page, not just under
+     * the auth prefix. */
+    res.cookie(SESSION_HINT_COOKIE, "1", {
+      httpOnly: false,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: REFRESH_COOKIE_MAX_AGE_MS,
+    });
     return result;
   }
 
@@ -461,6 +485,12 @@ export class AuthController {
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
       path: `/${process.env.API_PREFIX ?? "api"}/v1/auth`,
+    });
+    res.clearCookie(SESSION_HINT_COOKIE, {
+      httpOnly: false,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
     });
   }
 

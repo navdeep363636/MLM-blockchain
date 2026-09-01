@@ -40,22 +40,34 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             POST /auth/refresh at 593ms on a document whose scripts had all landed
             by 217ms. Every authenticated request on the page queues behind it.
             The promise is parked on window and adopted by refreshSession(), so
-            React never issues a second one - refresh tokens are single-use. */}
+            React never issues a second one - refresh tokens are single-use.
+
+            Gated on mt_session, a readable companion the server sets next to the
+            httpOnly refresh cookie. Without it this fired on every document -
+            the marketing pages, the login screen, every anonymous visitor - and
+            spent a rate-limit allowance that a signed-in member then needed.
+
+            The status travels with the body. A 429 or a 502 has to be
+            distinguishable from a 401 downstream, or a rate limit reads as a
+            logout. */}
         <script
           dangerouslySetInnerHTML={{
             __html:
               `try{var B=${JSON.stringify(API_BASE)};` +
+              `if(document.cookie.indexOf("mt_session=1")<0){window.__mtSession=null;window.__mtProfile=null;}else{` +
               `var s=fetch(B+"/auth/refresh",{method:"POST",credentials:"include",` +
               `headers:{"Content-Type":"application/json"},body:"{}"})` +
-              `.then(function(r){return r.ok?r.json():null}).catch(function(){return null});` +
+              `.then(function(r){return r.ok?r.json().then(function(j){return{status:r.status,body:j}},` +
+              `function(){return{status:r.status,body:null}}):{status:r.status,body:null}})` +
+              `.catch(function(){return{status:0,body:null}});` +
               `window.__mtSession=s;` +
               /* Chained here rather than left to React: the guards on every
                  dashboard route hold their content until the profile lands, so
                  this one request is what the reader is waiting on. */
-              `window.__mtProfile=s.then(function(b){var t=b&&b.tokens&&b.tokens.accessToken;if(!t)return null;` +
+              `window.__mtProfile=s.then(function(o){var t=o&&o.body&&o.body.tokens&&o.body.tokens.accessToken;if(!t)return null;` +
               `return fetch(B+"/users/me",{headers:{Authorization:"Bearer "+t}})` +
               `.then(function(r){return r.ok?r.json():null})}).catch(function(){return null});` +
-              `}catch(e){}`,
+              `}}catch(e){}`,
           }}
         />
       </head>
