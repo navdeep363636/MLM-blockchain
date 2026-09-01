@@ -76,20 +76,33 @@ export interface TournamentSeed {
   prizeSplit: { place: string; share: number }[];
 }
 
+/**
+ * Prize shares are BASIS POINTS totalling exactly 10,000, and a place is a
+ * NUMBER OR A NUMERIC RANGE ("1", "4-10") — not an ordinal label.
+ *
+ * Not percentages. `assertSplitTotals` enforces the bps total on the admin
+ * create/publish path, and the UI divides by 100 to display — so a split written
+ * as percentages is a hundredfold understatement of every prize, and the seeded
+ * events shipped exactly that: 100 bps distributed, 99% of each pool retained,
+ * and "1st place: 0.25%" on screen. `normaliseSplit` also parses the place to
+ * expand a range across its positions, so "4th-20th" was unparseable and would
+ * have paid nobody. Both were caught by running `assertSplitTotals` over the
+ * seed data, which is why the seed now does that.
+ */
 const TOP_HEAVY: { place: string; share: number }[] = [
-  { place: "1st", share: 40 },
-  { place: "2nd", share: 22 },
-  { place: "3rd", share: 13 },
-  { place: "4th-10th", share: 17 },
-  { place: "11th-50th", share: 8 },
+  { place: "1", share: 4_000 },
+  { place: "2", share: 2_200 },
+  { place: "3", share: 1_300 },
+  { place: "4-10", share: 1_700 },
+  { place: "11-50", share: 800 },
 ];
 
 const FLAT_FIELD: { place: string; share: number }[] = [
-  { place: "1st", share: 25 },
-  { place: "2nd", share: 17 },
-  { place: "3rd", share: 12 },
-  { place: "4th-20th", share: 28 },
-  { place: "21st-100th", share: 18 },
+  { place: "1", share: 2_500 },
+  { place: "2", share: 1_700 },
+  { place: "3", share: 1_200 },
+  { place: "4-20", share: 2_800 },
+  { place: "21-100", share: 1_800 },
 ];
 
 export const TOURNAMENTS: TournamentSeed[] = [
