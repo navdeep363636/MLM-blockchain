@@ -629,8 +629,10 @@ export function toLegalDocument(d: LegalDocumentResponse): LegalDocument {
     title: d.title,
     version: d.version,
     status: d.status as LegalDocument["status"],
-    updatedAt: d.updatedAt,
-    effectiveFrom: d.effectiveFrom,
+    /* Three names for "when did this last change", because the public read model
+     * and the admin one grew apart. Take whichever the server actually sent. */
+    updatedAt: d.updatedAt ?? d.publishedAt ?? d.createdAt ?? null,
+    effectiveFrom: d.effectiveFrom ?? null,
     materialChange: d.materialChange,
     summary: d.summary ?? "",
     sections: d.sections ?? [],
