@@ -22,14 +22,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Activity, ArrowLeft, Gamepad2, Gauge, Keyboard, LogOut, Pause, Play, RotateCcw, ShieldCheck,
-  Sparkles, Timer, TriangleAlert,
+  Sparkles, Timer, TriangleAlert, Trophy,
 } from "lucide-react";
 import {
   Badge, Button, Callout, CapMeter, DetailRow, EmptyState, Modal, SkeletonCard, Select,
 } from "@/components/ui";
 import { AnimatedCounter, LiveDot, Reveal, motion } from "@/components/fx";
 import { GameArt } from "@/app/(public)/_components/game-art";
-import { useBalances, useGames } from "@/lib/hooks/use-data";
+import { useBalances, useGames, useTournaments } from "@/lib/hooks/use-data";
 import { useGameSession } from "@/lib/games/session";
 import { engineFor } from "@/lib/games/registry";
 import { rngFrom } from "@/lib/games/rng";
@@ -68,12 +68,21 @@ export function GameplayScreen() {
   const params = useSearchParams();
   const router = useRouter();
   const slug = params.get("game");
+  /* A ranked session is addressed by the event's public ref, the same identifier
+   * every other tournament route takes. The server decides whether it is allowed
+   * — the entry, the title and the window are all checked there. */
+  const tournamentRef = params.get("tournament");
   const { data: games, isLoading } = useGames();
   const { data: balances } = useBalances();
+  const { data: tournaments } = useTournaments();
 
   const game = useMemo(() => games.find((g) => g.slug === slug) ?? null, [games, slug]);
+  const tournament = useMemo(
+    () => (tournamentRef ? tournaments.find((t) => t.id === tournamentRef) ?? null : null),
+    [tournaments, tournamentRef],
+  );
 
-  const session = useGameSession(game?.id ?? null);
+  const session = useGameSession(game?.id ?? null, tournamentRef);
   const { engine, tuning } = useMemo(
     () => engineFor(game?.slug ?? "", game?.genre ?? ""),
     [game?.slug, game?.genre],
@@ -330,7 +339,11 @@ export function GameplayScreen() {
               <div className="min-w-0">
                 <p className="flex flex-wrap items-center gap-2 truncate font-display text-base font-semibold text-text-primary">
                   {game.title}
-                  <Badge tone="good" dot>Free mode</Badge>
+                  {tournamentRef ? (
+                    <Badge tone="brand" icon={<Trophy className="size-3" />}>Ranked entry</Badge>
+                  ) : (
+                    <Badge tone="good" dot>Free mode</Badge>
+                  )}
                   {capRemaining === 0 && (
                     <Badge tone="warning" icon={<TriangleAlert className="size-3" />}>Cap reached</Badge>
                   )}
@@ -459,7 +472,7 @@ export function GameplayScreen() {
         open={summaryOpen}
         onClose={() => setSummaryOpen(false)}
         title="Session summary"
-        description={`${game.title} · ${engine.name} · free mode`}
+        description={`${game.title} · ${engine.name} · ${tournament ? tournament.name : "free mode"}`}
         icon={<Sparkles className="size-5" />}
         footer={
           <>
@@ -501,7 +514,14 @@ export function GameplayScreen() {
             />
             <DetailRow
               label="Entry cost"
-              value={<span className="tnum">{formatToken(0)} MTT · free mode</span>}
+              value={
+                <span className="tnum">
+                  {tournament
+                    ? `${formatToken(tournament.entryFee)} MTT · paid on registration`
+                    : `${formatToken(0)} MTT · free mode`}
+                </span>
+              }
+              hint={tournament ? "The fee was charged when you registered, not per session." : undefined}
             />
           </div>
 
