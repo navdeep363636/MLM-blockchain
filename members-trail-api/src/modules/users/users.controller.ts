@@ -68,7 +68,10 @@ export class UsersController {
     @Headers() headers: Record<string, string | undefined>,
   ): Promise<ContactChangeStartedResponse> {
     return this.users.startEmailChange(
-      user.id, dto.email, this.context(user, ip, userAgent, headers),
+      user.id,
+      dto.email,
+      { password: dto.password, twoFaCode: dto.twoFaCode },
+      this.context(user, ip, userAgent, headers),
     );
   }
 
@@ -105,7 +108,10 @@ export class UsersController {
     @Headers() headers: Record<string, string | undefined>,
   ): Promise<ContactChangeStartedResponse> {
     return this.users.startPhoneChange(
-      user.id, dto.phone, this.context(user, ip, userAgent, headers),
+      user.id,
+      dto.phone,
+      { password: dto.password, twoFaCode: dto.twoFaCode },
+      this.context(user, ip, userAgent, headers),
     );
   }
 

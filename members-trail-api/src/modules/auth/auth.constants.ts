@@ -1,3 +1,13 @@
+/**
+ * Access-token issuer and audience.
+ *
+ * Named constants because they are asserted in two places that are easy to
+ * drift apart: signing (SessionService) and verification (JwtAuthGuard, the
+ * realtime gateway). Verifying with only the secret checks neither claim.
+ */
+export const ACCESS_TOKEN_ISSUER = "members-trail";
+export const ACCESS_TOKEN_AUDIENCE = "members-trail-api";
+
 /* ============================================================================
  * Registration-time compliance and credential rules (FRD A-01, A-04).
  *

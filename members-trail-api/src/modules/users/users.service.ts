@@ -1,5 +1,5 @@
 import {
-  BadRequestException, ConflictException, Injectable, Logger, NotFoundException,
+  BadRequestException, ConflictException, Injectable, Logger, NotFoundException, UnauthorizedException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, IsNull, Repository } from "typeorm";
@@ -17,6 +17,7 @@ import { SessionService } from "@/modules/auth/session.service";
 import { defaultNotificationMatrix } from "@/modules/auth/auth.service";
 import { normaliseEmail, normalisePhone } from "@/modules/auth/auth.constants";
 import type { RequestContext } from "@/modules/auth/auth.service";
+import { TwoFactorService } from "@/modules/auth/two-factor.service";
 import {
   CONFIGURABLE_NOTIFICATION_KINDS, type AccountDeletionRequestDto,
   type ContactChangeStartedResponse, type DataExportRequestDto,
@@ -65,7 +66,57 @@ export class UsersService {
     private readonly audit: AuditService,
     private readonly otp: OtpService,
     private readonly sessions: SessionService,
+    private readonly twoFa: TwoFactorService,
   ) {}
+
+  /**
+   * Proves the person asking is the account holder, not just a token bearer.
+   *
+   * Required before either contact channel moves. Both channels feed recovery —
+   * email carries the reset link, phone carries SMS second factors — so a
+   * change to either is equivalent to handing over the account, and an access
+   * token alone is not evidence of anything beyond having briefly held one.
+   *
+   * The password is checked with the same Argon2 verify the login path uses, so
+   * the failure is timing-equivalent to a wrong password at sign-in.
+   */
+  private async reauthenticate(
+    user: User,
+    credentials: { password: string; twoFaCode?: string },
+  ): Promise<void> {
+    const withSecret = await this.users.findOne({
+      where: { id: user.id },
+      select: { id: true, passwordHash: true, twoFaMethod: true, twoFaEnabledAt: true },
+    });
+    if (!withSecret) throw new NotFoundException("Account not found");
+
+    const ok = await this.crypto.verifyPassword(withSecret.passwordHash, credentials.password);
+    if (!ok) {
+      throw new UnauthorizedException({
+        message: "That password is not correct",
+        code: "REAUTH_FAILED",
+      });
+    }
+
+    /* A second factor, where one is enrolled, is the whole point: a password
+     * lifted from a reused-credential dump must not be enough to move the
+     * recovery channels of an account that opted into 2FA. */
+    if (withSecret.twoFaEnabledAt) {
+      if (!credentials.twoFaCode) {
+        throw new UnauthorizedException({
+          message: "Enter your two-factor code to change this",
+          code: "TWO_FA_REQUIRED",
+        });
+      }
+      const second = await this.twoFa.verifyForSensitiveAction(user.id, credentials.twoFaCode);
+      if (!second) {
+        throw new UnauthorizedException({
+          message: "That two-factor code is not valid",
+          code: "TWO_FA_INVALID",
+        });
+      }
+    }
+  }
 
   /* ==================================================================== *
    * Profile
@@ -123,9 +174,11 @@ export class UsersService {
   async startEmailChange(
     userId: string,
     newEmail: string,
+    credentials: { password: string; twoFaCode?: string },
     ctx: RequestContext,
   ): Promise<ContactChangeStartedResponse> {
     const user = await this.require(userId);
+    await this.reauthenticate(user, credentials);
     const email = normaliseEmail(newEmail);
     const emailHash = this.crypto.hmac(email);
 
@@ -230,9 +283,11 @@ export class UsersService {
   async startPhoneChange(
     userId: string,
     newPhone: string,
+    credentials: { password: string; twoFaCode?: string },
     ctx: RequestContext,
   ): Promise<ContactChangeStartedResponse> {
     const user = await this.require(userId);
+    await this.reauthenticate(user, credentials);
     const phone = normalisePhone(newPhone);
     const phoneHash = this.crypto.hmac(phone);
 

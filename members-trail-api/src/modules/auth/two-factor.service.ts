@@ -355,6 +355,26 @@ export class TwoFactorService {
    * Internals
    * ------------------------------------------------------------------ */
 
+  /**
+   * Verifies a second factor for a sensitive action outside the login flow.
+   *
+   * Exists because changing the email or phone is as consequential as
+   * disabling 2FA — both channels feed account recovery — and the guard only
+   * proves a token was presented, not that the holder is the account owner.
+   */
+  async verifyForSensitiveAction(userId: string, code: string): Promise<boolean> {
+    const user = await this.users.findOne({
+      where: { id: userId },
+      select: {
+        id: true, twoFaMethod: true, twoFaEnabledAt: true,
+        twoFaSecretEnc: true, phone: true, email: true,
+      },
+    });
+    if (!user) return false;
+    if (!user.twoFaEnabledAt) return true;
+    return this.verifySecondFactor(user, code);
+  }
+
   private async verifySecondFactor(user: User, code: string): Promise<boolean> {
     if (user.twoFaMethod === "sms") {
       if (!user.phone) return false;

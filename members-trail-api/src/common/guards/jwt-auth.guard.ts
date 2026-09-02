@@ -11,6 +11,7 @@ import { CacheKeys } from "@/common/redis/cache.keys";
 import {
   IS_PUBLIC, KYC_TIER_KEY, PERMS_KEY, ROLES_KEY, type AnyRole, type AuthUser,
 } from "@/common/decorators";
+import { ACCESS_TOKEN_AUDIENCE, ACCESS_TOKEN_ISSUER } from "@/modules/auth/auth.constants";
 
 export interface AccessTokenClaims {
   sub: string;
@@ -85,8 +86,13 @@ export class JwtAuthGuard implements CanActivate {
       });
     }
 
-    /* ----------------------------- account state ------------------------- */
-    if (user.status === "suspended" || user.status === "frozen") {
+    /* ----------------------------- account state -------------------------
+     *
+     * `closed` was missing here, and `SessionService.rotate` did not check the
+     * status at all — so a closed account with one live session could refresh
+     * every 29 days forever and keep full API access. `login` refuses a closed
+     * account, but a closed account never needs to log in again. */
+    if (user.status === "suspended" || user.status === "frozen" || user.status === "closed") {
       throw new ForbiddenException({
         message: `Your account is ${user.status}. Contact support.`,
         code: "ACCOUNT_" + user.status.toUpperCase(),
@@ -107,7 +113,17 @@ export class JwtAuthGuard implements CanActivate {
   private async attach(req: Request & { user?: AuthUser }, token: string): Promise<AuthUser> {
     let claims: AccessTokenClaims;
     try {
-      claims = await this.jwt.verifyAsync<AccessTokenClaims>(token, { secret: this.cfg.accessSecret });
+      /* The issuer, audience and algorithm have to be named here: passing an
+       * options object REPLACES JwtModule's signOptions defaults, so verifying
+       * with only the secret checked neither claim and accepted any algorithm
+       * the secret could satisfy. Nothing else is signed with this secret today,
+       * which is exactly why the check belongs in before something is. */
+      claims = await this.jwt.verifyAsync<AccessTokenClaims>(token, {
+        secret: this.cfg.accessSecret,
+        issuer: ACCESS_TOKEN_ISSUER,
+        audience: ACCESS_TOKEN_AUDIENCE,
+        algorithms: ["HS256"],
+      });
     } catch (e) {
       const msg = e instanceof Error && e.name === "TokenExpiredError" ? "Access token expired" : "Invalid access token";
       throw new UnauthorizedException(msg);

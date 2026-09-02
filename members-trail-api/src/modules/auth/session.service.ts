@@ -13,7 +13,7 @@ import { EventBusService, Events } from "@/events";
 import { authConfig, type AuthConfig } from "@/config/configuration";
 import type { AccessTokenClaims } from "@/common/guards";
 import { AuditService } from "@/modules/audit/audit.service";
-import { parseDurationSeconds } from "./auth.constants";
+import { ACCESS_TOKEN_AUDIENCE, ACCESS_TOKEN_ISSUER, parseDurationSeconds } from "./auth.constants";
 import type { SessionView, TokenPair } from "./dto/auth.dto";
 
 /* ============================================================================
@@ -177,6 +177,22 @@ export class SessionService {
       throw new UnauthorizedException({
         message: "Account is no longer available.",
         code: "ACCOUNT_UNAVAILABLE",
+      });
+    }
+
+    /* Rotation is an authorisation decision, not a bookkeeping one.
+     *
+     * This used to accept whatever row the resolver returned, so a compliance
+     * action never reached a member who simply kept refreshing: each rotation
+     * wrote a fresh 30-day expiry and a fresh 30-day Redis key, and access ran
+     * indefinitely on a suspended, frozen or closed account. Refusing here also
+     * clears the remaining sessions, so the decision takes effect at once
+     * rather than at the end of the current access token's fifteen minutes. */
+    if (user.status !== "active") {
+      await this.revokeAll(user.id, `status_${user.status}`);
+      throw new UnauthorizedException({
+        message: `Your account is ${user.status}. Please contact support.`,
+        code: `ACCOUNT_${user.status.toUpperCase()}`,
       });
     }
 
@@ -367,8 +383,8 @@ export class SessionService {
     return this.jwt.signAsync(claims, {
       secret: this.cfg.accessSecret,
       expiresIn: this.cfg.accessTtl as `${number}${"s" | "m" | "h" | "d"}`,
-      issuer: "members-trail",
-      audience: "members-trail-api",
+      issuer: ACCESS_TOKEN_ISSUER,
+      audience: ACCESS_TOKEN_AUDIENCE,
       jwtid: jti,
     });
   }

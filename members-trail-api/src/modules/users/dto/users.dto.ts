@@ -81,13 +81,41 @@ export class UpdateProfileDto {
 
 /* --------------------------- contact change flow -------------------------- */
 
-export class ChangeEmailDto {
+/**
+ * Re-authentication for a contact change.
+ *
+ * Both channels feed account recovery — email carries the password-reset link,
+ * phone carries SMS second factors — so changing either is equivalent to
+ * handing over the account. Without this, one stolen access token was a
+ * complete takeover in four requests: move the phone (2FA codes now arrive at
+ * the attacker), move the email, trigger a password reset to the new address,
+ * and the revokeAll that follows signs out the real owner while the attacker
+ * keeps their session. The owner is left with no channel to recover through.
+ *
+ * `password` is always required. `twoFaCode` is required in addition whenever
+ * the account has a second factor enrolled — the service enforces that, since
+ * only it knows the enrolment state.
+ */
+export class ReauthDto {
+  @ApiProperty({ description: "The account's current password." })
+  @IsString() @MaxLength(200)
+  password!: string;
+
+  @ApiPropertyOptional({
+    description: "Current TOTP or SMS code. Required when two-factor is enrolled.",
+    example: "482913",
+  })
+  @IsOptional() @IsString() @Matches(/^\d{6}$/, { message: "Code must be 6 digits" })
+  twoFaCode?: string;
+}
+
+export class ChangeEmailDto extends ReauthDto {
   @ApiProperty({ description: "The new email address. A code is sent to it before anything changes." })
   @IsEmail() @MaxLength(320)
   email!: string;
 }
 
-export class ChangePhoneDto {
+export class ChangePhoneDto extends ReauthDto {
   @ApiProperty({ description: "The new phone number in E.164 format." })
   @IsString() @MaxLength(32)
   @Matches(/^\+?[1-9]\d{6,19}$/, { message: "Phone must be a valid international number" })

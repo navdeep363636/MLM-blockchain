@@ -11,6 +11,7 @@ import { AuditService } from "@/modules/audit/audit.service";
 import { OtpService } from "@/modules/auth/otp.service";
 import { SessionService } from "@/modules/auth/session.service";
 import { UsersService } from "./users.service";
+import { TwoFactorService } from "@/modules/auth/two-factor.service";
 
 /* ============================================================================
  * Preference immutability and the contact re-verification flow (FRD D-02).
@@ -46,6 +47,15 @@ describe("UsersService", () => {
   let otp: { issue: jest.Mock; verify: jest.Mock };
   let sessions: { revokeAll: jest.Mock; listActive: jest.Mock };
 
+  const crypto = {
+    hmac: jest.fn((v: string) => `hmac(${v})`),
+    /* Contact changes re-authenticate now, so the fixture needs a password
+       verifier. The refusal tests override it per case. */
+    verifyPassword: jest.fn(async () => true),
+  };
+  const twoFa = { verifyForSensitiveAction: jest.fn(async () => true) };
+  /** Valid re-auth for the happy paths; the refusal tests stub the verifier. */
+  const REAUTH = { password: "correct-horse-battery" };
   const ctx = { ip: "1.2.3.4", userAgent: "jest", sessionJti: "jti-current" };
 
   const account = (overrides: Partial<User> = {}): User => ({
@@ -91,7 +101,7 @@ describe("UsersService", () => {
         { provide: getRepositoryToken(VerificationToken), useValue: tokens },
         { provide: getRepositoryToken(Ticket), useValue: tickets },
         { provide: getRepositoryToken(LegalDocument), useValue: repoMock<LegalDocument>([]) },
-        { provide: CryptoService, useValue: { hmac: jest.fn((v: string) => `hmac(${v})`) } },
+        { provide: CryptoService, useValue: crypto },
         { provide: EventBusService, useValue: bus },
         {
           provide: AuditService,
@@ -99,6 +109,7 @@ describe("UsersService", () => {
         },
         { provide: OtpService, useValue: otp },
         { provide: SessionService, useValue: sessions },
+        { provide: TwoFactorService, useValue: twoFa },
       ],
     }).compile();
 
@@ -174,7 +185,7 @@ describe("UsersService", () => {
       const user = account();
       users.findOne.mockResolvedValue(user);
 
-      const res = await service.startEmailChange("u1", "New@Example.com", ctx);
+      const res = await service.startEmailChange("u1", "New@Example.com", REAUTH, ctx);
 
       expect(res.pending).toBe(true);
       expect(user.email).toBe("ada@example.com");
@@ -189,7 +200,7 @@ describe("UsersService", () => {
       users.exists.mockResolvedValue(true);
 
       await expect(
-        service.startEmailChange("u1", "taken@example.com", ctx),
+        service.startEmailChange("u1", "taken@example.com", REAUTH, ctx),
       ).rejects.toThrow(ConflictException);
 
       expect(otp.issue).not.toHaveBeenCalled();
@@ -199,7 +210,7 @@ describe("UsersService", () => {
       users.findOne.mockResolvedValue(account());
 
       await expect(
-        service.startEmailChange("u1", "ada@example.com", ctx),
+        service.startEmailChange("u1", "ada@example.com", REAUTH, ctx),
       ).rejects.toMatchObject({
         response: expect.objectContaining({ code: "EMAIL_UNCHANGED" }),
       });
@@ -312,4 +323,62 @@ describe("UsersService", () => {
       );
     });
   });
+
+  /* ==================================================================== *
+   * Re-authentication on contact change
+   *
+   * The takeover this closes: one stolen access token moved the phone (so 2FA
+   * codes went to the attacker), then the email, then triggered a reset to the
+   * new address — and the revokeAll that follows an email change signed out the
+   * real owner while the attacker kept their session. Four requests, fifteen
+   * minutes, no password ever needed.
+   * ==================================================================== */
+
+  describe("contact change re-authentication", () => {
+    it("refuses an email change without the correct password", async () => {
+      users.findOne.mockResolvedValue(account());
+      crypto.verifyPassword.mockResolvedValue(false);
+
+      await expect(
+        service.startEmailChange("u1", "attacker@evil.com", { password: "wrong" }, ctx),
+      ).rejects.toMatchObject({ response: expect.objectContaining({ code: "REAUTH_FAILED" }) });
+
+      expect(otp.issue).not.toHaveBeenCalled();
+    });
+
+    it("refuses a phone change without the correct password", async () => {
+      users.findOne.mockResolvedValue(account());
+      crypto.verifyPassword.mockResolvedValue(false);
+
+      await expect(
+        service.startPhoneChange("u1", "+15550001111", { password: "wrong" }, ctx),
+      ).rejects.toMatchObject({ response: expect.objectContaining({ code: "REAUTH_FAILED" }) });
+
+      expect(otp.issue).not.toHaveBeenCalled();
+    });
+
+    it("demands a second factor when the account has one enrolled", async () => {
+      users.findOne.mockResolvedValue({ ...account(), twoFaEnabledAt: new Date() });
+      crypto.verifyPassword.mockResolvedValue(true);
+
+      await expect(
+        service.startEmailChange("u1", "new@example.com", { password: "right" }, ctx),
+      ).rejects.toMatchObject({ response: expect.objectContaining({ code: "TWO_FA_REQUIRED" }) });
+
+      expect(otp.issue).not.toHaveBeenCalled();
+    });
+
+    it("refuses a wrong second factor even with the right password", async () => {
+      users.findOne.mockResolvedValue({ ...account(), twoFaEnabledAt: new Date() });
+      crypto.verifyPassword.mockResolvedValue(true);
+      twoFa.verifyForSensitiveAction.mockResolvedValue(false);
+
+      await expect(
+        service.startEmailChange("u1", "new@example.com", { password: "right", twoFaCode: "000000" }, ctx),
+      ).rejects.toMatchObject({ response: expect.objectContaining({ code: "TWO_FA_INVALID" }) });
+
+      expect(otp.issue).not.toHaveBeenCalled();
+    });
+  });
+
 });
