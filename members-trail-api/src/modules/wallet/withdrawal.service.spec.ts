@@ -137,6 +137,19 @@ describe("WithdrawalService", () => {
               written.push({ entity: entity.name, row });
               return { createdAt: new Date("2026-02-01T00:00:00Z"), ...row, id: `${entity.name}-id` };
             },
+            /* releaseHold re-reads the withdrawal under the lock before moving
+             * money, so the fake manager has to answer that read. Serving the
+             * same row the outer repository holds keeps the mock honest: the
+             * status it sees is the status the test set up. */
+            findOne: async (opts: { where?: { id?: string } }) =>
+              entity.name === "Withdrawal"
+                ? await withdrawals.findOne({ where: { id: opts?.where?.id } })
+                : null,
+            /* The rolling-window sum is asserted inside the balance lock now,
+             * so it runs against THIS manager rather than the outer repository.
+             * Reading the same `windowSum` the test configured keeps
+             * setWindowUsage meaningful for both paths. */
+            createQueryBuilder: () => qb({ sum: windowSum }),
           }),
         };
         return fn(tx, balance);
@@ -761,4 +774,132 @@ describe("WithdrawalService", () => {
       ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
+
+  /* ==================================================================== *
+   * Audit regressions
+   *
+   * Each of these covers a defect the suite could not previously catch,
+   * because the guard being tested was applied outside the lock that makes
+   * it meaningful — or was not applied at all.
+   * ==================================================================== */
+
+  describe("audit regressions", () => {
+    it("asserts the rolling-window cap inside the balance lock, not before it", async () => {
+      /* The cap used to be read before `withUserLock`, so two requests with
+       * different idempotency keys both saw the full allowance and both
+       * committed — N parallel requests got N x the ceiling. The sum now runs
+       * against the locked transaction, so the fixture's usage is what decides. */
+      setWindowUsage("950");
+      await expect(
+        svc.request("u1", { ...BASE_REQUEST, amountMtt: "100" }, "idem-lock-1", null),
+      ).rejects.toMatchObject({ response: { code: "TIER_LIMIT_EXCEEDED" } });
+    });
+
+    it("refuses an Idempotency-Key replayed for a different request", async () => {
+      setWindowUsage("0");
+      await svc.request("u1", { ...BASE_REQUEST, amountMtt: "100" }, "same-key", null);
+
+      const stored = lastRow() as Record<string, unknown>;
+      withdrawals.findOne.mockImplementation(async (opts: { where?: Record<string, unknown> }) =>
+        opts?.where?.idempotencyKey ? { ...stored, ref: "WD-REPLAY" } : null,
+      );
+
+      /* Returning the stored row on the key alone meant a client reusing a
+       * deterministic key got a 201 describing an older, smaller withdrawal to
+       * a different address, with nothing locked and nothing queued. */
+      await expect(
+        svc.request("u1", { ...BASE_REQUEST, amountMtt: "9000" }, "same-key", null),
+      ).rejects.toMatchObject({ response: { code: "IDEMPOTENCY_KEY_REUSED" } });
+    });
+
+    it("routes a cooling-off release to review when the account was frozen mid-window", async () => {
+      withdrawals.findOne.mockResolvedValue({
+        id: "w1",
+        ref: "WD-FROZEN",
+        userId: "u1",
+        status: "cooling_off",
+        reviewRequired: false,
+        coolingOffUntil: new Date("2020-01-01T00:00:00Z"),
+        amountMtt: "4000",
+      });
+      users.findOne.mockResolvedValue({ id: "u1", status: "frozen", kycTier: 1, riskScore: 0 });
+
+      await svc.releaseCoolingOff("w1");
+
+      /* A freeze lands on the USER row, and this used to check only the
+       * withdrawal status — so a request frozen at 11:00 was still paid when
+       * the 48h window closed. */
+      const saved = withdrawals.save.mock.calls.at(-1)?.[0];
+      expect(saved.status).toBe("review");
+      expect(saved.reviewRequired).toBe(true);
+      expect(queue.add).not.toHaveBeenCalledWith(
+        expect.stringContaining("payout"),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it("lets compliance reject a request that is already approved but not yet paid", async () => {
+      withdrawals.findOne.mockResolvedValue({
+        id: "w2",
+        ref: "WD-APPROVED",
+        userId: "u1",
+        status: "approved",
+        amountMtt: "400",
+        reviewRequired: false,
+        coolingOffUntil: null,
+        createdAt: new Date("2026-02-01T00:00:00Z"),
+        kind: "mtt",
+        amountFiat: null,
+        destinationAddress: "0x1111111111111111111111111111111111111111",
+        kycTierAtRequest: 1,
+        rejectionReason: null,
+        reviewedAt: null,
+        txHash: null,
+        sourceTag: "gameplay",
+      });
+
+      /* `approved` is a waiting state — the payout only leaves when the worker
+       * picks it up — so an auto-approved request that drew a fraud report
+       * seconds later had no endpoint that could stop it. */
+      await expect(svc.reject("w2", "fraud report", "admin-1", null)).resolves.toMatchObject({
+        status: "rejected",
+      });
+    });
+
+    it("does not release the same hold twice when two cancels race", async () => {
+      let status = "review";
+      withdrawals.findOne.mockImplementation(async () => ({
+        id: "w3",
+        ref: "WD-RACE",
+        userId: "u1",
+        status,
+        amountMtt: "100",
+        reviewRequired: false,
+        coolingOffUntil: null,
+        createdAt: new Date("2026-02-01T00:00:00Z"),
+        kind: "mtt",
+        amountFiat: null,
+        destinationAddress: "0x1111111111111111111111111111111111111111",
+        kycTierAtRequest: 1,
+        rejectionReason: null,
+        reviewedAt: null,
+        txHash: null,
+        sourceTag: "gameplay",
+      }));
+
+      const before = balance.mttAvailable;
+      await svc.cancel("u1", "WD-RACE", null);
+      status = "cancelled"; // what the first release committed
+
+      const afterFirst = balance.mttAvailable;
+      await svc.cancel("u1", "WD-RACE", null).catch(() => undefined);
+
+      /* Both cancels used to pass the status check outside the lock and both
+       * credited: available 900 -> 1000 -> 1100, hold 100 -> 0 -> -100. */
+      expect(afterFirst).not.toBe(before);
+      expect(balance.mttAvailable).toBe(afterFirst);
+    });
+  });
+
 });

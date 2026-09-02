@@ -63,7 +63,13 @@ export interface MttMutation {
   note?: string | null;
   metadata?: Record<string, unknown> | null;
   /** Which balance bucket to move. Defaults to available. */
-  bucket?: "available" | "staked" | "pendingRewards" | "commissionAvailable" | "commissionPending";
+  bucket?:
+    | "available"
+    | "staked"
+    | "pendingRewards"
+    | "commissionAvailable"
+    | "commissionPending"
+    | "lockedForWithdrawal";
 }
 
 export interface LedgerResult<T> {
@@ -361,6 +367,13 @@ export class LedgerService {
       pendingRewards: "mttPendingRewards",
       commissionAvailable: "commissionAvailable",
       commissionPending: "commissionPending",
+      /* The withdrawal hold was the one money bucket missing from this map, so
+       * every mutation of it bypassed the non-negative refusal below and went
+       * straight through a bare sub(). The column is DECIMAL(36,18) with no
+       * unsigned flag, so MySQL accepted the negative — and `balance()` sums the
+       * hold into the reported total, which quietly nets a shortfall out of the
+       * member's displayed figure instead of surfacing it. */
+      lockedForWithdrawal: "mttLockedForWithdrawal",
     }[bucket] as keyof UserBalance;
 
     /* asScalar rather than String(): the indexed read is typed `unknown`, and a
@@ -405,12 +418,19 @@ export class LedgerService {
     });
   }
 
-  /** Releases a withdrawal hold — on rejection or cancellation. */
+  /**
+   * Releases a withdrawal hold — on rejection or cancellation.
+   *
+   * Routed through `applyBucket` so releasing more than is held is refused
+   * rather than driving the hold negative. Two concurrent cancels of the same
+   * withdrawal used to take available 900 -> 1000 -> 1100 and the hold
+   * 100 -> 0 -> -100, minting 100 MTT out of nothing.
+   */
   async releaseWithdrawalLock(userId: string, amount: string): Promise<void> {
     await this.ds.transaction("READ COMMITTED", async (tx) => {
       const balance = await this.lockBalance(tx, userId);
-      balance.mttLockedForWithdrawal = sub(balance.mttLockedForWithdrawal, amount);
-      balance.mttAvailable = add(balance.mttAvailable, amount);
+      this.applyBucket(balance, "lockedForWithdrawal", dec(amount).negated().toString());
+      this.applyBucket(balance, "available", toDbAmount(amount));
       await tx.getRepository(UserBalance).save(balance);
     });
   }
@@ -419,7 +439,7 @@ export class LedgerService {
   async settleWithdrawalLock(userId: string, amount: string): Promise<void> {
     await this.ds.transaction("READ COMMITTED", async (tx) => {
       const balance = await this.lockBalance(tx, userId);
-      balance.mttLockedForWithdrawal = sub(balance.mttLockedForWithdrawal, amount);
+      this.applyBucket(balance, "lockedForWithdrawal", dec(amount).negated().toString());
       await tx.getRepository(UserBalance).save(balance);
     });
   }

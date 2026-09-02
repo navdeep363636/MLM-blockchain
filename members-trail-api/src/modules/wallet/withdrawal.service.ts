@@ -5,7 +5,7 @@ import {
 import { InjectRepository } from "@nestjs/typeorm";
 import { InjectQueue } from "@nestjs/bullmq";
 import type { Queue } from "bullmq";
-import { IsNull, LessThanOrEqual, Repository } from "typeorm";
+import { IsNull, LessThanOrEqual, Repository, type EntityManager } from "typeorm";
 import {
   Transaction, User, UserBalance, WalletAddress, Withdrawal,
   type WithdrawalStatus,
@@ -87,6 +87,26 @@ const WINDOW_CONSUMING: WithdrawalStatus[] = [
 
 /** Statuses a member may still cancel. */
 const CANCELLABLE: WithdrawalStatus[] = ["pending", "cooling_off", "review"];
+
+/**
+ * Statuses compliance can still reject from.
+ *
+ * `approved` is included, and CANCELLABLE deliberately is not reused here.
+ * `approved` is a WAITING state — the payout only leaves when the queue worker
+ * picks it up — so an auto-approved request that drew a fraud report seconds
+ * later had no endpoint that could stop it: reject returned NOT_REVIEWABLE and
+ * cancel returned NOT_CANCELLABLE. Staff could only watch it pay.
+ */
+const REJECTABLE: WithdrawalStatus[] = ["pending", "cooling_off", "review", "approved"];
+
+/** Statuses from which a held balance may still be returned. */
+const RELEASABLE = new Set<WithdrawalStatus>([
+  "pending",
+  "cooling_off",
+  "review",
+  "approved",
+  "processing",
+]);
 
 /** Account states allowed to withdraw. `frozen` is a compliance hold on funds. */
 const WITHDRAWABLE_STATUSES = new Set(["active"]);
@@ -170,6 +190,47 @@ export class WithdrawalService {
     return toDbAmount(raw?.sum ?? 0);
   }
 
+  /**
+   * Refuses the request if it would breach the rolling-window ceiling.
+   *
+   * Takes the caller's EntityManager so the SUM runs inside the same
+   * transaction as the row insert, serialised by the per-user balance lock.
+   * Read outside that lock, the number is stale the moment a sibling request
+   * commits.
+   */
+  private async assertWindowRoom(
+    tx: EntityManager,
+    userId: string,
+    amount: string,
+    tierLimit: string,
+    policy: WithdrawalPolicyConfig,
+    kycTier: number,
+  ): Promise<void> {
+    const since = addDays(new Date(), -policy.rollingWindowDays);
+    const raw = await tx
+      .getRepository(Withdrawal)
+      .createQueryBuilder("w")
+      .select("COALESCE(SUM(w.amountMtt), 0)", "sum")
+      .where("w.userId = :userId", { userId })
+      .andWhere("w.createdAt >= :since", { since })
+      .andWhere("w.status IN (:...statuses)", { statuses: WINDOW_CONSUMING })
+      .getRawOne<{ sum: string | null }>();
+
+    const used = toDbAmount(raw?.sum ?? 0);
+    const remaining = gt(tierLimit, used) ? sub(tierLimit, used) : toDbAmount(0);
+
+    if (gt(amount, remaining)) {
+      throw new ConflictException({
+        code: "TIER_LIMIT_EXCEEDED",
+        message: `This exceeds your ${policy.rollingWindowDays}-day limit for KYC tier ${kycTier}`,
+        requested: amount,
+        remaining,
+        tierLimit: toDbAmount(tierLimit),
+        windowDays: policy.rollingWindowDays,
+      });
+    }
+  }
+
   /* ==================================================================== *
    * Request
    * ==================================================================== */
@@ -182,10 +243,28 @@ export class WithdrawalService {
   ): Promise<WithdrawalResponse> {
     const key = `withdrawal:${userId}:${idempotencyKey}`;
 
-    const replay = await this.withdrawals.findOne({ where: { idempotencyKey: key } });
-    if (replay) return toView(replay);
-
     const amount = toDbAmount(dto.amountMtt);
+
+    /* A replay is only a replay if it describes the same request. Returning the
+     * stored row on the key alone meant a client reusing a deterministic key
+     * ("withdrawal-daily") got a 201 describing an earlier, smaller withdrawal
+     * to a different address — nothing locked, nothing queued, and the client
+     * believing the new amount was in flight. The Redis reserve hides this for
+     * 24h; the DB row outlives it. */
+    const replay = await this.withdrawals.findOne({ where: { idempotencyKey: key } });
+    if (replay) {
+      const sameDestination =
+        dto.kind === "mtt"
+          ? replay.destinationAddress === (dto.destinationAddress ?? "").toLowerCase()
+          : replay.destination === dto.payoutMethodRef;
+      if (replay.kind === dto.kind && dec(replay.amountMtt).eq(amount) && sameDestination) {
+        return toView(replay);
+      }
+      throw new ConflictException({
+        code: "IDEMPOTENCY_KEY_REUSED",
+        message: "This Idempotency-Key was already used for a different withdrawal",
+      });
+    }
     if (dec(amount).lte(0)) throw new BadRequestException("Withdrawal amount must be positive");
     if (lt(amount, MIN_WITHDRAWAL_MTT)) {
       throw new BadRequestException({
@@ -212,22 +291,15 @@ export class WithdrawalService {
       });
     }
 
-    /* Tier ceiling over the rolling window. */
+    /* Tier ceiling over the rolling window.
+     *
+     * Computed here for the error payload, but ASSERTED inside the balance lock
+     * below — see assertWindowRoom. Checking it out here only was a plain race:
+     * two requests with different Idempotency-Keys both read used = 0, both saw
+     * the full limit remaining, and both committed, so N parallel requests got
+     * N x the ceiling up to the balance. */
     const tierKey = String(user.kycTier) as keyof WithdrawalPolicyConfig["tierLimitsMtt"];
     const tierLimit = policy.tierLimitsMtt[tierKey] ?? toDbAmount(0);
-    const used = await this.windowUsage(userId, policy.rollingWindowDays);
-    const remaining = gt(tierLimit, used) ? sub(tierLimit, used) : toDbAmount(0);
-
-    if (gt(amount, remaining)) {
-      throw new ConflictException({
-        code: "TIER_LIMIT_EXCEEDED",
-        message: `This exceeds your ${policy.rollingWindowDays}-day limit for KYC tier ${user.kycTier}`,
-        requested: amount,
-        remaining,
-        tierLimit: toDbAmount(tierLimit),
-        windowDays: policy.rollingWindowDays,
-      });
-    }
 
     /* Destination resolution. */
     let destinationAddress: string | null = null;
@@ -292,6 +364,10 @@ export class WithdrawalService {
           requested: amount,
         });
       }
+
+      /* Re-read the window inside the lock, against the same transaction, so the
+       * sum sees every row a concurrent request has already committed. */
+      await this.assertWindowRoom(tx, userId, amount, tierLimit, policy, user.kycTier);
 
       balance.mttAvailable = sub(balance.mttAvailable, amount);
       balance.mttLockedForWithdrawal = add(balance.mttLockedForWithdrawal, amount);
@@ -503,7 +579,7 @@ export class WithdrawalService {
   ): Promise<WithdrawalResponse> {
     const row = await this.withdrawals.findOne({ where: { id } });
     if (!row) throw new NotFoundException("Withdrawal not found");
-    if (!CANCELLABLE.includes(row.status)) {
+    if (!REJECTABLE.includes(row.status)) {
       throw new BadRequestException({
         code: "NOT_REVIEWABLE",
         message: `A withdrawal that is ${row.status} can no longer be rejected`,
@@ -650,6 +726,26 @@ export class WithdrawalService {
       return;
     }
 
+    /* A freeze during the window has to survive it.
+     *
+     * This used to check only the WITHDRAWAL status, and a freeze changes the
+     * USER status — so a request auto-approved below the review threshold at
+     * 10:00, frozen by the fraud engine at 11:00, was released to `approved` and
+     * paid 48 hours later. The account state is re-read here, and a member no
+     * longer clear to withdraw is routed to review rather than to a payout. */
+    const holder = await this.users.findOne({ where: { id: row.userId } });
+    const clear = holder ? WITHDRAWABLE_STATUSES.has(holder.status) : false;
+    if (!clear) {
+      this.log.warn(
+        `cooling-off release for ${row.ref}: account is ${holder?.status ?? "missing"} — routing to review`,
+      );
+      row.status = "review";
+      row.reviewRequired = true;
+      row.coolingOffUntil = null;
+      await this.withdrawals.save(row);
+      return;
+    }
+
     row.status = row.reviewRequired ? "review" : "approved";
     row.coolingOffUntil = null;
     await this.withdrawals.save(row);
@@ -682,6 +778,18 @@ export class WithdrawalService {
        * leaves a job in the queue, and that job must simply do nothing. */
       this.log.warn(`payout skipped for ${row.ref}: status is ${row.status}, not approved`);
       return { rail: "none", withdrawalId: id, reason: `STATUS_${row.status.toUpperCase()}` };
+    }
+
+    /* The withdrawal status is not the whole picture: a freeze lands on the
+     * user row, so an approved request for a since-frozen account would still
+     * pay. Re-read the holder at the last moment before the money moves. */
+    const holder = await this.users.findOne({ where: { id: row.userId } });
+    if (!holder || !WITHDRAWABLE_STATUSES.has(holder.status)) {
+      this.log.warn(`payout blocked for ${row.ref}: account is ${holder?.status ?? "missing"}`);
+      row.status = "review";
+      row.reviewRequired = true;
+      await this.withdrawals.save(row);
+      return { rail: "none", withdrawalId: id, reason: "ACCOUNT_NOT_WITHDRAWABLE" };
     }
 
     if (row.kind === "mtt" && !row.destinationAddress) {
@@ -799,6 +907,24 @@ export class WithdrawalService {
   ): Promise<void> {
     const amount = toDbAmount(row.amountMtt);
     await this.ledger.withUserLock(row.userId, async (tx, balance) => {
+      /* Re-read the withdrawal under the lock and abort if it is no longer
+       * releasable.
+       *
+       * The callers check the status, but they do it OUTSIDE this lock, so two
+       * concurrent releases both passed and both credited: available went
+       * 900 -> 1000 -> 1100 and the hold 100 -> 0 -> -100, minting 100 MTT. A
+       * cancel racing a reject did the same. The status re-read has to happen
+       * where the money moves. */
+      const fresh = await tx.getRepository(Withdrawal).findOne({
+        where: { id: row.id },
+        lock: { mode: "pessimistic_write" },
+      });
+      if (!fresh) throw new NotFoundException("Withdrawal not found");
+      if (!RELEASABLE.has(fresh.status)) {
+        this.log.warn(`release skipped for ${fresh.ref}: already ${fresh.status}`);
+        return;
+      }
+
       balance.mttLockedForWithdrawal = sub(balance.mttLockedForWithdrawal, amount);
       balance.mttAvailable = add(balance.mttAvailable, amount);
       balance.lastLedgerAt = new Date();
