@@ -200,6 +200,18 @@ describe("CommissionService", () => {
               written.push({ entity: entity.name, row });
               return { createdAt: new Date("2026-02-10T00:00:00Z"), ...row, id: `${entity.name}-id` };
             },
+            /* moveToReleased re-reads the commission FOR UPDATE before crediting,
+             * so the fake manager has to answer that read. Deferring to the outer
+             * repository keeps the mock honest: the status the lock sees is the
+             * status the test set up. */
+            findOne: async (opts: { where?: { id?: string } }) => {
+              if (entity.name !== "Commission") return null;
+              const found = await commissions.findOne({ where: { id: opts?.where?.id } });
+              /* Tests that do not stub an id lookup mean "the row is unchanged",
+               * so fall back to still-queued. A test asserting the guard stubs
+               * commissions.findOne with a conflicting status instead. */
+              return found ?? { id: opts?.where?.id, status: "queued" };
+            },
           }),
         };
         return fn(tx, balance);
@@ -961,4 +973,80 @@ describe("CommissionService", () => {
       expect(m.remainingAmount).toBe("0.00");
     });
   });
+
+  /* ==================================================================== *
+   * Audit regressions
+   * ==================================================================== */
+
+  describe("audit regressions", () => {
+    it("does not credit a queued commission twice when two releasers race", async () => {
+      /* releaseQueued has four independent callers — the cron, the
+       * CommissionPoolFunded handler, the ReleaseCommission job and an admin
+       * endpoint — and none share a lock. Two of them picking up the same row
+       * both credited: available went 0 -> 6 -> 12 while pending floored at 0,
+       * with one commission row on the books. */
+      const row = {
+        id: "c1",
+        ref: "CM-RACE",
+        recipientId: "u1",
+        amountMtt: "6.000000000000000000",
+        status: "queued",
+        treasuryInflowRef: null,
+      };
+      commissions.find.mockResolvedValue([row]);
+      users.findOne.mockResolvedValue({ id: "u1", kycTier: 1, status: "active" });
+
+      // First releaser wins; the second finds the row already released.
+      commissions.findOne.mockResolvedValueOnce(null).mockResolvedValue({ ...row, status: "released" });
+
+      await svc.releaseQueued();
+      const afterFirst = balance.commissionAvailable;
+
+      await svc.releaseQueued();
+
+      expect(balance.commissionAvailable).toBe(afterFirst);
+    });
+
+    it("excludes the current month from the trailing spend that sets its own cap", async () => {
+      /* trailingMonths returns a half-open range and only `start` was applied,
+       * so the window included the month whose cap it set. A member with no
+       * prior spend could buy 2,000 of IAP on the 1st and lift their own cap
+       * for that same month from 100 to 10,100. */
+      const captured: Record<string, unknown> = {};
+      revenue.createQueryBuilder.mockImplementation(() => ({
+        select: () => ({
+          where: () => ({
+            andWhere: (clause: string, params: Record<string, unknown>) => {
+              Object.assign(captured, params);
+              return {
+                andWhere: (c2: string, p2: Record<string, unknown>) => {
+                  Object.assign(captured, p2);
+                  return {
+                    andWhere: (c3: string, p3: Record<string, unknown>) => {
+                      Object.assign(captured, p3);
+                      return {
+                        andWhere: (c4: string, p4: Record<string, unknown>) => {
+                          Object.assign(captured, p4);
+                          return { getRawOne: async () => ({ sum: "0" }) };
+                        },
+                        getRawOne: async () => ({ sum: "0" }),
+                      };
+                    },
+                  };
+                },
+              };
+            },
+          }),
+        }),
+      }));
+
+      await svc.capMeter("u1").catch(() => undefined);
+
+      expect(captured.end).toBeInstanceOf(Date);
+      expect((captured.end as Date).getTime()).toBeGreaterThan((captured.start as Date).getTime());
+      // The upper bound is the first of the current month, never "now".
+      expect((captured.end as Date).getUTCDate()).toBe(1);
+    });
+  });
+
 });

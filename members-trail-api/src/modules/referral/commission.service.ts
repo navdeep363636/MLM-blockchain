@@ -548,9 +548,18 @@ export class CommissionService {
     return fiat(gt(spendComponent, absolute) ? absolute : spendComponent);
   }
 
-  /** The recipient's OWN reconciled net spend over the trailing window. */
+  /**
+   * The recipient's OWN reconciled net spend over the trailing window.
+   *
+   * `trailingMonths` returns a half-open [first-of-month-N-ago, first-of-this-month)
+   * range, and the upper bound has to be applied. Using only `start` left the
+   * window running up to today, i.e. INCLUDING the month whose cap it sets — so
+   * a member with no prior spend could buy ₹2,000 of IAP on the 1st and lift
+   * their own September ceiling from ₹100 to ₹10,100 in the same month, which is
+   * exactly what the comment on the cap claims cannot happen.
+   */
   private async trailingOwnSpend(userId: string): Promise<string> {
-    const { start } = trailingMonths(CAP_TRAILING_MONTHS);
+    const { start, end } = trailingMonths(CAP_TRAILING_MONTHS);
     const raw = await this.revenue
       .createQueryBuilder("e")
       .select("COALESCE(SUM(e.netAmount), 0)", "sum")
@@ -558,6 +567,7 @@ export class CommissionService {
       .andWhere("e.reconciled = true")
       .andWhere("e.reversedAt IS NULL")
       .andWhere("e.occurredAt >= :start", { start })
+      .andWhere("e.occurredAt < :end", { end })
       .getRawOne<{ sum: string | null }>();
     return fiat(raw?.sum ?? 0);
   }
@@ -697,7 +707,7 @@ export class CommissionService {
         continue;
       }
 
-      await this.moveToReleased(row, inflowRef);
+      if (!(await this.moveToReleased(row, inflowRef))) continue;
       available = available.minus(dec(row.amountMtt));
       releasedMtt = add(releasedMtt, row.amountMtt);
       released += 1;
@@ -750,9 +760,30 @@ export class CommissionService {
     return { released, queued };
   }
 
-  /** pending → available, atomically with the status change. */
-  private async moveToReleased(row: Commission, inflowRef: string | null): Promise<void> {
+  /**
+   * pending → available, atomically with the status change.
+   *
+   * The row is re-read FOR UPDATE inside the lock because `releaseQueued` has
+   * four independent callers — the ten-minute cron, the CommissionPoolFunded
+   * handler, the ReleaseCommission job and an admin endpoint — none of which
+   * share a lock. Two of them selecting the same queued row both called this and
+   * both credited: commissionAvailable went 0 -> 6 -> 12 while commissionPending
+   * floored at 0. One commission row, twice the money, and the solvency view
+   * could not see it because `committedMtt` still counted one row.
+   */
+  private async moveToReleased(row: Commission, inflowRef: string | null): Promise<boolean> {
+    let applied = false;
     await this.ledger.withUserLock(row.recipientId, async (tx, balance) => {
+      const fresh = await tx.getRepository(Commission).findOne({
+        where: { id: row.id },
+        lock: { mode: "pessimistic_write" },
+      });
+      if (!fresh || fresh.status !== "queued") {
+        this.log.warn(`release skipped for ${row.ref}: already ${fresh?.status ?? "missing"}`);
+        return;
+      }
+      applied = true;
+
       balance.commissionPending = nonNegative(sub(balance.commissionPending, row.amountMtt));
       balance.commissionAvailable = add(balance.commissionAvailable, row.amountMtt);
       /* Lifetime is monotonic: it records what was ever earned, and a later
@@ -767,12 +798,15 @@ export class CommissionService {
       await tx.getRepository(Commission).save(row);
     });
 
+    if (!applied) return false;
+
     await this.bus.publish(Events.CommissionReleased, {
       recipientId: row.recipientId,
       ref: row.ref,
       amountMtt: toDbAmount(row.amountMtt),
       treasuryInflowRef: row.treasuryInflowRef ?? null,
     });
+    return true;
   }
 
   /* ==================================================================== *

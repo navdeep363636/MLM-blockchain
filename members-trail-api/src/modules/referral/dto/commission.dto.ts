@@ -1,3 +1,4 @@
+import { Type } from "class-transformer";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   IsArray, IsISO8601, IsIn, IsInt, IsNumberString, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength,
@@ -51,7 +52,11 @@ export class CommissionQuery extends DateRangeQuery {
   @IsOptional() @IsIn(COMMISSION_STATUSES)
   status?: CommissionStatus;
 
+  /* enableImplicitConversion is off globally, so without the explicit @Type a
+   * query value stays a string and @IsInt() rejects it — this filter returned
+   * 400 on every request. PaginationQuery.page/.limit already do it this way. */
   @ApiPropertyOptional({ enum: [1, 2, 3] })
+  @Type(() => Number)
   @IsOptional() @IsInt() @Min(1) @Max(MAX_DEPTH)
   level?: number;
 }

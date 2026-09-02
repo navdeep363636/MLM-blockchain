@@ -1,3 +1,4 @@
+import { Type } from "class-transformer";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { IsInt, IsOptional, Max, Min } from "class-validator";
 import { PaginationQuery } from "@/common/dto";
@@ -32,6 +33,11 @@ export class DownlineMemberResponse {
 
 export class DownlineQuery extends PaginationQuery {
   @ApiPropertyOptional({ enum: [1, 2, 3], description: "Filter to one tier" })
+  /* The global pipe runs with enableImplicitConversion: false, so a query
+   * value arrives as a string and @IsInt() rejects it — this filter returned
+   * 400 on every request until the explicit @Type was added, the same way
+   * PaginationQuery.page and .limit already do it. */
+  @Type(() => Number)
   @IsOptional() @IsInt() @Min(1) @Max(3)
   level?: number;
 }
