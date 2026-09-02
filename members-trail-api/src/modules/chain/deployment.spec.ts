@@ -68,9 +68,12 @@ describe("deployment record", () => {
 
   it("records the pools that were created and which of them were funded", () => {
     expect(testnet!.expectedPoolCount).toBe(4);
-    /* Only pool 1 was funded. Pools 0, 2 and 3 accept stakes and emit nothing,
-       so any APR the UI shows for them is a number the chain will not honour. */
-    expect(testnet!.postSetup.fundedPoolIds).toEqual([1]);
+    /* The 2026-09-02 staking redeploy (commit e056d17) recreated all 4 pools on
+       a fresh contract but funded none of them yet — pool 1's old funding was
+       on the superseded contract. Every pool accepts stakes and emits nothing
+       until fundRewardPool runs, so any APR the UI shows right now is a number
+       the chain will not honour. */
+    expect(testnet!.postSetup.fundedPoolIds).toEqual([]);
     for (const id of testnet!.postSetup.fundedPoolIds) {
       expect(id).toBeLessThan(testnet!.expectedPoolCount);
     }

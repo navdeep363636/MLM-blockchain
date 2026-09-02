@@ -1,6 +1,7 @@
 {
   "_eventNames": "Event names in the per-contract notes below were corrected against abi/*.json on 2026-08-31; the first version of this file listed five names no contract emits. A wrong event name is a wrong topic0 and eth_getLogs returns an empty array rather than an error, so an indexer built on one reports healthy and indexes nothing.",
   "_purpose": "Frontend/backend integration reference for the BSC Testnet deployment. Generated after deploy -> roles -> pools -> fund -> payout -> post-deploy-check (23/23 passed). ABIs live in ../abi/*.json — this file only carries addresses, config, and chain metadata.",
+  "_redeploy_2026_09_02": "MTTStaking and both MTTVesting instances were redeployed for commit e056d17 (close staking penalty dodge, seal vesting allocation — see contracts/MTTStaking.sol, contracts/MTTVesting.sol). MTTToken, MTTReferralDistributor and MTTPayout are untouched originals from 2026-08-31. The new pools are recreated but UNFUNDED, and the new vesting instances are deployed but UNSEALED/UNFUNDED — see MLM-contracts/scripts/redeploy-staking-vesting-fix.js for why: MTTToken has a fixed supply with no more to mint, the deployer key holds 0 MTT, and the original 150M/50M team/advisor allocation is still sitting in the SUPERSEDED vesting contracts (0x723053...66580F, 0xE1FB92...fBBa29), which have no admin sweep — only release() to the beneficiary over time. Moving that allocation to the new contracts is a fund-custody decision for whoever holds the source wallet keys, not something a script can decide.",
   "network": {
     "name": "bscTestnet",
     "chainId": 97,
@@ -21,38 +22,36 @@
       "notes": "ERC20, fixed 1,000,000,000 MTT supply, no mint(). Pausable (PAUSER_ROLE), burnable (holder self-burn + BURNER_ROLE adminBurn). Key events (from abi/MTTToken.json): Transfer, Approval, AllocationMinted, Paused, Unpaused."
     },
     "TeamVesting": {
-      "address": "0x723053F097E8de0D7C8DAc967cD4346d0366580F",
+      "address": "0x150f8a4B30f92eD6524b6Cdde9af0836Dc55980f",
       "abi": "../abi/MTTVesting.json",
-      "explorer": "https://testnet.bscscan.com/address/0x723053F097E8de0D7C8DAc967cD4346d0366580F",
+      "explorer": "https://testnet.bscscan.com/address/0x150f8a4B30f92eD6524b6Cdde9af0836Dc55980f",
       "beneficiary": "0x978C3e593901Cb89cDC7Bd49329ef60E992ad292",
-      "allocationMtt": "150000000",
+      "allocationMtt": "0",
       "cliffSeconds": 31104000,
       "durationSeconds": 93312000,
-      "startUnix": 1788155652,
-      "startIso": "2026-08-31T05:54:12.000Z",
-      "notes": "12-month cliff (360d), 36-month linear (1080d) vesting. release() callable by anyone; always pays the beneficiary. Key events: TokensReleased."
+      "startUnix": "see deployedAt in bscTestnet.json (redeploy block timestamp)",
+      "notes": "Redeployed 2026-09-02 (commit e056d17): seal() now required before anything vests, and a later transfer can no longer retroactively vest itself. NOT YET FUNDED OR SEALED — allocationMtt is 0 until MTT is sent here and seal() is called. The original 150,000,000 MTT allocation is still in the superseded contract at 0x723053F097E8de0D7C8DAc967cD4346d0366580F. 12-month cliff (360d), 36-month linear (1080d) vesting once sealed. release() callable by anyone; always pays the beneficiary. Key events: TokensReleased."
     },
     "AdvisorsVesting": {
-      "address": "0xE1FB92AAF3190de8e2c24Dd342327F87fcfBBa29",
+      "address": "0xe1D8C9A2b11d0345510B6E61e8322Cb70De96315",
       "abi": "../abi/MTTVesting.json",
-      "explorer": "https://testnet.bscscan.com/address/0xE1FB92AAF3190de8e2c24Dd342327F87fcfBBa29",
+      "explorer": "https://testnet.bscscan.com/address/0xe1D8C9A2b11d0345510B6E61e8322Cb70De96315",
       "beneficiary": "0xD40e3924E035B78E50584f11E02ddc9037fd4E1c",
-      "allocationMtt": "50000000",
+      "allocationMtt": "0",
       "cliffSeconds": 15552000,
       "durationSeconds": 62208000,
-      "startUnix": 1788155652,
-      "startIso": "2026-08-31T05:54:12.000Z",
-      "notes": "6-month cliff (180d), 24-month linear (720d) vesting. Key events: TokensReleased."
+      "startUnix": "see deployedAt in bscTestnet.json (redeploy block timestamp)",
+      "notes": "Redeployed 2026-09-02 (commit e056d17), same fix as TeamVesting above. NOT YET FUNDED OR SEALED. The original 50,000,000 MTT allocation is still in the superseded contract at 0xE1FB92AAF3190de8e2c24Dd342327F87fcfBBa29. 6-month cliff (180d), 24-month linear (720d) vesting once sealed. Key events: TokensReleased."
     },
     "MTTStaking": {
-      "address": "0xce83252a19AfcC8B9C89ef44d3f2554b89C7Cb38",
+      "address": "0xeA3a3A586e37E0c97FF1ffb3A39855220181E8eB",
       "abi": "../abi/MTTStaking.json",
-      "explorer": "https://testnet.bscscan.com/address/0xce83252a19AfcC8B9C89ef44d3f2554b89C7Cb38",
+      "explorer": "https://testnet.bscscan.com/address/0xeA3a3A586e37E0c97FF1ffb3A39855220181E8eB",
       "penaltyReceiver": "0x40269336F5547f1E6686723C3A0D223bF8477cD3",
-      "notes": "Multi-pool staking. No pause, no escape hatch. Key events (from abi/MTTStaking.json): Staked, Unstaked, RewardClaimed, PoolCreated, PoolFunded, PenaltyReceiverUpdated, RoleGranted/RoleRevoked.",
+      "notes": "Redeployed 2026-09-02 (commit e056d17): closes two bugs — claimRewards() used to be penalty-free and zeroed the balance unstake() charges against, so claim-then-unstake forfeited nothing; and the penalty now settles on the accrued rewards attributable to the principal share being withdrawn in that call, not on the whole accrued balance regardless of amount withdrawn. Principal itself is still never confiscated. No pause, no escape hatch. Superseded contract: 0xce83252a19AfcC8B9C89ef44d3f2554b89C7Cb38. Key events (from abi/MTTStaking.json): Staked, Unstaked, RewardClaimed, PoolCreated, PoolFunded, PenaltyReceiverUpdated, RoleGranted/RoleRevoked.",
       "pools": [
         { "id": 0, "label": "Flexible", "active": true, "lockDurationSeconds": "0", "rewardsDurationSeconds": "604800", "earlyUnstakePenaltyBps": "0", "totalRewardsFunded": "0.0" },
-        { "id": 1, "label": "30-Day", "active": true, "lockDurationSeconds": "2592000", "rewardsDurationSeconds": "2592000", "earlyUnstakePenaltyBps": "2000", "totalRewardsFunded": "25000.0", "periodFinish": "1790747926", "periodFinishIso": "2026-09-30T05:58:46.000Z" },
+        { "id": 1, "label": "30-Day", "active": true, "lockDurationSeconds": "2592000", "rewardsDurationSeconds": "2592000", "earlyUnstakePenaltyBps": "2000", "totalRewardsFunded": "0.0", "note": "Unfunded on this new contract — the old pool 1's 25,000 MTT was on the superseded staking contract." },
         { "id": 2, "label": "90-Day", "active": true, "lockDurationSeconds": "7776000", "rewardsDurationSeconds": "2592000", "earlyUnstakePenaltyBps": "3000", "totalRewardsFunded": "0.0" },
         { "id": 3, "label": "180-Day", "active": true, "lockDurationSeconds": "15552000", "rewardsDurationSeconds": "2592000", "earlyUnstakePenaltyBps": "4000", "totalRewardsFunded": "0.0" }
       ]
@@ -104,8 +103,8 @@
       "treasuryReserve": { "address": "0x40269336F5547f1E6686723C3A0D223bF8477cD3", "pct": 15, "balanceMtt": "150000000.0" },
       "liquidityWallet": { "address": "0x8401927F4D9d9Ff475D555E057De4E2c563cd9F6", "pct": 15, "balanceMtt": "150000000.0" },
       "marketingWallet": { "address": "0x26B230Dd2e30Ca6157b5dc1A8658c8d73b42cb9e", "pct": 10, "balanceMtt": "100000000.0" },
-      "teamVesting": { "address": "0x723053F097E8de0D7C8DAc967cD4346d0366580F", "pct": 15, "balanceMtt": "150000000.0" },
-      "advisorsVesting": { "address": "0xE1FB92AAF3190de8e2c24Dd342327F87fcfBBa29", "pct": 5, "balanceMtt": "50000000.0" }
+      "teamVesting": { "address": "0x723053F097E8de0D7C8DAc967cD4346d0366580F", "pct": 15, "balanceMtt": "150000000.0", "note": "This is the SUPERSEDED (pre-fix) TeamVesting contract — the 150M allocation is still physically here, since it has no admin sweep. The live contract for the fix is now 0x150f8a4B30f92eD6524b6Cdde9af0836Dc55980f, currently unfunded." },
+      "advisorsVesting": { "address": "0xE1FB92AAF3190de8e2c24Dd342327F87fcfBBa29", "pct": 5, "balanceMtt": "50000000.0", "note": "This is the SUPERSEDED (pre-fix) AdvisorsVesting contract — the 50M allocation is still physically here. The live contract for the fix is now 0xe1D8C9A2b11d0345510B6E61e8322Cb70De96315, currently unfunded." }
     },
     "deployerFinalBalanceMtt": "0.0"
   },

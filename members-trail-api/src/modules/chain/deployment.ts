@@ -58,21 +58,39 @@ export interface KnownDeployment {
  *
  * Sequence run: deploy -> roles -> pools -> fund -> payout -> post-deploy-check,
  * ending 23/23 checks passing against 109/109 contract tests.
+ *
+ * MTTStaking and both MTTVesting instances were REDEPLOYED 2026-09-02 for
+ * commit e056d17 ("close staking penalty dodge, seal vesting allocation") —
+ * the addresses below are the new instances, superseding:
+ *   MTTStaking       0xce83252a19AfcC8B9C89ef44d3f2554b89C7Cb38
+ *   TeamVesting      0x723053F097E8de0D7C8DAc967cD4346d0366580F
+ *   AdvisorsVesting  0xE1FB92AAF3190de8e2c24Dd342327F87fcfBBa29
+ * MTTToken, the distributor and the payout rail were not touched by that fix
+ * and are still the original 2026-08-31 instances.
+ *
+ * The new pools were recreated (same 4-pool layout) but are NOT YET FUNDED,
+ * and the new vesting instances are deployed but NOT YET SEALED — funding
+ * either requires MTT from a wallet whose key this deployment does not hold
+ * (see MLM-contracts/scripts/redeploy-staking-vesting-fix.js). Until that
+ * happens, pool 1 pays no rewards and neither vesting contract releases
+ * anything (totalAllocation() is 0 pre-seal).
  */
 const BSC_TESTNET: KnownDeployment = {
   chainId: 97,
   network: "bscTestnet",
   /* Conservative lower bound: at/just before MTTToken's deployment block, so a
      first scan captures the setup events (role grants, pool creation, the
-     initial funding) and not only what happened afterwards. */
+     initial funding) and not only what happened afterwards. Still valid after
+     the 2026-09-02 staking/vesting redeploy — those contracts deployed later,
+     well after this block. */
   indexerStartBlock: 128_242_300,
   addresses: {
     [Contracts.MttToken]: "0x53AE1e2888C1703b3Acf818C1305bf411a86892B",
-    [Contracts.Staking]: "0xce83252a19AfcC8B9C89ef44d3f2554b89C7Cb38",
+    [Contracts.Staking]: "0xeA3a3A586e37E0c97FF1ffb3A39855220181E8eB",
     [Contracts.ReferralDistributor]: "0x6AE2AB55b420FEA264920F2944A5A1d729A94C8F",
     [Contracts.Payout]: "0x0af73E1bbe85526D5c74b34F6eA44E94861Ff827",
-    [Contracts.TeamVesting]: "0x723053F097E8de0D7C8DAc967cD4346d0366580F",
-    [Contracts.AdvisorsVesting]: "0xE1FB92AAF3190de8e2c24Dd342327F87fcfBBa29",
+    [Contracts.TeamVesting]: "0x150f8a4B30f92eD6524b6Cdde9af0836Dc55980f",
+    [Contracts.AdvisorsVesting]: "0xe1D8C9A2b11d0345510B6E61e8322Cb70De96315",
   },
   roleHolders: {
     DEFAULT_ADMIN_ROLE: "0xf832BA0d3337CC72043E47cA7a56938125801E4b",
@@ -85,10 +103,12 @@ const BSC_TESTNET: KnownDeployment = {
   },
   expectedPoolCount: 4,
   postSetup: {
-    /* Only pool 1 (30-day) was funded. Pools 0, 2 and 3 exist and accept stakes
-       but emit no rewards until someone calls fundRewardPool, so a UI that shows
-       an APR for them is showing a number the chain will not honour. */
-    fundedPoolIds: [1],
+    /* The 2026-09-02 staking redeploy recreated all 4 pools but funded none of
+       them — pool 1 was funded on the SUPERSEDED contract, not this one. No
+       pool pays rewards until fundRewardPool is called from a wallet holding
+       MTT, so a UI that shows an APR for any pool right now is showing a
+       number the chain will not honour. */
+    fundedPoolIds: [],
     payoutFloatMtt: "10000",
     payoutDailyLimitMtt: "5000",
     /* Zero. `recordCommission` reverts until treasury calls

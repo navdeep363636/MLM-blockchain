@@ -1,13 +1,13 @@
 {
   "network": "bscTestnet",
   "chainId": 97,
-  "deployedAt": "2026-08-31T05:54:37.723Z",
+  "deployedAt": "2026-09-02T10:26:17.767Z",
   "deployer": "0xf832BA0d3337CC72043E47cA7a56938125801E4b",
   "addresses": {
     "MTTToken": "0x53AE1e2888C1703b3Acf818C1305bf411a86892B",
-    "TeamVesting": "0x723053F097E8de0D7C8DAc967cD4346d0366580F",
-    "AdvisorsVesting": "0xE1FB92AAF3190de8e2c24Dd342327F87fcfBBa29",
-    "MTTStaking": "0xce83252a19AfcC8B9C89ef44d3f2554b89C7Cb38",
+    "TeamVesting": "0x150f8a4B30f92eD6524b6Cdde9af0836Dc55980f",
+    "AdvisorsVesting": "0xe1D8C9A2b11d0345510B6E61e8322Cb70De96315",
+    "MTTStaking": "0xeA3a3A586e37E0c97FF1ffb3A39855220181E8eB",
     "MTTReferralDistributor": "0x6AE2AB55b420FEA264920F2944A5A1d729A94C8F",
     "MTTPayout": "0x0af73E1bbe85526D5c74b34F6eA44E94861Ff827"
   },
@@ -25,9 +25,9 @@
     "payoutRelayer": "0xdD83d806789e199D7D4C079FEEE80523cd023AAf"
   },
   "vesting": {
-    "start": 1788155652,
-    "startIso": "2026-08-31T05:54:12.000Z",
-    "startSource": "block timestamp",
+    "start": 1788344749,
+    "startIso": "2026-09-02T10:25:49.000Z",
+    "startSource": "block timestamp (redeploy)",
     "team": {
       "cliffSeconds": 31104000,
       "durationSeconds": 93312000
@@ -54,14 +54,14 @@
     "TeamVesting": [
       "0x978C3e593901Cb89cDC7Bd49329ef60E992ad292",
       "0x53AE1e2888C1703b3Acf818C1305bf411a86892B",
-      1788155652,
+      1788344749,
       31104000,
       93312000
     ],
     "AdvisorsVesting": [
       "0xD40e3924E035B78E50584f11E02ddc9037fd4E1c",
       "0x53AE1e2888C1703b3Acf818C1305bf411a86892B",
-      1788155652,
+      1788344749,
       15552000,
       62208000
     ],
@@ -79,6 +79,29 @@
       "0xf832BA0d3337CC72043E47cA7a56938125801E4b",
       "0xdD83d806789e199D7D4C079FEEE80523cd023AAf",
       "50000000000000000000000"
+    ]
+  },
+  "redeployNote": {
+    "reason": "commit e056d17: staking penalty dodge closed, vesting allocation sealed",
+    "redeployedAt": "2026-09-02T10:26:17.767Z",
+    "redeployedContracts": [
+      "MTTStaking",
+      "TeamVesting",
+      "AdvisorsVesting"
+    ],
+    "reusedContracts": [
+      "MTTToken",
+      "MTTReferralDistributor",
+      "MTTPayout"
+    ],
+    "superseded": {
+      "MTTStaking": "0xce83252a19AfcC8B9C89ef44d3f2554b89C7Cb38",
+      "TeamVesting": "0x723053F097E8de0D7C8DAc967cD4346d0366580F",
+      "AdvisorsVesting": "0xE1FB92AAF3190de8e2c24Dd342327F87fcfBBa29"
+    },
+    "pending": [
+      "Fund new MTTStaking pool 1 rewards (needs MTT from the rewards-pool wallet).",
+      "Fund + seal new TeamVesting/AdvisorsVesting (needs MTT moved from the superseded vesting contracts or another allocation wallet — a fund-custody decision, not scripted here)."
     ]
   }
 }
