@@ -140,6 +140,16 @@ async function main() {
   console.log("      Funding AdvisorsVesting with", ethers.formatEther(advAmount), "MTT...");
   await (await token.transfer(deployed.AdvisorsVesting, advAmount)).wait();
 
+  /* Seal each schedule against the amount just funded. Until this runs the
+   * allocation is zero and nothing is releasable; afterwards the figure is
+   * fixed, so a later transfer into either contract cannot retroactively vest
+   * itself. Both must be sealed before their cliff ends. */
+  console.log("      Sealing vesting allocations...");
+  await (await teamVest.seal()).wait();
+  await (await advVest.seal()).wait();
+  console.log("      TeamVesting sealed at", ethers.formatEther(await teamVest.totalAllocation()), "MTT");
+  console.log("      AdvisorsVesting sealed at", ethers.formatEther(await advVest.totalAllocation()), "MTT");
+
   // 3) Staking
   console.log("[3/5] Deploying MTTStaking...");
   const Staking = await ethers.getContractFactory("MTTStaking");

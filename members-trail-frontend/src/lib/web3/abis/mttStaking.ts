@@ -302,6 +302,12 @@ export const mttStakingAbi = [
       {
         "indexed": false,
         "internalType": "uint256",
+        "name": "rewardsPaid",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
         "name": "forfeitedRewards",
         "type": "uint256"
       },
@@ -323,6 +329,19 @@ export const mttStakingAbi = [
         "internalType": "bytes32",
         "name": "",
         "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_LOCK_DURATION",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
       }
     ],
     "stateMutability": "view",

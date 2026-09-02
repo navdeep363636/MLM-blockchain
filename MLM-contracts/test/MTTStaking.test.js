@@ -134,9 +134,18 @@ describe("MTTStaking", function () {
       await stakeAs(alice, 0, ethers.parseEther("1000"));
       await fundPool(0, ethers.parseEther("300"));
       await time.increase(31 * DAY);
+      const accrued = await staking.earned(0, alice.address);
       const before = await token.balanceOf(alice.address);
       await staking.connect(alice).unstake(0, ethers.parseEther("1000"));
-      expect(await token.balanceOf(alice.address) - before).to.equal(ethers.parseEther("1000"));
+
+      /* Unstake settles the rewards attributable to the principal being
+       * withdrawn, so a full exit after maturity pays principal plus everything
+       * accrued and nothing is forfeited. It used to leave the rewards behind
+       * for a separate claim, which is what let a locked member drain them
+       * penalty-free before exiting. */
+      expect(await token.balanceOf(alice.address) - before)
+        .to.be.closeTo(ethers.parseEther("1000") + accrued, ethers.parseEther("0.5"));
+      expect(await token.balanceOf(penaltyRcv.address)).to.equal(0n);
     });
 
     it("returns FULL principal even on early unstake (only pending rewards are penalized)", async function () {
@@ -144,14 +153,22 @@ describe("MTTStaking", function () {
       await fundPool(0, ethers.parseEther("300"));
       await time.increase(10 * DAY);
 
+      const accrued = await staking.earned(0, alice.address);
       const before = await token.balanceOf(alice.address);
       await staking.connect(alice).unstake(0, ethers.parseEther("1000"));
       const received = await token.balanceOf(alice.address) - before;
+      const forfeited = await token.balanceOf(penaltyRcv.address);
 
-      // principal returned in full, untouched by the penalty
-      expect(received).to.equal(ethers.parseEther("1000"));
-      // penalty receiver got a cut of the PENDING REWARDS only
-      expect(await token.balanceOf(penaltyRcv.address)).to.be.gt(0n);
+      // Principal is returned in full, untouched by the penalty — the payout is
+      // principal plus the surviving share of the rewards it earned.
+      expect(received).to.be.gte(ethers.parseEther("1000"));
+      expect(received).to.be.closeTo(
+        ethers.parseEther("1000") + accrued - forfeited,
+        ethers.parseEther("0.5"),
+      );
+      // The penalty came out of the PENDING REWARDS only.
+      expect(forfeited).to.be.gt(0n);
+      expect(forfeited).to.be.lt(accrued);
     });
 
     it("early-exit penalty takes exactly the configured % of pending rewards", async function () {

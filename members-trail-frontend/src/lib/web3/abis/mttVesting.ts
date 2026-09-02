@@ -56,14 +56,27 @@ export const mttVestingAbi = [
       {
         "indexed": false,
         "internalType": "uint256",
-        "name": "amount",
+        "name": "total",
         "type": "uint256"
-      },
+      }
+    ],
+    "name": "AllocationSealed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
       {
-        "indexed": false,
+        "indexed": true,
         "internalType": "address",
         "name": "to",
         "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
       }
     ],
     "name": "TokensReleased",
@@ -180,6 +193,13 @@ export const mttVestingAbi = [
   },
   {
     "inputs": [],
+    "name": "seal",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "start",
     "outputs": [
       {
@@ -207,6 +227,32 @@ export const mttVestingAbi = [
   {
     "inputs": [],
     "name": "totalAllocation",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "totalAllocationSealed",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "unallocatedBalance",
     "outputs": [
       {
         "internalType": "uint256",

@@ -342,6 +342,7 @@ describe("Platform integration additions", function () {
         beneficiary.address, await token.getAddress(), start, 365 * DAY, 3 * 365 * DAY,
       );
       await token.connect(admin).transfer(await vesting.getAddress(), ethers.parseEther("1200"));
+      await vesting.seal();
     });
 
     it("reports nothing releasable before the cliff, without the caller guessing a timestamp", async function () {

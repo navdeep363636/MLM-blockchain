@@ -24,6 +24,17 @@ contract MTTStaking is AccessControl, ReentrancyGuard {
     bytes32 public constant POOL_ADMIN_ROLE = keccak256("POOL_ADMIN_ROLE");
     bytes32 public constant TREASURY_ROLE = keccak256("TREASURY_ROLE");
 
+    /**
+     * @notice Ceiling on a pool's lock, four years.
+     *
+     * `lockEnd` is a uint64 sum of `block.timestamp + lockDuration`, and there is
+     * no setter for `lockDuration` once a pool exists. An unbounded value either
+     * overflows that addition — bricking `stake` for the pool permanently — or
+     * locks principal for longer than the platform will exist. Neither is
+     * recoverable without recreating the pool.
+     */
+    uint64 public constant MAX_LOCK_DURATION = 4 * 365 days;
+
     IERC20 public immutable mtt;
 
     struct Pool {
@@ -67,7 +78,14 @@ contract MTTStaking is AccessControl, ReentrancyGuard {
     event PoolCreated(uint256 indexed poolId, uint64 lockDuration, uint64 rewardsDuration, uint16 earlyUnstakePenaltyBps);
     event PoolFunded(uint256 indexed poolId, address indexed funder, uint256 amount, uint256 newRewardRate, uint64 newPeriodFinish);
     event Staked(uint256 indexed poolId, address indexed user, uint256 amount, uint64 lockEnd);
-    event Unstaked(uint256 indexed poolId, address indexed user, uint256 amount, uint256 forfeitedRewards, bool early);
+    event Unstaked(
+        uint256 indexed poolId,
+        address indexed user,
+        uint256 amount,
+        uint256 rewardsPaid,
+        uint256 forfeitedRewards,
+        bool early
+    );
     event RewardClaimed(uint256 indexed poolId, address indexed user, uint256 amount);
     event PenaltyReceiverUpdated(address indexed newReceiver);
 
@@ -80,6 +98,21 @@ contract MTTStaking is AccessControl, ReentrancyGuard {
         _grantRole(TREASURY_ROLE, admin);
     }
 
+    /**
+     * @notice Rejects a poolId that was never created.
+     *
+     * Every mapping read on `pools` returns a zero-valued struct for an unknown
+     * id rather than reverting, so without this an admin could `setPoolActive`
+     * an id past `poolCount` and members could stake into it. The position would
+     * be invisible to `getPools`/`getPositions` (both bounded by `poolCount`)
+     * and the pool could never be funded, because `rewardsDuration` is zero and
+     * the rate maths divides by it.
+     */
+    modifier validPool(uint256 poolId) {
+        require(poolId < poolCount, "no pool");
+        _;
+    }
+
     // ---------- Admin ----------
 
     function createPool(
@@ -88,6 +121,7 @@ contract MTTStaking is AccessControl, ReentrancyGuard {
         uint16 earlyUnstakePenaltyBps
     ) external onlyRole(POOL_ADMIN_ROLE) returns (uint256 poolId) {
         require(rewardsDuration > 0, "rewardsDuration=0");
+        require(lockDuration <= MAX_LOCK_DURATION, "lock too long");
         require(earlyUnstakePenaltyBps <= 10000, "penalty>100%");
         poolId = poolCount++;
         Pool storage pool = pools[poolId];
@@ -98,7 +132,7 @@ contract MTTStaking is AccessControl, ReentrancyGuard {
         emit PoolCreated(poolId, lockDuration, rewardsDuration, earlyUnstakePenaltyBps);
     }
 
-    function setPoolActive(uint256 poolId, bool active) external onlyRole(POOL_ADMIN_ROLE) {
+    function setPoolActive(uint256 poolId, bool active) external onlyRole(POOL_ADMIN_ROLE) validPool(poolId) {
         pools[poolId].active = active;
     }
 
@@ -114,7 +148,12 @@ contract MTTStaking is AccessControl, ReentrancyGuard {
      *         described in FRD Section 2.2 / 9.5. Pulls `amount` MTT from the
      *         caller and streams it to stakers over the pool's rewardsDuration.
      */
-    function fundRewardPool(uint256 poolId, uint256 amount) external onlyRole(TREASURY_ROLE) nonReentrant {
+    function fundRewardPool(uint256 poolId, uint256 amount)
+        external
+        onlyRole(TREASURY_ROLE)
+        nonReentrant
+        validPool(poolId)
+    {
         require(amount > 0, "amount=0");
         Pool storage pool = pools[poolId];
         require(pool.active, "pool inactive");
@@ -156,8 +195,32 @@ contract MTTStaking is AccessControl, ReentrancyGuard {
         return u.rewards + (u.amount * (rpt - u.rewardPerTokenPaid)) / 1e18;
     }
 
+    /**
+     * @notice Advance the pool's reward accumulator to now.
+     *
+     * The zero-staker case used to move `lastUpdateTime` forward like any other,
+     * which silently destroyed that slice of the stream: `rewardPerToken` cannot
+     * accrue against a zero denominator, so the tokens stayed in the contract
+     * with no path back out — `fundRewardPool` only rolls forward the *unstreamed*
+     * remainder, and there is no sweep. A pool funded with 300 MTT over 30 days
+     * that nobody staked into for its first ten days permanently lost 100 MTT.
+     *
+     * Instead the stream is paused: `periodFinish` moves out by the idle window,
+     * so the same `rewardRate` keeps running and the whole funded amount reaches
+     * stakers, just later. Treasury deposits and distributions now reconcile.
+     */
     function _updatePoolRewards(uint256 poolId) internal {
         Pool storage pool = pools[poolId];
+
+        if (pool.totalStaked == 0) {
+            uint256 applicable = _lastTimeRewardApplicable(poolId);
+            if (pool.rewardRate > 0 && applicable > pool.lastUpdateTime) {
+                pool.periodFinish += uint64(applicable - pool.lastUpdateTime);
+            }
+            pool.lastUpdateTime = uint64(_lastTimeRewardApplicable(poolId));
+            return;
+        }
+
         pool.rewardPerTokenStored = rewardPerToken(poolId);
         pool.lastUpdateTime = uint64(_lastTimeRewardApplicable(poolId));
     }
@@ -171,7 +234,7 @@ contract MTTStaking is AccessControl, ReentrancyGuard {
 
     // ---------- User actions ----------
 
-    function stake(uint256 poolId, uint256 amount) external nonReentrant {
+    function stake(uint256 poolId, uint256 amount) external nonReentrant validPool(poolId) {
         Pool storage pool = pools[poolId];
         require(pool.active, "pool inactive");
         require(amount > 0, "amount=0");
@@ -179,8 +242,24 @@ contract MTTStaking is AccessControl, ReentrancyGuard {
         _updateUserRewards(poolId, msg.sender);
 
         UserInfo storage u = userInfo[poolId][msg.sender];
+
+        /* A top-up used to reset the lock on the entire position, so adding 1 MTT
+         * on day 29 of a 30-day lock re-locked 10,000 MTT for another 30 days and
+         * turned a matured withdrawal into an early one. The new end is now the
+         * balance-weighted average of the old and new tranches: fresh principal
+         * serves its full lock, principal already most of the way through keeps
+         * most of its progress, and nobody is punished for adding to a position. */
+        uint64 freshEnd = uint64(block.timestamp) + pool.lockDuration;
+        if (u.amount == 0 || pool.lockDuration == 0) {
+            u.lockEnd = freshEnd;
+        } else {
+            uint64 heldEnd = u.lockEnd > uint64(block.timestamp) ? u.lockEnd : uint64(block.timestamp);
+            u.lockEnd = uint64(
+                ((uint256(heldEnd) * u.amount) + (uint256(freshEnd) * amount)) / (u.amount + amount)
+            );
+        }
+
         u.amount += amount;
-        u.lockEnd = uint64(block.timestamp) + pool.lockDuration; // resets lock on top-up, by design
         pool.totalStaked += amount;
         totalStakedAllPools += amount;
 
@@ -188,15 +267,38 @@ contract MTTStaking is AccessControl, ReentrancyGuard {
         emit Staked(poolId, msg.sender, amount, u.lockEnd);
     }
 
-    /// @notice Claim accrued rewards without touching staked principal. Never subject to penalty.
-    function claimRewards(uint256 poolId) external nonReentrant {
+    /**
+     * @notice Claim accrued rewards without touching staked principal.
+     *
+     * Subject to the same early-exit penalty as `unstake` while the position is
+     * locked. It has to be: this function used to be penalty-free and it zeroes
+     * `u.rewards`, which is the only value `unstake` charges against. Claiming
+     * and then unstaking in the same block therefore forfeited nothing, and the
+     * penalty raised zero revenue from anyone who noticed. Rewards leaving the
+     * pool early are penalised; whether they leave via claim or via exit is not
+     * a distinction worth a loophole.
+     */
+    function claimRewards(uint256 poolId) external nonReentrant validPool(poolId) {
         _updateUserRewards(poolId, msg.sender);
         UserInfo storage u = userInfo[poolId][msg.sender];
-        uint256 amount = u.rewards;
-        require(amount > 0, "nothing to claim");
+        uint256 accrued = u.rewards;
+        require(accrued > 0, "nothing to claim");
+
+        uint256 forfeited = 0;
+        if (u.amount > 0 && block.timestamp < u.lockEnd) {
+            forfeited = (accrued * pools[poolId].earlyUnstakePenaltyBps) / 10000;
+        }
+        uint256 amount = accrued - forfeited;
+
         u.rewards = 0;
-        pools[poolId].totalRewardsPaid += amount;
-        mtt.safeTransfer(msg.sender, amount);
+        pools[poolId].totalRewardsPaid += accrued;
+
+        if (forfeited > 0) {
+            mtt.safeTransfer(penaltyReceiver, forfeited);
+        }
+        if (amount > 0) {
+            mtt.safeTransfer(msg.sender, amount);
+        }
         emit RewardClaimed(poolId, msg.sender, amount);
     }
 
@@ -283,11 +385,12 @@ contract MTTStaking is AccessControl, ReentrancyGuard {
 
     /**
      * @notice Withdraw staked principal. Principal is ALWAYS returned in full.
-     *         If called before lock expiry, a configurable percentage of the
-     *         caller's currently-accrued, unclaimed rewards is forfeited to
-     *         `penaltyReceiver` as the early-exit penalty (never the principal).
+     *         The rewards attributable to that principal are settled at the same
+     *         time; if called before lock expiry, a configurable percentage of
+     *         that slice is forfeited to `penaltyReceiver` as the early-exit
+     *         penalty. The penalty never touches principal.
      */
-    function unstake(uint256 poolId, uint256 amount) external nonReentrant {
+    function unstake(uint256 poolId, uint256 amount) external nonReentrant validPool(poolId) {
         UserInfo storage u = userInfo[poolId][msg.sender];
         require(amount > 0 && amount <= u.amount, "invalid amount");
 
@@ -296,20 +399,49 @@ contract MTTStaking is AccessControl, ReentrancyGuard {
         bool early = block.timestamp < u.lockEnd;
         uint256 forfeited = 0;
 
-        if (early && u.rewards > 0) {
-            Pool storage pool = pools[poolId];
-            forfeited = (u.rewards * pool.earlyUnstakePenaltyBps) / 10000;
-            u.rewards -= forfeited;
+        /* Rewards leave with the principal that earned them, pro-rated by the
+         * share being withdrawn, and the penalty is charged on that share only.
+         *
+         * Two earlier rules were wrong in opposite directions. Charging bps on
+         * the whole accrued balance meant unstaking 1 wei of a 1,000 MTT
+         * position forfeited 30% of every reward earned. Charging bps on the
+         * withdrawn share but leaving the rewards in place still compounded,
+         * because each later tranche re-penalised rewards the earlier ones had
+         * already been charged for — five 200 MTT exits cost 53% where one
+         * 1,000 MTT exit cost 30%.
+         *
+         * Settling the attributable slice on each withdrawal makes the total
+         * exactly bps of rewards accrued under lock, however the exit is split,
+         * so there is nothing to game. */
+        uint256 rewardsPaid = 0;
+        if (u.rewards > 0) {
+            uint256 attributable = (u.rewards * amount) / u.amount;
+            if (early) {
+                forfeited = (attributable * pools[poolId].earlyUnstakePenaltyBps) / 10000;
+            }
+            rewardsPaid = attributable - forfeited;
+            u.rewards -= attributable;
         }
 
         u.amount -= amount;
         pools[poolId].totalStaked -= amount;
         totalStakedAllPools -= amount;
 
+        /* A fully-exited position kept its old lockEnd, so `getPosition` reported
+         * an empty position as locked until the original maturity date. */
+        if (u.amount == 0) u.lockEnd = 0;
+
+        /* Both the payout and the forfeit leave the reward float, so both belong
+         * in the paid-out total. Omitting the forfeit left funded-minus-paid
+         * overstating what stakers are still owed, and the gap grew with every
+         * early exit. */
+        if (rewardsPaid + forfeited > 0) {
+            pools[poolId].totalRewardsPaid += rewardsPaid + forfeited;
+        }
         if (forfeited > 0) {
             mtt.safeTransfer(penaltyReceiver, forfeited);
         }
-        mtt.safeTransfer(msg.sender, amount);
-        emit Unstaked(poolId, msg.sender, amount, forfeited, early);
+        mtt.safeTransfer(msg.sender, amount + rewardsPaid);
+        emit Unstaked(poolId, msg.sender, amount, rewardsPaid, forfeited, early);
     }
 }

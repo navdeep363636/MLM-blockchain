@@ -1135,6 +1135,12 @@ export const mttStakingAbi = [
       {
         "indexed": false,
         "internalType": "uint256",
+        "name": "rewardsPaid",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
         "name": "forfeitedRewards",
         "type": "uint256"
       },
@@ -1156,6 +1162,19 @@ export const mttStakingAbi = [
         "internalType": "bytes32",
         "name": "",
         "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_LOCK_DURATION",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
       }
     ],
     "stateMutability": "view",
@@ -2761,14 +2780,27 @@ export const mttVestingAbi = [
       {
         "indexed": false,
         "internalType": "uint256",
-        "name": "amount",
+        "name": "total",
         "type": "uint256"
-      },
+      }
+    ],
+    "name": "AllocationSealed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
       {
-        "indexed": false,
+        "indexed": true,
         "internalType": "address",
         "name": "to",
         "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
       }
     ],
     "name": "TokensReleased",
@@ -2885,6 +2917,13 @@ export const mttVestingAbi = [
   },
   {
     "inputs": [],
+    "name": "seal",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "start",
     "outputs": [
       {
@@ -2912,6 +2951,32 @@ export const mttVestingAbi = [
   {
     "inputs": [],
     "name": "totalAllocation",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "totalAllocationSealed",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "unallocatedBalance",
     "outputs": [
       {
         "internalType": "uint256",
@@ -3828,6 +3893,7 @@ export type TokenEvent =
 /** Every function on MTTStaking. A typo is a compile error, not a revert. */
 export type StakingFunction =
   | "DEFAULT_ADMIN_ROLE"
+  | "MAX_LOCK_DURATION"
   | "POOL_ADMIN_ROLE"
   | "TREASURY_ROLE"
   | "claimRewards"
@@ -3922,14 +3988,18 @@ export type VestingFunction =
   | "release"
   | "released"
   | "schedule"
+  | "seal"
   | "start"
   | "token"
   | "totalAllocation"
+  | "totalAllocationSealed"
+  | "unallocatedBalance"
   | "vestedAmount"
   | "vestingDuration";
 
 /** Every event MTTVesting can emit. */
 export type VestingEvent =
+  | "AllocationSealed"
   | "TokensReleased";
 
 /** Every function on MTTPayout. A typo is a compile error, not a revert. */
@@ -3989,7 +4059,7 @@ export const ABI_FINGERPRINT = {
     "events": 8
   },
   "MTTStaking": {
-    "functions": 30,
+    "functions": 31,
     "events": 9
   },
   "MTTReferralDistributor": {
@@ -3997,8 +4067,8 @@ export const ABI_FINGERPRINT = {
     "events": 8
   },
   "MTTVesting": {
-    "functions": 11,
-    "events": 1
+    "functions": 14,
+    "events": 2
   },
   "MTTPayout": {
     "functions": 34,
