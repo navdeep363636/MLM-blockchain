@@ -151,7 +151,7 @@ export const TOURNAMENTS: TournamentSeed[] = [
 export const GAMES: GameSeed[] = [
   {
     slug: "neon-rush", title: "Neon Rush", genre: "Arcade",
-    blurb: "Endless runner through a synth-lit city. Reflex scoring with combo multipliers.",
+    blurb: "Cells light up and fade. Hit them early for more, and chain hits into a multiplier up to eight.",
     thumbnailHue: 18, pointsPerSessionMin: 90, pointsPerSessionMax: 620,
     entryType: "both", entryFee: "5", dailyPointsCap: 3_000, sessionPointsCap: 900, active: true,
     /* Event 2 carries a score delta already expressed in score units, so
@@ -160,7 +160,7 @@ export const GAMES: GameSeed[] = [
   },
   {
     slug: "cipher-break", title: "Cipher Break", genre: "Puzzle",
-    blurb: "Timed logic puzzles. Pure skill, no randomness — the flagship ranked title.",
+    blurb: "Deduction, not reaction. Crack a seeded glyph cipher in eight guesses — the fewer you spend, the higher you score.",
     thumbnailHue: 61, pointsPerSessionMin: 120, pointsPerSessionMax: 780,
     entryType: "free", entryFee: "0", dailyPointsCap: 4_000, sessionPointsCap: 1_100, active: true,
     /* Event 2 carries a score delta already expressed in score units, so
@@ -169,7 +169,7 @@ export const GAMES: GameSeed[] = [
   },
   {
     slug: "turbo-drift", title: "Turbo Drift", genre: "Racing",
-    blurb: "Time-trial circuit racing with ghost replays and weekly track rotation.",
+    blurb: "Thread a barrier-strewn road at rising speed. Chevron gates pay six times the road, and you get three lives.",
     thumbnailHue: 104, pointsPerSessionMin: 100, pointsPerSessionMax: 560,
     entryType: "both", entryFee: "8", dailyPointsCap: 3_000, sessionPointsCap: 800, active: true,
     /* Event 2 carries a score delta already expressed in score units, so
@@ -178,7 +178,7 @@ export const GAMES: GameSeed[] = [
   },
   {
     slug: "block-forge", title: "Block Forge", genre: "Strategy",
-    blurb: "Tile-placement builder. Deep scoring ceiling rewards long-term mastery.",
+    blurb: "Stack falling pieces and clear rows. Four rows at once is worth eleven singles — the ceiling rewards patience.",
     thumbnailHue: 147, pointsPerSessionMin: 140, pointsPerSessionMax: 900,
     entryType: "both", entryFee: "12", dailyPointsCap: 4_500, sessionPointsCap: 1_300, active: true,
     /* Event 2 carries a score delta already expressed in score units, so
@@ -187,7 +187,7 @@ export const GAMES: GameSeed[] = [
   },
   {
     slug: "sky-siege", title: "Sky Siege", genre: "Action",
-    blurb: "Wave-defence shooter with escalating difficulty tiers.",
+    blurb: "Wave defence across six columns. Shots travel, so lead your targets; three shields, and every wave lands heavier.",
     thumbnailHue: 190, pointsPerSessionMin: 110, pointsPerSessionMax: 640,
     entryType: "free", entryFee: "0", dailyPointsCap: 3_200, sessionPointsCap: 950, active: true,
     /* Event 2 carries a score delta already expressed in score units, so
@@ -205,7 +205,7 @@ export const GAMES: GameSeed[] = [
   },
   {
     slug: "hex-tactics", title: "Hex Tactics", genre: "Strategy",
-    blurb: "Turn-based skirmish on hex grids. Elo-rated ladder.",
+    blurb: "Turn-based territory capture on a hex board. Claim a colour, absorb the frontier, and lock the one your rival wants.",
     thumbnailHue: 276, pointsPerSessionMin: 150, pointsPerSessionMax: 850,
     entryType: "both", entryFee: "15", dailyPointsCap: 5_000, sessionPointsCap: 1_400, active: true,
     /* Event 2 carries a score delta already expressed in score units, so
@@ -214,7 +214,7 @@ export const GAMES: GameSeed[] = [
   },
   {
     slug: "pulse-beat", title: "Pulse Beat", genre: "Rhythm",
-    blurb: "Beat-matching with community-charted tracks and accuracy grading.",
+    blurb: "Four-lane beat matching on a seeded chart. Perfect timing pays in full; a note you miss breaks the chain.",
     thumbnailHue: 319, pointsPerSessionMin: 100, pointsPerSessionMax: 700,
     entryType: "free", entryFee: "0", dailyPointsCap: 3_000, sessionPointsCap: 1_000,
     /* Inactive on purpose: the admin catalogue needs one disabled row to prove

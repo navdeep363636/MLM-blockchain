@@ -66,15 +66,22 @@ export const balances: Balances = {
 
 /* --------------------------------- Games --------------------------------- */
 
+/* Slug, title, genre, blurb.
+ *
+ * The blurb is the only description of a title a visitor reads before signing
+ * up, so it has to describe the game that actually loads. These used to
+ * describe games nobody had built — an endless runner, a circuit racer with
+ * ghost replays — while four engines covered all eight titles between them.
+ * Each line below is now what the title's engine really does. */
 const GAME_DEFS: Array<[string, string, string, string]> = [
-  ["neon-rush", "Neon Rush", "Arcade", "Endless runner through a synth-lit city. Reflex scoring with combo multipliers."],
-  ["cipher-break", "Cipher Break", "Puzzle", "Timed logic puzzles. Pure skill, no randomness — the flagship ranked title."],
-  ["turbo-drift", "Turbo Drift", "Racing", "Time-trial circuit racing with ghost replays and weekly track rotation."],
-  ["block-forge", "Block Forge", "Strategy", "Tile-placement builder. Deep scoring ceiling rewards long-term mastery."],
-  ["sky-siege", "Sky Siege", "Action", "Wave-defence shooter with escalating difficulty tiers."],
+  ["neon-rush", "Neon Rush", "Arcade", "Cells light up and fade. Hit them early for more, and chain hits into a multiplier up to eight."],
+  ["cipher-break", "Cipher Break", "Puzzle", "Deduction, not reaction. Crack a seeded glyph cipher in eight guesses — the fewer you spend, the higher you score."],
+  ["turbo-drift", "Turbo Drift", "Racing", "Thread a barrier-strewn road at rising speed. Chevron gates pay six times the road, and you get three lives."],
+  ["block-forge", "Block Forge", "Strategy", "Stack falling pieces and clear rows. Four rows at once is worth eleven singles — the ceiling rewards patience."],
+  ["sky-siege", "Sky Siege", "Action", "Wave defence across six columns. Shots travel, so lead your targets; three shields, and every wave lands heavier."],
   ["word-vault", "Word Vault", "Word", "Vocabulary sprints with daily seeded boards — everyone plays the same board."],
-  ["hex-tactics", "Hex Tactics", "Strategy", "Turn-based skirmish on hex grids. Elo-rated ladder."],
-  ["pulse-beat", "Pulse Beat", "Rhythm", "Beat-matching with community-charted tracks and accuracy grading."],
+  ["hex-tactics", "Hex Tactics", "Strategy", "Turn-based territory capture on a hex board. Claim a colour, absorb the frontier, and lock the one your rival wants."],
+  ["pulse-beat", "Pulse Beat", "Rhythm", "Four-lane beat matching on a seeded chart. Perfect timing pays in full; a note you miss breaks the chain."],
 ];
 
 export const games: Game[] = GAME_DEFS.map(([slug, title, genre, blurb], i) => ({
