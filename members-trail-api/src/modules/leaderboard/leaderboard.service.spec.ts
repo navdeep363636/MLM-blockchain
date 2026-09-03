@@ -109,6 +109,16 @@ describe("LeaderboardService", () => {
       expect(keys.every((k) => k.includes("abcdef12"))).toBe(true);
     });
 
+    it("keys a per-title board on the FULL gameId, not a truncated prefix", async () => {
+      /* Two games sharing an 8-char prefix used to collide onto one key. */
+      await svc.record({ userId: "u1", metric: "score", delta: 10, gameId: "abcdef12-1111-1111-1111-111111111111" });
+      await svc.record({ userId: "u1", metric: "score", delta: 10, gameId: "abcdef12-2222-2222-2222-222222222222" });
+      const keys = redis.zIncr.mock.calls.map((c) => c[0] as string);
+      expect(keys.some((k) => k.includes("abcdef12-1111-1111-1111-111111111111"))).toBe(true);
+      expect(keys.some((k) => k.includes("abcdef12-2222-2222-2222-222222222222"))).toBe(true);
+      expect(new Set(keys).size).toBe(8); // 4 periods × 2 distinct games, no collision
+    });
+
     it("ignores a non-positive delta", async () => {
       await svc.record({ userId: "u1", metric: "points", delta: 0 });
       expect(redis.zIncr).not.toHaveBeenCalled();
@@ -178,6 +188,25 @@ describe("LeaderboardService", () => {
       const r = await svc.board({ metric: "points", period: "all_time" }, "u1");
       expect(r.resetsInSeconds).toBe(0);
       expect(r.periodKey).toBe("all_time");
+    });
+
+    it("reports the seconds until a weekly board resets — end of the ISO week in UTC", async () => {
+      const r = await svc.board({ metric: "points", period: "weekly" }, "u1");
+
+      /* Independently derived: walk day-by-day to the next Monday 00:00 UTC,
+       * rather than re-running the service's own dow/daysLeft formula — a bug
+       * in that formula should not also be baked into the expectation. */
+      const now = new Date();
+      const target = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      do {
+        target.setUTCDate(target.getUTCDate() + 1);
+      } while (target.getUTCDay() !== 1);
+      const expected = Math.round((target.getTime() - now.getTime()) / 1000);
+
+      /* A couple of seconds' tolerance for the wall-clock tick between the two
+       * `new Date()` reads. */
+      expect(r.resetsInSeconds).toBeGreaterThanOrEqual(expected - 2);
+      expect(r.resetsInSeconds).toBeLessThanOrEqual(expected + 2);
     });
   });
 
@@ -303,6 +332,23 @@ describe("LeaderboardService", () => {
       expect(r.rows).toEqual([]);
       expect(r.you).toBeNull();
     });
+
+    it("falls through to the snapshot table when unbuilt AND genuinely empty, without looping", async () => {
+      /* No snapshot yet (unbuilt), and rebuild() finds nothing to reconstruct
+       * from (genuinely empty period) — must fall through to the snapshot read
+       * once, not loop or throw on the zero-rows-restored case. */
+      redis.zTop.mockResolvedValue([]);
+      snapshots.count.mockResolvedValue(0);
+      sessions.createQueryBuilder.mockImplementation(() => sessionQb([]));
+      snapshots.find.mockResolvedValue([]);
+
+      const r = await svc.board({ metric: "points", period: "weekly" }, "u1");
+
+      expect(r.source).toBe("snapshot");
+      expect(r.rows).toEqual([]);
+      expect(r.totalRanked).toBe(0);
+      expect(redis.zAdd).not.toHaveBeenCalled();
+    });
   });
 
   describe("rankFor", () => {
@@ -326,6 +372,17 @@ describe("LeaderboardService", () => {
       redis.zRank.mockResolvedValue(null);
       snapshots.findOne.mockResolvedValue(null);
       expect(await svc.rankFor("u1", "points", "weekly")).toBeNull();
+    });
+
+    it("resolves a per-title rank against the full-gameId key", async () => {
+      redis.zRank.mockResolvedValue(3);
+      redis.zScore.mockResolvedValue(150);
+
+      const r = await svc.rankFor("u1", "score", "weekly", "abcdef12-1111-1111-1111-111111111111");
+
+      expect(r).toEqual({ rank: 3, score: 150 });
+      const key = redis.zRank.mock.calls[0][0] as string;
+      expect(key).toContain("abcdef12-1111-1111-1111-111111111111");
     });
   });
 
@@ -410,6 +467,15 @@ describe("LeaderboardService", () => {
       await svc.pruneClosedPeriods(new Date("2026-03-15T12:00:00Z"));
       const patterns = redis.delByPattern.mock.calls.map((c) => c[0] as string);
       expect(patterns.some((p) => p.includes("2026-03-15"))).toBe(false);
+    });
+
+    it("rolls the day and month keys correctly across a year boundary", async () => {
+      redis.delByPattern.mockResolvedValue(1);
+      await svc.pruneClosedPeriods(new Date("2026-01-02T12:00:00Z"));
+      const patterns = redis.delByPattern.mock.calls.map((c) => c[0] as string);
+      /* Yesterday is 2026-01-01; 32 days back lands in December 2025. */
+      expect(patterns.some((p) => p.includes("2026-01-01"))).toBe(true);
+      expect(patterns.some((p) => p.includes("2025-12"))).toBe(true);
     });
   });
 
