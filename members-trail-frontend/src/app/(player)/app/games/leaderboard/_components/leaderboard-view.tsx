@@ -1,62 +1,48 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Crown, Medal, Minus, Trophy, Users } from "lucide-react";
+import { useState } from "react";
+import { ArrowDown, ArrowUp, Crown, Medal, Minus, TriangleAlert, Trophy } from "lucide-react";
 import {
   Avatar, Badge, Callout, DataTable, SegmentedControl, StatTile, type Column,
 } from "@/components/ui";
 import { Reveal } from "@/components/fx";
 import { useLeaderboard } from "@/lib/hooks/use-data";
+import { humanMessage } from "@/lib/api/errors";
 import { cn, formatCompact, formatNumber } from "@/lib/utils";
 import type { LeaderboardEntry } from "@/types";
-import { draw } from "../../../_components/derive";
 
-type Period = "daily" | "weekly" | "alltime" | "friends";
-type Metric = "points" | "staked" | "wins";
+/* The UI's period/metric labels are a thin display layer over the exact
+ * values the `/leaderboard` endpoint accepts (`LEADERBOARD_PERIODS` /
+ * `LEADERBOARD_METRICS` in the API's leaderboard DTO). There is no "Friends"
+ * board or "MTT staked" metric on the server — earlier revisions of this view
+ * faked both by scaling and jittering the one real (points, weekly) response
+ * client-side, which silently re-ranked players on invented numbers. Every
+ * tab below now maps to a period/metric the server actually computes; there
+ * is nothing left to project. */
+type Period = "daily" | "weekly" | "alltime";
+type Metric = "points" | "score" | "wins";
+
+const BACKEND_PERIOD: Record<Period, "daily" | "weekly" | "all_time"> = {
+  daily: "daily",
+  weekly: "weekly",
+  alltime: "all_time",
+};
 
 const METRIC_LABEL: Record<Metric, string> = {
   points: "Points earned",
-  staked: "MTT staked",
+  score: "Game score",
   wins: "Tournament wins",
 };
 
-/**
- * The mock ledger holds one all-time Points board. Deriving the other views
- * deterministically from each entry's id keeps ranks stable across renders
- * while still showing a genuinely different board per filter.
- */
-function project(rows: LeaderboardEntry[], period: Period, metric: Metric): LeaderboardEntry[] {
-  const scale =
-    metric === "staked" ? 0.42 : metric === "wins" ? 0.00026 : 1;
-  const window =
-    period === "daily" ? 0.035 : period === "weekly" ? 0.19 : period === "friends" ? 0.55 : 1;
-
-  const projected = rows
-    .filter((r) => (period === "friends" ? draw(`${r.userId}-friend`) > 0.55 || r.isCurrentUser : true))
-    .map((r) => {
-      const jitter = 0.72 + draw(`${r.userId}-${period}-${metric}`) * 0.56;
-      const raw = r.metric * scale * window * jitter;
-      return {
-        ...r,
-        metric: metric === "wins" ? Math.max(0, Math.round(raw)) : Math.round(raw),
-        change: Math.round((draw(`${r.userId}-${period}-chg`) - 0.45) * 12),
-      };
-    })
-    .sort((a, b) => b.metric - a.metric);
-
-  return projected.map((r, i) => ({ ...r, rank: i + 1 }));
-}
-
 export function LeaderboardView() {
-  const { data: base, isLoading } = useLeaderboard();
   const [period, setPeriod] = useState<Period>("weekly");
   const [metric, setMetric] = useState<Metric>("points");
+  const { data: rows, isLoading, error } = useLeaderboard(metric, BACKEND_PERIOD[period]);
 
-  const rows = useMemo(() => project(base, period, metric), [base, period, metric]);
   const me = rows.find((r) => r.isCurrentUser);
   const podium = rows.slice(0, 3);
 
-  const unit = metric === "staked" ? "MTT" : metric === "wins" ? "wins" : "pts";
+  const unit = metric === "wins" ? "wins" : "pts";
 
   const columns: Column<LeaderboardEntry>[] = [
     {
@@ -141,7 +127,6 @@ export function LeaderboardView() {
             { value: "daily", label: "Daily" },
             { value: "weekly", label: "Weekly" },
             { value: "alltime", label: "All-time" },
-            { value: "friends", label: "Friends", icon: <Users className="size-3.5" /> },
           ]}
         />
         <SegmentedControl
@@ -150,11 +135,17 @@ export function LeaderboardView() {
           size="sm"
           options={[
             { value: "points", label: "Points" },
-            { value: "staked", label: "MTT staked" },
+            { value: "score", label: "Score" },
             { value: "wins", label: "Wins" },
           ]}
         />
       </div>
+
+      {error && (
+        <Callout tone="critical" title="Couldn't load the leaderboard" icon={<TriangleAlert />} className="mt-5">
+          <p className="mt-1">{humanMessage(error)}</p>
+        </Callout>
+      )}
 
       {/* Your rank, pinned above the table */}
       <div className="mt-5 grid gap-4 sm:grid-cols-3">
@@ -172,7 +163,7 @@ export function LeaderboardView() {
           value={me?.metric ?? 0}
           suffix={` ${unit}`}
           icon={<Medal />}
-          deltaLabel={`This ${period === "alltime" ? "all-time total" : period === "friends" ? "friends board" : period + " window"}`}
+          deltaLabel={`This ${period === "alltime" ? "all-time total" : period + " window"}`}
           compact
         />
         <StatTile
@@ -236,7 +227,7 @@ export function LeaderboardView() {
           caption={`${METRIC_LABEL[metric]} leaderboard, ${period} window`}
           empty={{
             title: "No ranked players in this view",
-            description: "Try a different period, or add friends to populate the friends board.",
+            description: "Play a session to be the first one on the board.",
           }}
         />
       </div>
