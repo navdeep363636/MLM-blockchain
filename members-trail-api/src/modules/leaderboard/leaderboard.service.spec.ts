@@ -150,7 +150,8 @@ describe("LeaderboardService", () => {
       const r = await svc.board({ metric: "points", period: "weekly", limit: 1 }, "u1");
 
       expect(r.rows).toHaveLength(1);
-      expect(r.you?.rank).toBe(42);
+      /* zRank is already 1-based: the mocked 41 is rank 41. */
+      expect(r.you?.rank).toBe(41);
       expect(r.you?.score).toBe(120);
       expect(r.you?.isYou).toBe(true);
     });
@@ -289,6 +290,9 @@ describe("LeaderboardService", () => {
 
       const r = await svc.board({ metric: "points", period: "weekly", limit: 1 }, "u1");
 
+      /* Snapshot path: the persisted rank is served as stored, so the mocked
+         42 comes straight back. This is the branch whose disagreement with the
+         Redis path exposed the double increment. */
       expect(r.you?.rank).toBe(42);
     });
 
@@ -306,7 +310,9 @@ describe("LeaderboardService", () => {
       redis.zRank.mockResolvedValue(2);
       redis.zScore.mockResolvedValue(777);
       const r = await svc.rankFor("u1", "points", "weekly");
-      expect(r).toEqual({ rank: 3, score: 777 });
+      /* zRank is already 1-based, so a mocked 2 is rank 2 — the service used
+         to add another one and report the leader as second. */
+      expect(r).toEqual({ rank: 2, score: 777 });
     });
 
     it("falls back to the persisted record", async () => {

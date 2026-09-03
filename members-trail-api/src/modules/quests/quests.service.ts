@@ -259,6 +259,22 @@ export class QuestsService {
       note: `Quest reward: ${quest.title}`,
     });
 
+    /* Only a claim that actually paid consumes the quest.
+     *
+     * `claimedAt` was stamped unconditionally, so claiming while the daily cap
+     * was full burned the quest for zero Points: the guard above then threw
+     * ALREADY_CLAIMED on every retry, and a daily instance expires before the
+     * cap resets. The reward was silently destroyed. */
+    if (credit.credited <= 0) {
+      instance.pointsAwarded = 0;
+      await this.userQuests.save(instance);
+      throw new ConflictException({
+        code: "POINTS_CAP_REACHED",
+        message: "Your Points cap is full — claim this again once it resets",
+        rewardPoints: quest.rewardPoints,
+      });
+    }
+
     instance.claimedAt = new Date();
     instance.pointsAwarded = credit.credited;
     await this.userQuests.save(instance);

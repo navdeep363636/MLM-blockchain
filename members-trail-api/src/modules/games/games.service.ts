@@ -65,6 +65,29 @@ const POPULARITY_WINDOW_DAYS = 30;
 /** Frames per second above which input is not human. */
 const MAX_HUMAN_FRAMES_PER_SECOND = 40;
 
+/** Allowance for a client clock running slightly ahead of the server's. */
+const CLOCK_SKEW_TOLERANCE_MS = 5_000;
+
+/**
+ * Ceiling on a single scoring frame, as a fraction of the title's maxScore.
+ *
+ * The replay used to sum whatever `v` the client sent, so one fabricated frame
+ * carrying the title's entire maxScore was a valid session: two HTTP calls, no
+ * game code, full payout. No real engine awards a fifth of the theoretical
+ * maximum in one event, so a frame that claims more than this is not a good run
+ * — it is a forged stream.
+ */
+const MAX_FRAME_SHARE_OF_MAX_SCORE = 0.2;
+
+/**
+ * Ceiling on score per second of play, as a fraction of maxScore.
+ *
+ * The second half of the same defence. Bounding the frame alone just moves the
+ * attacker to five frames; bounding the rate means a maximum score requires a
+ * plausible amount of time on the clock, and the clock is now the server's.
+ */
+const MAX_SCORE_RATE_PER_SECOND = 0.05;
+
 /** Tolerance between the client's claim and the server's replay before the
  *  discrepancy is treated as evidence rather than rounding. */
 const SCORE_DISCREPANCY_TOLERANCE_BPS = 500; // 5%
@@ -449,9 +472,31 @@ export class GamesService {
       });
     }
 
+    /* The wall clock owns the duration.
+     *
+     * `durationMs` used to be whatever the client asserted, checked only against
+     * a six-hour upper bound — and it feeds three of the four fatal heuristics.
+     * Submitting 40ms after opening with durationMs: 86_400_000 (the DTO's max)
+     * made `duration_implausible` unreachable and drove the frames-per-second
+     * figure to 0.11, so `input_rate_superhuman` could not fire either however
+     * many frames were shipped. A claim longer than the session has actually
+     * been open is not a rounding difference; it is the whole exploit. */
+    const elapsedMs = Date.now() - session.startedAt.getTime();
+    if (dto.durationMs > elapsedMs + CLOCK_SKEW_TOLERANCE_MS) {
+      session.status = "rejected";
+      session.rejectionReason = "Reported play time exceeds the time the session was open";
+      session.anomalyFlags = ["duration_exceeds_wall_clock"];
+      session.pointsAwarded = 0;
+      await this.sessions.save(session);
+      throw new ConflictException({
+        code: "DURATION_IMPLAUSIBLE",
+        message: "The reported play time is longer than this session has existed",
+      });
+    }
+
     session.status = "submitted";
     session.clientScore = dto.clientScore;
-    session.durationMs = dto.durationMs;
+    session.durationMs = Math.min(dto.durationMs, elapsedMs);
     session.endedAt = new Date();
     session.telemetryFrames = dto.telemetry.length;
     /* Tamper evidence: the digest is computed here, from the frames we actually
@@ -461,7 +506,13 @@ export class GamesService {
 
     await this.queue.add(
       Jobs.ValidateSession,
-      { sessionId: session.id, telemetry: dto.telemetry, clientScore: dto.clientScore, durationMs: dto.durationMs },
+      {
+        sessionId: session.id,
+        telemetry: dto.telemetry,
+        clientScore: dto.clientScore,
+        /* The clamped figure, never the claim. */
+        durationMs: session.durationMs,
+      },
       /* Deterministic id: a client retrying the same submission must not queue
        * two validations of one session. */
       { jobId: jobKey(`validate:${session.id}`) },
@@ -522,6 +573,8 @@ export class GamesService {
       serverScore: replay.score,
       durationMs: params.durationMs,
       frames: params.telemetry.length,
+      rejectedFrames: replay.rejectedFrames,
+      rateLimited: replay.rateLimited,
     });
 
     const deviceFlag = await this.deviceSharingFlag(session);
@@ -701,7 +754,7 @@ export class GamesService {
     telemetry: TelemetryFrame[],
     durationMs: number,
     config: ScoringConfig,
-  ): { score: number; scoringFrames: number } {
+  ): { score: number; scoringFrames: number; rejectedFrames: number; rateLimited: boolean } {
     const scoreEvent = config.scoreEvent ?? 2;
     const perUnit = config.scorePerUnit ?? 1;
     const perSecond = config.scorePerSecond ?? 0;
@@ -709,6 +762,13 @@ export class GamesService {
     let score = 0;
     let scoringFrames = 0;
     let lastT = -1;
+
+    const max = config.maxScore ?? Number.MAX_SAFE_INTEGER;
+    /* Per-frame ceiling: no single event may carry a large share of the title's
+     * whole maximum. A frame above it is dropped and counted, so the discrepancy
+     * heuristic still sees the gap between the claim and what replayed. */
+    const frameCeiling = Number.isFinite(max) ? Math.ceil(max * MAX_FRAME_SHARE_OF_MAX_SCORE) : Infinity;
+    let rejectedFrames = 0;
 
     for (const frame of telemetry) {
       /* Out-of-order frames are not replayable; they are dropped rather than
@@ -718,14 +778,29 @@ export class GamesService {
       if (frame.t > durationMs) continue;
       if (frame.e !== scoreEvent) continue;
       if (frame.v <= 0) continue;
+      if (frame.v * perUnit > frameCeiling) {
+        rejectedFrames += 1;
+        continue;
+      }
       score += frame.v * perUnit;
       scoringFrames += 1;
     }
 
     if (perSecond > 0) score += Math.floor(durationMs / 1_000) * perSecond;
 
-    const max = config.maxScore ?? Number.MAX_SAFE_INTEGER;
-    return { score: Math.max(0, Math.min(Math.floor(score), max)), scoringFrames };
+    /* Rate ceiling: score has to be earned over time, not asserted in a burst.
+     * With the duration now clamped to the wall clock, this is what makes a
+     * maximum score cost a plausible number of seconds. */
+    const seconds = Math.max(1, Math.floor(durationMs / 1_000));
+    const rateCeiling = Number.isFinite(max) ? Math.ceil(max * MAX_SCORE_RATE_PER_SECOND * seconds) : Infinity;
+    const bounded = Math.min(score, rateCeiling);
+
+    return {
+      score: Math.max(0, Math.min(Math.floor(bounded), max)),
+      scoringFrames,
+      rejectedFrames,
+      rateLimited: bounded < score,
+    };
   }
 
   /** Points the server score is worth, bounded by the title's declared band. */
@@ -733,9 +808,17 @@ export class GamesService {
     const perScore = config.pointsPerScore ?? 0.1;
     const raw = Math.floor(serverScore * perScore);
     if (raw <= 0) return 0;
-    /* The title's own band is the first ceiling; PointsService then applies the
-     * per-session, per-game and per-day caps. */
-    return Math.min(Math.max(raw, game.pointsPerSessionMin), game.pointsPerSessionMax);
+
+    /* The band's minimum is the floor of a QUALIFYING run, not of any run.
+     *
+     * `Math.max(raw, min)` paid the full minimum for any non-zero score, so a
+     * server score of 13 on Word Vault earned the same 80 Points as a score of
+     * 600 — 0.1% of the ceiling for 17% of the payout, and thirty-one trivial
+     * sessions exhausted the title's daily cap. Below the qualifying threshold
+     * the run is worth what it actually scored. */
+    const qualifying = raw >= game.pointsPerSessionMin;
+    const awarded = qualifying ? Math.max(raw, game.pointsPerSessionMin) : raw;
+    return Math.min(awarded, game.pointsPerSessionMax);
   }
 
   /** Anti-cheat heuristics. Returns the flags that fired, in severity order. */
@@ -746,9 +829,17 @@ export class GamesService {
     serverScore: number;
     durationMs: number;
     frames: number;
+    rejectedFrames: number;
+    rateLimited: boolean;
   }): string[] {
     const flags: string[] = [];
     const { clientScore, serverScore, durationMs, frames, game } = input;
+
+    /* Frames the replay refused because a single event claimed an implausible
+     * share of the title's maximum. One is a bug; a stream full of them is a
+     * forged submission. */
+    if (input.rejectedFrames > 0) flags.push("frame_value_implausible");
+    if (input.rateLimited) flags.push("score_rate_implausible");
 
     if (frames === 0 && serverScore > 0) flags.push("score_without_telemetry");
     if (clientScore > 0 && frames === 0) flags.push("claim_without_telemetry");
@@ -948,6 +1039,9 @@ const FATAL_REASONS: Record<string, string> = {
   claim_without_telemetry: "A score was reported with no gameplay data to support it",
   duration_implausible: "The session was too short to have produced this result",
   input_rate_superhuman: "The input rate is not achievable by a human player",
+  score_without_telemetry: "A score was recorded with no gameplay data behind it",
+  duration_exceeds_wall_clock: "Reported play time exceeds the time the session was open",
+  frame_value_implausible: "One or more scoring events claimed more than the game can award",
   score_discrepancy: "The reported score does not match the replayed gameplay",
 };
 
