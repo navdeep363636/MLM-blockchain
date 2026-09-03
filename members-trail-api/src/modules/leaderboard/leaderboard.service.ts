@@ -215,10 +215,10 @@ export class LeaderboardService implements OnApplicationBootstrap {
     const rank = await this.redis.zRank(key, userId);
     if (rank !== null) {
       const score = await this.redis.zScore(key, userId);
-      /* zRank already returns a 1-based rank — its own doc comment says so — and
-       * incrementing again put the leader at 2. The snapshot fallback a few
-       * lines below returns row.rank un-incremented, so the same player's rank
-       * shifted by one the moment Redis was flushed. */
+      /* zRank returns a 1-based rank, matching the snapshot fallback below
+       * (`row.rank`, also 1-based via `rank: index + 1` in `snapshot()`) — so a
+       * player's rank does not shift when the source flips from live to
+       * persisted. */
       return { rank, score: Math.floor(score ?? 0) };
     }
 
@@ -354,9 +354,16 @@ export class LeaderboardService implements OnApplicationBootstrap {
     return CacheKeys.leaderboard(this.snapshotMetric(metric, gameId), this.periodKey(period));
   }
 
-  /** A per-title board is a distinct metric, not a filter on a global one. */
+  /**
+   * A per-title board is a distinct metric, not a filter on a global one.
+   *
+   * Keyed on the FULL gameId. An earlier revision truncated to the first 8 hex
+   * characters to keep Redis keys short — with enough titles in the catalog
+   * that is a real birthday-paradox collision risk, and a collision here
+   * silently merges two games' live indexes and snapshot rows into one board.
+   */
   private snapshotMetric(metric: LeaderboardMetric, gameId: string | null): string {
-    return gameId ? `${metric}:${gameId.slice(0, 8)}` : metric;
+    return gameId ? `${metric}:${gameId}` : metric;
   }
 
   private periodKey(period: LeaderboardPeriod): string {

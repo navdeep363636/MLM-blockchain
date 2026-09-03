@@ -412,7 +412,7 @@ export class UserAchievement extends BaseEntity {
 @Unique("uq_lb_snapshot", ["metric", "periodKey", "userId"])
 @Index("idx_lb_lookup", ["metric", "periodKey", "rank"])
 export class LeaderboardSnapshot extends BaseEntity {
-  @Column({ type: "varchar", length: 32 })
+  @Column({ type: "varchar", length: 64 })
   metric!: string;
 
   @Column({ type: "varchar", length: 16 })

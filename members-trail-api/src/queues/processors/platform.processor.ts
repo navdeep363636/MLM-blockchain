@@ -121,10 +121,26 @@ export class LeaderboardProcessor extends BaseProcessor {
         return this.tournaments.settle(data.tournamentId);
       },
 
+      /**
+       * Reconstructs the LIVE index for a period from validated sessions.
+       *
+       * Distinct from `SnapshotLeaderboard`: that one persists the live index to
+       * the durable `leaderboard_snapshots` table, this one repopulates Redis
+       * itself. Used for manual recovery after a Redis flush/eviction outside the
+       * boot-time reconciliation — it used to just call `snapshotAll` again,
+       * which re-persists whatever the (possibly still-empty) live index holds
+       * rather than rebuilding it.
+       */
       [Jobs.RebuildLeaderboard]: async (data: {
         period?: "daily" | "weekly" | "monthly" | "all_time";
       }) => {
-        return this.leaderboard.snapshotAll(data.period ?? "weekly");
+        const period = data.period ?? "weekly";
+        const metrics: Array<"points" | "score" | "sessions" | "wins"> = [
+          "points", "score", "sessions", "wins",
+        ];
+        let total = 0;
+        for (const metric of metrics) total += await this.leaderboard.rebuild(metric, period);
+        return { period, rebuilt: total };
       },
     };
   }
