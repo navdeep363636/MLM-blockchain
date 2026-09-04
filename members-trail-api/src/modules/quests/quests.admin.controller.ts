@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Put } from "@nestjs
 import { ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { ClientIp, CurrentUser, RequirePermissions, StaffOnly, type AuthUser } from "@/common/decorators";
 import { QuestsService } from "./quests.service";
-import { QuestResponse, UpsertQuestRequest } from "./dto/quests.dto";
+import { QuestResponse, SetQuestActiveRequest, UpsertQuestRequest } from "./dto/quests.dto";
 
 /* ============================================================================
  * Quest administration (FRD AD-04).
@@ -40,7 +40,7 @@ export class QuestsAdminController {
   @ApiOperation({ summary: "Activate a quest" })
   activate(
     @Param("id", ParseUUIDPipe) id: string,
-    @Body() body: { reason: string },
+    @Body() body: SetQuestActiveRequest,
     @CurrentUser() actor: AuthUser,
   ): Promise<QuestResponse> {
     return this.quests.setQuestActive(id, true, body.reason, actor.id);
@@ -54,7 +54,7 @@ export class QuestsAdminController {
   })
   deactivate(
     @Param("id", ParseUUIDPipe) id: string,
-    @Body() body: { reason: string },
+    @Body() body: SetQuestActiveRequest,
     @CurrentUser() actor: AuthUser,
   ): Promise<QuestResponse> {
     return this.quests.setQuestActive(id, false, body.reason, actor.id);

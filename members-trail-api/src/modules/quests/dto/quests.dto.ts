@@ -15,10 +15,17 @@ import type { AchievementTier, QuestKind } from "@/database/entities";
 export const QUEST_KINDS: QuestKind[] = ["daily", "weekly", "milestone"];
 export const ACHIEVEMENT_TIERS: AchievementTier[] = ["bronze", "silver", "gold", "platinum"];
 
-/** Objective metrics the tracker understands. Anything else never progresses. */
-export const QUEST_METRICS = [
-  "sessions", "score", "points", "wins", "tournaments", "conversions", "referrals",
-] as const;
+/**
+ * Objective metrics the tracker understands.
+ *
+ * Exactly the signals `QuestsService.track()` receives — currently only from
+ * `onSessionValidated()` (sessions/score/points from validated gameplay). This
+ * used to also list "wins"/"tournaments"/"conversions"/"referrals", none of
+ * which any module ever emits a tracking signal for: an admin could configure
+ * a quest on one of those and it would never progress. Add a value back here
+ * only alongside the code that actually tracks it.
+ */
+export const QUEST_METRICS = ["sessions", "score", "points"] as const;
 export type QuestMetric = (typeof QUEST_METRICS)[number];
 
 export class QuestResponse {
@@ -114,6 +121,19 @@ export class UpsertQuestRequest {
   @IsInt() @Min(1) @Max(1_000_000)
   rewardPoints!: number;
 
+  @ApiProperty() @IsString() @MinLength(10) @MaxLength(500)
+  reason!: string;
+}
+
+/**
+ * Activate/deactivate took `{ reason: string }` as an inline object type, not a
+ * class. Nest's ValidationPipe only validates a body whose declared type has a
+ * decorated `metatype` — a plain object type is treated as `Object` and
+ * skipped, so `reason` reached `AuditService` unvalidated: missing, empty, or
+ * non-string all passed silently, undermining "every change here is audited
+ * with a mandatory reason" for these two endpoints specifically.
+ */
+export class SetQuestActiveRequest {
   @ApiProperty() @IsString() @MinLength(10) @MaxLength(500)
   reason!: string;
 }
