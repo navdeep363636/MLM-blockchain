@@ -1,4 +1,4 @@
-import { ConflictException } from "@nestjs/common";
+import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { Test } from "@nestjs/testing";
 import {
@@ -170,7 +170,7 @@ describe("QuestsService", () => {
     });
 
     it("ignores a signal for a different metric", async () => {
-      const r = await svc.track({ userId: "u1", metric: "conversions", amount: 5 });
+      const r = await svc.track({ userId: "u1", metric: "score", amount: 5 });
       expect(r.advanced).toBe(0);
     });
 
@@ -298,6 +298,28 @@ describe("QuestsService", () => {
       await expect(svc.claim("u1", "q-1"))
         .rejects.toMatchObject({ response: { code: "CLAIM_IN_FLIGHT" } });
     });
+
+    it("does NOT silently destroy the reward when the daily cap is fully consumed", async () => {
+      /* The exact scenario the comment on this branch warns about: claimedAt
+       * used to be stamped unconditionally, so a fully-capped claim burned the
+       * quest for zero Points — every retry then hit ALREADY_CLAIMED, and a
+       * daily instance expires before the cap resets. The member never got
+       * the reward. */
+      points.credit.mockResolvedValue({
+        requested: 150, credited: 0, capped: 150, cappedBy: "user_daily",
+        headroom: 0, meters: [], entryRef: null, runningBalance: null, replayed: false,
+      });
+
+      await expect(svc.claim("u1", "q-1"))
+        .rejects.toMatchObject({ response: { code: "POINTS_CAP_REACHED", rewardPoints: 150 } });
+
+      /* The instance is saved with zero pointsAwarded, NOT claimedAt — so a
+       * retry once the cap resets can still succeed rather than hitting
+       * ALREADY_CLAIMED for a reward it never actually received. */
+      expect(userQuests.save).toHaveBeenCalledWith(
+        expect.objectContaining({ pointsAwarded: 0, claimedAt: null }),
+      );
+    });
   });
 
   /* ==================================================================== *
@@ -386,6 +408,31 @@ describe("QuestsService", () => {
       expect(r.unlocked).toEqual(["FIRST_10"]);
       expect(points.credit).not.toHaveBeenCalled();
     });
+
+    it("treats a concurrent unlock (unique-constraint race) as a no-op, not a crash", async () => {
+      /* No lock guards this method — two validated sessions for the same user
+       * finishing close together can both pass the already-unlocked check
+       * before either writes. The loser must not throw the DB's raw
+       * duplicate-key error out of an event handler. */
+      achievements.find.mockResolvedValue([achievement]);
+      sessions.createQueryBuilder.mockImplementation(() =>
+        qb({ sessions: "12", points: "0", bestScore: "0", games: "1" }),
+      );
+      const dupError = Object.assign(new Error("dup"), { code: "ER_DUP_ENTRY" });
+      unlocked.save.mockRejectedValueOnce(dupError);
+
+      await expect(svc.evaluateAchievements("u1")).resolves.toEqual({ unlocked: [], pointsAwarded: 0 });
+    });
+
+    it("still throws a non-duplicate-key error from the unlock write", async () => {
+      achievements.find.mockResolvedValue([achievement]);
+      sessions.createQueryBuilder.mockImplementation(() =>
+        qb({ sessions: "12", points: "0", bestScore: "0", games: "1" }),
+      );
+      unlocked.save.mockRejectedValueOnce(new Error("connection reset"));
+
+      await expect(svc.evaluateAchievements("u1")).rejects.toThrow("connection reset");
+    });
   });
 
   /* ==================================================================== *
@@ -464,6 +511,149 @@ describe("QuestsService", () => {
       const r = await svc.listForUser("u1");
       expect(r).toEqual({ daily: [], weekly: [], milestones: [], readyToClaim: 0, claimablePoints: 0 });
       expect(ConflictException).toBeDefined();
+    });
+  });
+
+  /* ==================================================================== *
+   * Achievements — read side
+   * ==================================================================== */
+
+  describe("achievementsFor", () => {
+    const ach = {
+      id: "a-1", code: "FIRST_10", title: "Ten sessions", description: "Play ten sessions",
+      tier: "bronze" as const, rewardPoints: 200,
+      criteria: { metric: "sessions_total", value: 10 }, active: true,
+    };
+
+    it("reports progress toward a not-yet-unlocked achievement, clamped to its target", async () => {
+      achievements.find.mockResolvedValue([ach]);
+      unlocked.find.mockResolvedValue([]);
+      sessions.createQueryBuilder.mockImplementation(() =>
+        qb({ sessions: "4", points: "0", bestScore: "0", games: "1" }),
+      );
+
+      const r = await svc.achievementsFor("u1");
+
+      expect(r.achievements).toEqual([
+        expect.objectContaining({ id: "a-1", unlocked: false, progress: 4, target: 10, pointsAwarded: 0 }),
+      ]);
+      expect(r.unlockedCount).toBe(0);
+      expect(r.totalCount).toBe(1);
+      expect(r.pointsEarned).toBe(0);
+    });
+
+    it("reports an unlocked achievement with its award and unlock time", async () => {
+      const unlockedAt = new Date("2026-01-01T00:00:00Z");
+      achievements.find.mockResolvedValue([ach]);
+      unlocked.find.mockResolvedValue([{ achievementId: "a-1", unlockedAt, pointsAwarded: 200 }]);
+      sessions.createQueryBuilder.mockImplementation(() =>
+        qb({ sessions: "12", points: "0", bestScore: "0", games: "1" }),
+      );
+
+      const r = await svc.achievementsFor("u1");
+
+      expect(r.achievements[0]).toEqual(
+        expect.objectContaining({
+          unlocked: true, unlockedAt: unlockedAt.toISOString(), pointsAwarded: 200, progress: 10,
+        }),
+      );
+      expect(r.unlockedCount).toBe(1);
+      expect(r.pointsEarned).toBe(200);
+    });
+  });
+
+  /* ==================================================================== *
+   * Admin
+   * ==================================================================== */
+
+  describe("upsertQuest", () => {
+    const dto = {
+      title: "Play five games", description: "Play five sessions this week.",
+      kind: "weekly" as const, metric: "sessions" as const, target: 5, rewardPoints: 300,
+      reason: "New weekly objective for the season launch",
+    };
+
+    it("REFUSES a quest that awards no Points", async () => {
+      await expect(svc.upsertQuest({ ...dto, rewardPoints: 0 }, "admin-1", "1.2.3.4"))
+        .rejects.toBeInstanceOf(BadRequestException);
+      expect(quests.save).not.toHaveBeenCalled();
+    });
+
+    it("creates a new quest and audits it with the given reason", async () => {
+      const r = await svc.upsertQuest(dto, "admin-1", "1.2.3.4");
+
+      expect(quests.save).toHaveBeenCalledWith(
+        expect.objectContaining({ title: dto.title, target: 5, rewardPoints: 300, active: true }),
+      );
+      expect(audit.recordOrThrow).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actorId: "admin-1", action: "quest.create", reason: dto.reason, ip: "1.2.3.4",
+        }),
+      );
+      expect(r.title).toBe(dto.title);
+    });
+
+    it("REFUSES to update a quest that does not exist", async () => {
+      quests.findOne.mockResolvedValue(null);
+      await expect(svc.upsertQuest({ ...dto, id: "missing" }, "admin-1", null))
+        .rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it("audits an update with the before/after values, not just the after", async () => {
+      quests.findOne.mockResolvedValue({ ...DAILY_QUEST, id: "q-1" });
+
+      await svc.upsertQuest({ ...dto, id: "q-1" }, "admin-1", null);
+
+      expect(audit.recordOrThrow).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "quest.update",
+          before: expect.objectContaining({ title: DAILY_QUEST.title, target: DAILY_QUEST.target }),
+          after: expect.objectContaining({ title: dto.title, target: dto.target }),
+        }),
+      );
+    });
+  });
+
+  describe("setQuestActive", () => {
+    it("REFUSES to (de)activate a quest that does not exist", async () => {
+      quests.findOne.mockResolvedValue(null);
+      await expect(svc.setQuestActive("missing", true, "cleaning up the seasonal list", "admin-1"))
+        .rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it("flips active and audits the change with the given reason", async () => {
+      quests.findOne.mockResolvedValue({ ...DAILY_QUEST, active: true });
+
+      await svc.setQuestActive("q-1", false, "seasonal event ended", "admin-1");
+
+      expect(quests.save).toHaveBeenCalledWith(expect.objectContaining({ active: false }));
+      expect(audit.recordOrThrow).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actorId: "admin-1", action: "quest.set_active", reason: "seasonal event ended",
+          after: { active: false },
+        }),
+      );
+    });
+  });
+
+  describe("expireStale", () => {
+    it("counts lapsed unclaimed instances without deleting or loading them", async () => {
+      const builder = qb({});
+      builder.getCount = jest.fn(async () => 7);
+      userQuests.createQueryBuilder.mockReturnValue(builder);
+
+      const n = await svc.expireStale();
+
+      expect(n).toBe(7);
+      expect(userQuests.save).not.toHaveBeenCalled();
+    });
+
+    it("returns zero without logging when nothing has lapsed", async () => {
+      const builder = qb({});
+      builder.getCount = jest.fn(async () => 0);
+      userQuests.createQueryBuilder.mockReturnValue(builder);
+
+      await expect(svc.expireStale()).resolves.toBe(0);
     });
   });
 });
