@@ -180,6 +180,20 @@ export interface PointsEntryResponse {
   note: string | null;
 }
 
+/**
+ * The full-history CSV/PDF statement (FRD W-05) — up to 10,000 rows server-side,
+ * not the ~200-row window the on-screen table fetches. `rows` is pre-flattened
+ * per column, in the same order as `columns`, so the client never has to guess
+ * which ledger fields map to which export column.
+ */
+export interface PointsExportResponse {
+  filename: string;
+  columns: string[];
+  rows: string[][];
+  rowCount: number;
+  generatedAt: string;
+}
+
 export interface PointsSummary {
   earned: number;
   convertedOut: number;

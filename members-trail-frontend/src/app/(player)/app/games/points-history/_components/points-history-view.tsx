@@ -6,10 +6,12 @@ import {
 } from "lucide-react";
 import {
   Badge, Button, Callout, DataTable, SearchInput, SegmentedControl, Select,
-  StatTile, type Column,
+  StatTile, useToast, type Column,
 } from "@/components/ui";
 import { AreaTrend } from "@/components/charts";
 import { usePointsHistory } from "@/lib/hooks/use-data";
+import { useExportPointsHistory } from "@/lib/hooks/use-mutations";
+import { humanMessage } from "@/lib/api/errors";
 import { cn, csvDownload, formatDate, formatNumber } from "@/lib/utils";
 import type { PointsEntry } from "@/types";
 import { POINTS_SOURCE_LABEL, bestDay, pointsPerDay } from "../../../_components/derive";
@@ -22,16 +24,21 @@ const RANGE_DAYS: Record<Range, number> = { "7d": 7, "30d": 30, "90d": 90, all: 
 const SOURCE_TONE: Record<PointsEntry["source"], "brand" | "good" | "info" | "warning" | "neutral" | "serious"> = {
   gameplay: "brand",
   quest: "good",
+  achievement: "good",
   ad: "info",
   tournament: "warning",
   purchase: "serious",
   referral_bonus: "neutral",
   conversion: "neutral",
+  admin_adjustment: "neutral",
+  reversal: "warning",
 };
 
 export function PointsHistoryView() {
   const { data: entries, isLoading } = usePointsHistory();
   const referenceNow = useReferenceNow();
+  const exportHistory = useExportPointsHistory();
+  const toast = useToast();
 
   const [range, setRange] = useState<Range>("30d");
   const [source, setSource] = useState("all");
@@ -53,7 +60,12 @@ export function PointsHistoryView() {
 
   const totals = useMemo(() => {
     const earned = filtered.filter((e) => e.amount > 0).reduce((s, e) => s + e.amount, 0);
-    const converted = filtered.filter((e) => e.amount < 0).reduce((s, e) => s + Math.abs(e.amount), 0);
+    /* Matches the backend's own summary(): only a "conversion" debit is money
+     * converted out. A negative "reversal"/"admin_adjustment" row is a
+     * correction, not a conversion, and must not inflate this figure. */
+    const converted = filtered
+      .filter((e) => e.source === "conversion" && e.amount < 0)
+      .reduce((s, e) => s + Math.abs(e.amount), 0);
     return { earned, converted, net: earned - converted };
   }, [filtered]);
 
@@ -123,18 +135,25 @@ export function PointsHistoryView() {
     },
   ];
 
-  const exportCsv = () => {
-    csvDownload(
-      `members-trail-points-${range}.csv`,
-      filtered.map((e) => ({
-        reference: e.id,
-        date: e.date,
-        source: POINTS_SOURCE_LABEL[e.source],
-        detail: e.gameTitle ?? e.note ?? "",
-        points: e.amount,
-        running_balance: e.runningBalance,
-      })),
-    );
+  /**
+   * The on-screen table only ever holds the bounded window `usePointsHistory`
+   * fetched (see its hook doc) — building a CSV from `filtered` silently
+   * exported an incomplete statement for any account with more rows than
+   * that. This calls the dedicated export endpoint instead, with the same
+   * range/source/search filters currently applied, so the file always
+   * matches what the backend's own ledger holds.
+   */
+  const exportCsv = async () => {
+    try {
+      const res = await exportHistory.mutateAsync({
+        source: source === "all" ? undefined : source,
+        from: range === "all" ? undefined : new Date(referenceNow - RANGE_DAYS[range] * 86_400_000).toISOString(),
+        q: query.trim() || undefined,
+      });
+      csvDownload(res.filename, res.rows.map((row) => Object.fromEntries(res.columns.map((c, i) => [c, row[i]]))));
+    } catch (err) {
+      toast.error("Couldn't export your Points history", humanMessage(err));
+    }
   };
 
   return (
@@ -215,6 +234,7 @@ export function PointsHistoryView() {
           variant="outline"
           onClick={exportCsv}
           disabled={filtered.length === 0}
+          loading={exportHistory.isPending}
           icon={<Download className="size-3.5" />}
           className="sm:ml-auto"
         >

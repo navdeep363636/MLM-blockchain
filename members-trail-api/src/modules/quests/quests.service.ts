@@ -45,6 +45,12 @@ import type {
 
 const CLAIM_LOCK_TTL_SECONDS = 15;
 
+/** Same duplicate-key detection LedgerService uses for its own replay handling. */
+function isDuplicateKeyError(e: unknown): boolean {
+  const err = e as { code?: string; errno?: number };
+  return err?.code === "ER_DUP_ENTRY" || err?.code === "23000" || err?.errno === 1062;
+}
+
 /** Progress increments this service knows how to derive. */
 export interface ProgressSignal {
   userId: string;
@@ -172,25 +178,6 @@ export class QuestsService {
     return { advanced, completed };
   }
 
-  /** Creates this period's instance on demand, or returns the existing one. */
-  private async instanceFor(userId: string, quest: Quest, period: string): Promise<UserQuest> {
-    const found = await this.userQuests.findOne({
-      where: { userId, questId: quest.id, periodKey: period },
-    });
-    if (found) return found;
-
-    return this.userQuests.save(
-      this.userQuests.create({
-        userId,
-        questId: quest.id,
-        periodKey: period,
-        progress: 0,
-        pointsAwarded: 0,
-        expiresAt: expiryFor(quest.kind),
-      }),
-    );
-  }
-
   /* ==================================================================== *
    * Claim
    * ==================================================================== */
@@ -258,6 +245,22 @@ export class QuestsService {
       gameId: quest.gameId ?? null,
       note: `Quest reward: ${quest.title}`,
     });
+
+    /* Only a claim that actually paid consumes the quest.
+     *
+     * `claimedAt` was stamped unconditionally, so claiming while the daily cap
+     * was full burned the quest for zero Points: the guard above then threw
+     * ALREADY_CLAIMED on every retry, and a daily instance expires before the
+     * cap resets. The reward was silently destroyed. */
+    if (credit.credited <= 0) {
+      instance.pointsAwarded = 0;
+      await this.userQuests.save(instance);
+      throw new ConflictException({
+        code: "POINTS_CAP_REACHED",
+        message: "Your Points cap is full — claim this again once it resets",
+        rewardPoints: quest.rewardPoints,
+      });
+    }
 
     instance.claimedAt = new Date();
     instance.pointsAwarded = credit.credited;
@@ -349,14 +352,28 @@ export class QuestsService {
         credited = credit.credited;
       }
 
-      await this.unlocked.save(
-        this.unlocked.create({
-          userId,
-          achievementId: achievement.id,
-          unlockedAt: new Date(),
-          pointsAwarded: credited,
-        }),
-      );
+      /* No lock guards this method the way `claim()` is locked — it runs from
+       * an event handler, and two validated sessions for the same user can
+       * finish close enough together to both pass the `already.has(...)`
+       * check above before either writes. `points.credit()` is still safe
+       * (idempotent on `achievement:${userId}:${id}`), but the loser here used
+       * to throw an unhandled unique-constraint error out of the event
+       * handler. Treat it the same way a retried claim is treated: the
+       * achievement is unlocked either way, so there is nothing left for the
+       * loser to do. */
+      try {
+        await this.unlocked.save(
+          this.unlocked.create({
+            userId,
+            achievementId: achievement.id,
+            unlockedAt: new Date(),
+            pointsAwarded: credited,
+          }),
+        );
+      } catch (e) {
+        if (isDuplicateKeyError(e)) continue;
+        throw e;
+      }
 
       newlyUnlocked.push(achievement.code);
       pointsAwarded += credited;

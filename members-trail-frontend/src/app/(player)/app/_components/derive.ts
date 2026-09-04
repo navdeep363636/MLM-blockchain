@@ -74,9 +74,12 @@ export function bestDay(entries: PointsEntry[]): { day: string; earned: number }
 export const POINTS_SOURCE_LABEL: Record<PointsEntry["source"], string> = {
   gameplay: "Gameplay",
   quest: "Quest reward",
+  achievement: "Achievement reward",
   ad: "Rewarded ad",
   purchase: "Purchase bonus",
   tournament: "Tournament",
   referral_bonus: "Referral bonus",
   conversion: "Converted to MTT",
+  admin_adjustment: "Admin adjustment",
+  reversal: "Reversed",
 };

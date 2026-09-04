@@ -60,6 +60,12 @@ import {
 const HISTORY_SORT_COLUMNS = ["createdAt", "pointsSpent", "mttCredited"] as const;
 const LOCK_TTL_SECONDS = 15;
 
+/** Same detection LedgerService uses for its own duplicate-key replay handling. */
+function isDuplicateKeyError(e: unknown): boolean {
+  const err = e as { code?: string; errno?: number };
+  return err?.code === "ER_DUP_ENTRY" || err?.code === "23000" || err?.errno === 1062;
+}
+
 /** Conversion statuses that still consume cap allowance. A failed or cancelled
  *  conversion returns the allowance — it never spent the Points. */
 const CAP_CONSUMING_STATUSES = ["pending", "queued", "processing", "review", "completed"];
@@ -344,73 +350,92 @@ export class ConversionService {
     /* One transaction, one lock. `withUserLock` is the sanctioned way to write
      * two ledger effects that must agree (see the LedgerService docs) — doing
      * this as mutatePoints() then mutateMtt() would leave a window in which the
-     * Points had been debited and the MTT did not yet exist. */
-    const { conversion, balanceAfter } = await this.ledger.withUserLock(userId, async (tx, balance) => {
-      if (balance.points < points) {
-        throw new ConflictException({
-          code: "INSUFFICIENT_POINTS",
-          message: "Insufficient Points balance",
-          available: balance.points,
-          requested: points,
-        });
-      }
+     * Points had been debited and the MTT did not yet exist.
+     *
+     * The `existing` lookup above the redis lock is the normal replay path; this
+     * try/catch is the backstop for the narrow window outside it (a lock that
+     * expired mid-transaction, two processes racing before either had acquired
+     * it) — the same pattern `LedgerService.mutatePoints`/`mutateMtt` use rather
+     * than a raw duplicate-key error surfacing as an unhandled 500. */
+    let conversion: Conversion;
+    let balanceAfter: number;
+    try {
+      ({ conversion, balanceAfter } = await this.ledger.withUserLock(userId, async (tx, balance) => {
+        if (balance.points < points) {
+          throw new ConflictException({
+            code: "INSUFFICIENT_POINTS",
+            message: "Insufficient Points balance",
+            available: balance.points,
+            requested: points,
+          });
+        }
 
-      const nextPoints = balance.points - points;
+        const nextPoints = balance.points - points;
 
-      const entry = await tx.getRepository(PointsLedgerEntry).save(
-        tx.getRepository(PointsLedgerEntry).create({
-          ref: Ref.pointsEntry(),
-          userId,
-          source: "conversion",
-          amount: -points,
-          runningBalance: nextPoints,
-          note: `Converted to ${mtt} MTT at ${rate.pointsPerMtt} Points/MTT`,
-          idempotencyKey: `${key}:points`,
-        }),
-      );
+        const entry = await tx.getRepository(PointsLedgerEntry).save(
+          tx.getRepository(PointsLedgerEntry).create({
+            ref: Ref.pointsEntry(),
+            userId,
+            source: "conversion",
+            amount: -points,
+            runningBalance: nextPoints,
+            note: `Converted to ${mtt} MTT at ${rate.pointsPerMtt} Points/MTT`,
+            idempotencyKey: `${key}:points`,
+          }),
+        );
 
-      const transaction = await tx.getRepository(Transaction).save(
-        tx.getRepository(Transaction).create({
-          ref: Ref.transaction(),
-          userId,
-          type: "conversion",
-          amountMtt: toDbAmount(mtt),
-          status: "completed",
-          sourceTag: "gameplay",
-          note: `${points} Points → ${mtt} MTT`,
-          metadata: {
+        const transaction = await tx.getRepository(Transaction).save(
+          tx.getRepository(Transaction).create({
+            ref: Ref.transaction(),
+            userId,
+            type: "conversion",
+            amountMtt: toDbAmount(mtt),
+            status: "completed",
+            sourceTag: "gameplay",
+            note: `${points} Points → ${mtt} MTT`,
+            metadata: {
+              pointsSpent: points,
+              rateApplied: rate.pointsPerMtt,
+              rateId: rate.id,
+              pointsEntryRef: entry.ref,
+            },
+            idempotencyKey: `${key}:mtt`,
+            settledAt: new Date(),
+          }),
+        );
+
+        const row = await tx.getRepository(Conversion).save(
+          tx.getRepository(Conversion).create({
+            ref: Ref.conversion(),
+            userId,
             pointsSpent: points,
+            /* Snapshotted, not referenced: a later rate change must not reprice
+             * a conversion that already happened. */
             rateApplied: rate.pointsPerMtt,
-            rateId: rate.id,
-            pointsEntryRef: entry.ref,
-          },
-          idempotencyKey: `${key}:mtt`,
-          settledAt: new Date(),
-        }),
-      );
+            mttCredited: toDbAmount(mtt),
+            status: "completed",
+            transactionId: transaction.id,
+            idempotencyKey: key,
+          }),
+        );
 
-      const row = await tx.getRepository(Conversion).save(
-        tx.getRepository(Conversion).create({
-          ref: Ref.conversion(),
-          userId,
-          pointsSpent: points,
-          /* Snapshotted, not referenced: a later rate change must not reprice
-           * a conversion that already happened. */
-          rateApplied: rate.pointsPerMtt,
-          mttCredited: toDbAmount(mtt),
-          status: "completed",
-          transactionId: transaction.id,
-          idempotencyKey: key,
-        }),
-      );
+        balance.points = nextPoints;
+        balance.mttAvailable = add(balance.mttAvailable, mtt);
+        balance.lastLedgerAt = new Date();
+        await tx.getRepository(UserBalance).save(balance);
 
-      balance.points = nextPoints;
-      balance.mttAvailable = add(balance.mttAvailable, mtt);
-      balance.lastLedgerAt = new Date();
-      await tx.getRepository(UserBalance).save(balance);
-
-      return { conversion: row, balanceAfter: nextPoints };
-    });
+        return { conversion: row, balanceAfter: nextPoints };
+      }));
+    } catch (e) {
+      if (isDuplicateKeyError(e)) {
+        const already = await this.conversions.findOne({ where: { idempotencyKey: key } });
+        if (already) {
+          const balance = await this.ledger.getBalance(userId);
+          return this.view(already, balance.points, true);
+        }
+      }
+      throw e;
+    }
 
     await this.bus.publish(Events.ConversionCompleted, {
       userId,

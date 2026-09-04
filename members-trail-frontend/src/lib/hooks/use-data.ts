@@ -396,12 +396,30 @@ export const useLeaderboard = (
     KEEP_PREVIOUS,
   );
 
-export const useQuests = (): Resource<Quest[]> =>
+export interface QuestBoard {
+  quests: Quest[];
+  /* The server's own count/total — NOT `quests.filter(completed && !claimed)`
+   * recomputed client-side, for the same reason `Quest.completed` is trusted
+   * as-is: a client recompute against a since-changed `target` can disagree
+   * with what the server would actually let a member claim. */
+  readyToClaim: number;
+  claimablePoints: number;
+}
+
+const EMPTY_QUEST_BOARD: QuestBoard = { quests: [], readyToClaim: 0, claimablePoints: 0 };
+
+export const useQuests = (): Resource<QuestBoard> =>
   useAuthedResource(
     qk.quests(),
-    async () =>
-      toQuestList(await api.get<QuestBoardResponse>("/quests")),
-    [],
+    async () => {
+      const board = await api.get<QuestBoardResponse>("/quests");
+      return {
+        quests: toQuestList(board),
+        readyToClaim: board?.readyToClaim ?? 0,
+        claimablePoints: board?.claimablePoints ?? 0,
+      };
+    },
+    EMPTY_QUEST_BOARD,
   );
 
 export const useAchievements = (): Resource<Achievement[]> =>

@@ -104,6 +104,14 @@ export interface Quest {
   rewardPoints: number;
   expiresAt?: string;
   claimed: boolean;
+  /**
+   * The server's own verdict — NOT `progress >= target` recomputed client-side.
+   * They usually agree, but an admin raising `target` after a member already
+   * completed it under the old target is a real case where they diverge: the
+   * server keeps `completedAt`, but a client recompute against the new target
+   * would hide a "Claim" button for a reward already earned.
+   */
+  completed: boolean;
 }
 
 export interface Achievement {
@@ -118,7 +126,12 @@ export interface Achievement {
 
 /* -------------------------------- Ledgers -------------------------------- */
 
-export type PointsSource = "gameplay" | "quest" | "ad" | "purchase" | "tournament" | "referral_bonus" | "conversion";
+/* Must mirror the backend's PointsSource union exactly (economy.entity.ts) — a
+ * value missing here renders as literal "undefined" wherever a label/tone map
+ * is keyed on it, for a source that is genuinely reachable in production. */
+export type PointsSource =
+  | "gameplay" | "quest" | "achievement" | "ad" | "tournament" | "purchase"
+  | "referral_bonus" | "conversion" | "admin_adjustment" | "reversal";
 
 export interface PointsEntry {
   id: string;

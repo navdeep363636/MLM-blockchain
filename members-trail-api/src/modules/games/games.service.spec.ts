@@ -638,4 +638,68 @@ describe("GamesService", () => {
     });
   });
 
+
+  /* ==================================================================== *
+   * Audit regressions — the mint paths
+   *
+   * The exploit these close: two HTTP calls, no game code. Open a session,
+   * submit one fabricated frame carrying the title's entire maxScore with a
+   * claimed duration long enough to defeat every heuristic, and collect the
+   * full payout. Repeated across the catalogue it saturated the platform's
+   * whole daily MTT issuance from a single account.
+   * ==================================================================== */
+
+  describe("forged submissions", () => {
+    const CONFIG = { scoreEvent: 2, scorePerUnit: 1, maxScore: 12_000, pointsPerScore: 0.1033 };
+
+    const replayOf = (telemetry: unknown[], durationMs: number) =>
+      (svc as unknown as {
+        replay(t: unknown[], d: number, c: unknown): {
+          score: number; scoringFrames: number; rejectedFrames: number; rateLimited: boolean;
+        };
+      }).replay(telemetry, durationMs, CONFIG);
+
+    it("refuses a single frame carrying the whole maximum", () => {
+      const r = replayOf([{ t: 1_000, e: 2, v: 12_000 }], 2_000);
+
+      /* Previously this replayed to exactly maxScore and paid in full. */
+      expect(r.score).toBe(0);
+      expect(r.scoringFrames).toBe(0);
+      expect(r.rejectedFrames).toBe(1);
+    });
+
+    it("caps the score a short session can accrue however many frames it ships", () => {
+      // 60 frames of 200 each = 12,000, all individually under the frame ceiling.
+      const frames = Array.from({ length: 60 }, (_, i) => ({ t: i * 30, e: 2, v: 200 }));
+      const r = replayOf(frames, 2_000);
+
+      // Two seconds cannot earn the maximum: 5% of maxScore per second.
+      expect(r.score).toBeLessThanOrEqual(Math.ceil(12_000 * 0.05 * 2));
+      expect(r.rateLimited).toBe(true);
+    });
+
+    it("lets a long, plausible run reach a high score", () => {
+      const frames = Array.from({ length: 300 }, (_, i) => ({ t: i * 400, e: 2, v: 30 }));
+      const r = replayOf(frames, 120_000);
+
+      expect(r.score).toBe(9_000);
+      expect(r.rejectedFrames).toBe(0);
+      expect(r.rateLimited).toBe(false);
+    });
+
+    it("does not pay the band minimum for a near-zero score", () => {
+      const pointsFor = (svc as unknown as {
+        pointsFor(score: number, game: unknown, config: unknown): number;
+      }).pointsFor.bind(svc);
+
+      const game = { pointsPerSessionMin: 80, pointsPerSessionMax: 480 };
+      /* A server score of 13 at 0.08/score is 1 raw point. It used to be floored
+       * up to the full 80 — 17% of the ceiling for 0.1% of the score — so
+       * thirty-one trivial sessions exhausted the title's daily cap. */
+      expect(pointsFor(13, game, { pointsPerScore: 0.08 })).toBe(1);
+      // A qualifying run still gets the floor.
+      expect(pointsFor(1_100, game, { pointsPerScore: 0.08 })).toBe(88);
+    });
+  });
+
 });

@@ -80,6 +80,7 @@ describe("PointsService.credit — cap clamp", () => {
   let sums: Sums;
   let mutatePoints: jest.Mock;
   let publish: jest.Mock;
+  let findOne: jest.Mock;
 
   const build = async (overrides: { caps?: Partial<{ dailyGlobal: number; perGameDailyDefault: number; perSessionDefault: number }> } = {}) => {
     sums = { global: 0, game: 0, session: 0 };
@@ -88,8 +89,11 @@ describe("PointsService.credit — cap clamp", () => {
       replayed: false,
     }));
     publish = jest.fn(async () => undefined);
+    /* No prior entry for this idempotencyKey unless a test says otherwise —
+     * the normal, first-time-credit case. */
+    findOne = jest.fn(async () => null);
 
-    const entriesRepo = { createQueryBuilder: jest.fn(() => makeQueryBuilder(sums)) };
+    const entriesRepo = { createQueryBuilder: jest.fn(() => makeQueryBuilder(sums)), findOne };
     const gamesRepo = {
       findOne: jest.fn(async () => GAME as Game),
       find: jest.fn(async () => [GAME as Game]),
@@ -242,5 +246,63 @@ describe("PointsService.credit — cap clamp", () => {
     await expect(
       service.credit({ userId: "u1", amount: -10, source: "gameplay", idempotencyKey: "k2" }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  /* ==================================================================== *
+   * Idempotency — a retry has to resolve to the row already on the ledger,
+   * not be re-evaluated against headroom that already reflects it.
+   * ==================================================================== */
+
+  describe("replay", () => {
+    it("returns the ORIGINAL credited amount on retry, even once headroom is now fully consumed", async () => {
+      /* First call: 100 headroom, credits 100. */
+      const res1 = await service.credit({
+        userId: "u1", amount: 100, source: "gameplay", idempotencyKey: "session:s1",
+      });
+      expect(res1.credited).toBe(100);
+      expect(res1.replayed).toBe(false);
+
+      /* The retry arrives after the day's cap is now fully consumed by other
+       * activity (including this very credit). Before the fix, headroom was
+       * computed BEFORE the idempotency check, clamped the retry to 0, and
+       * returned as if nothing had ever been credited — even though the
+       * ledger already held the row. */
+      findOne.mockResolvedValue({ ref: "PT-TEST", amount: 100, runningBalance: 100 });
+      sums.global = 25_000; // global cap now fully saturated
+
+      const res2 = await service.credit({
+        userId: "u1", amount: 100, source: "gameplay", idempotencyKey: "session:s1",
+      });
+
+      expect(res2.replayed).toBe(true);
+      expect(res2.credited).toBe(100);
+      expect(res2.entryRef).toBe("PT-TEST");
+      expect(mutatePoints).toHaveBeenCalledTimes(1); // never re-invoked for the retry
+    });
+
+    it("reports capped as requested-minus-actually-credited on replay, not a re-clamp against current headroom", async () => {
+      /* Original request asked for 400, was clamped to 100 (300 capped) and
+       * persisted as amount=100. */
+      findOne.mockResolvedValue({ ref: "PT-TEST", amount: 100, runningBalance: 100 });
+
+      const res = await service.credit({
+        userId: "u1", amount: 400, source: "gameplay", idempotencyKey: "session:s2",
+      });
+
+      expect(res.replayed).toBe(true);
+      expect(res.credited).toBe(100);
+      expect(res.capped).toBe(300);
+      expect(mutatePoints).not.toHaveBeenCalled();
+    });
+
+    it("does not publish PointsCredited or PointsCapReached again for a replay", async () => {
+      findOne.mockResolvedValue({ ref: "PT-TEST", amount: 100, runningBalance: 100 });
+
+      await service.credit({
+        userId: "u1", amount: 100, source: "gameplay", idempotencyKey: "session:s3",
+      });
+
+      expect(publish).not.toHaveBeenCalled();
+    });
   });
 });

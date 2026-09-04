@@ -215,7 +215,11 @@ export class LeaderboardService implements OnApplicationBootstrap {
     const rank = await this.redis.zRank(key, userId);
     if (rank !== null) {
       const score = await this.redis.zScore(key, userId);
-      return { rank: rank + 1, score: Math.floor(score ?? 0) };
+      /* zRank already returns a 1-based rank — its own doc comment says so — and
+       * incrementing again put the leader at 2. The snapshot fallback a few
+       * lines below returns row.rank un-incremented, so the same player's rank
+       * shifted by one the moment Redis was flushed. */
+      return { rank, score: Math.floor(score ?? 0) };
     }
 
     const row = await this.snapshots.findOne({
@@ -411,7 +415,7 @@ export class LeaderboardService implements OnApplicationBootstrap {
     const rank = await this.redis.zRank(key, userId);
     if (rank === null) return null;
     const score = await this.redis.zScore(key, userId);
-    const [row] = await this.decorate([{ userId, score: Math.floor(score ?? 0), rank: rank + 1 }], userId);
+    const [row] = await this.decorate([{ userId, score: Math.floor(score ?? 0), rank }], userId);
     return row ?? null;
   }
 

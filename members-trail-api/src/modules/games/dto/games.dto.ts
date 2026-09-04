@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
-  IsArray, IsBoolean, IsIn, IsInt, IsNumberString, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength, ValidateNested,
+  ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsNumberString, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength, ValidateNested,
 } from "class-validator";
 import { Type } from "class-transformer";
 import { DateRangeQuery, PaginationQuery } from "@/common/dto";
@@ -128,7 +128,10 @@ export class SubmitSessionRequest {
     type: [TelemetryFrame],
     description: "Ordered input/score frames. The server replays these to recompute the score.",
   })
-  @IsArray() @ValidateNested({ each: true }) @Type(() => TelemetryFrame)
+  /* The client caps itself at 2,000 frames; the server did not, so a 256 kB
+   * body could carry ~10,000, each running a nested validator pass and all of
+   * them copied verbatim into the Redis job payload. */
+  @IsArray() @ArrayMaxSize(2_000) @ValidateNested({ each: true }) @Type(() => TelemetryFrame)
   telemetry!: TelemetryFrame[];
 }
 
