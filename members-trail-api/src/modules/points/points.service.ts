@@ -160,6 +160,35 @@ export class PointsService {
   }
 
   private async creditUnderLock(input: CreditPointsInput): Promise<CreditPointsResult> {
+    /* Idempotency has to be checked BEFORE headroom, not after clamping.
+     *
+     * A retry (queue redelivery, network retry) of a request that already
+     * landed shows up here with the same idempotencyKey. By the time it
+     * arrives, `sumIssued()` already counts that earlier credit against the
+     * day's cap — so recomputing headroom first and clamping against it can
+     * clamp a genuine replay down to 0 and return as if the request had never
+     * been credited, even though the ledger already holds the row. Per-user
+     * serialisation (the redis lock in `credit()`) makes this check race-free
+     * for retries of the same account; `ledger.mutatePoints`'s own
+     * duplicate-key handling remains the backstop for the tiny window outside
+     * that lock. */
+    const existing = await this.entries.findOne({ where: { idempotencyKey: input.idempotencyKey } });
+    if (existing) {
+      const snapshot = await this.headroom(input.userId, input.gameId ?? null, input.gameSessionId ?? null);
+      const credited = existing.amount;
+      return {
+        requested: input.amount,
+        credited,
+        capped: Math.max(0, input.amount - credited),
+        cappedBy: null,
+        headroom: snapshot.headroom,
+        meters: snapshot.meters,
+        entryRef: existing.ref,
+        runningBalance: existing.runningBalance,
+        replayed: true,
+      };
+    }
+
     const snapshot = await this.headroom(input.userId, input.gameId ?? null, input.gameSessionId ?? null);
 
     /* clampToHeadroom is the shared cap primitive — same helper the commission
