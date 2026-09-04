@@ -6,8 +6,8 @@
 
 import Link from "next/link";
 import {
-  ArrowDownLeft, ArrowLeftRight, Banknote, Coins, Gift, History,
-  Megaphone, ShoppingBag, Sparkles, Store, Ticket, Trophy, Users,
+  ArrowDownLeft, ArrowLeftRight, Award, Banknote, Coins, Gift, History,
+  Megaphone, ShieldAlert, ShoppingBag, Sparkles, Store, Ticket, Trophy, Users,
 } from "lucide-react";
 import { EmptyState, Skeleton, StatusPill } from "@/components/ui";
 import { usePointsHistory, useTransactions } from "@/lib/hooks/use-data";
@@ -45,11 +45,14 @@ const TX_ICON: Record<Transaction["type"], React.ReactNode> = {
 const POINTS_ICON: Record<PointsEntry["source"], React.ReactNode> = {
   gameplay: <Sparkles />,
   quest: <Trophy />,
+  achievement: <Award />,
   ad: <Megaphone />,
   purchase: <ShoppingBag />,
   tournament: <Ticket />,
   referral_bonus: <Users />,
   conversion: <ArrowLeftRight />,
+  admin_adjustment: <ShieldAlert />,
+  reversal: <ArrowDownLeft />,
 };
 
 interface FeedItem {

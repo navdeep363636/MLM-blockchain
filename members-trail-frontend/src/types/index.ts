@@ -118,7 +118,12 @@ export interface Achievement {
 
 /* -------------------------------- Ledgers -------------------------------- */
 
-export type PointsSource = "gameplay" | "quest" | "ad" | "purchase" | "tournament" | "referral_bonus" | "conversion";
+/* Must mirror the backend's PointsSource union exactly (economy.entity.ts) — a
+ * value missing here renders as literal "undefined" wherever a label/tone map
+ * is keyed on it, for a source that is genuinely reachable in production. */
+export type PointsSource =
+  | "gameplay" | "quest" | "achievement" | "ad" | "tournament" | "purchase"
+  | "referral_bonus" | "conversion" | "admin_adjustment" | "reversal";
 
 export interface PointsEntry {
   id: string;

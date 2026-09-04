@@ -30,7 +30,8 @@ import { useMutation, useQueryClient, type UseMutationResult } from "@tanstack/r
 import { api } from "@/lib/api/client";
 import { qk } from "@/lib/api/keys";
 import type {
-  ConversionQuote, ConversionResponse, OkResponse, TicketResponse, WithdrawalResponse,
+  ConversionQuote, ConversionResponse, OkResponse, PointsExportResponse, TicketResponse,
+  WithdrawalResponse,
 } from "@/lib/api/types";
 
 /* --------------------------------- plumbing ------------------------------- */
@@ -228,6 +229,30 @@ export const useClaimCommission = () =>
   useAction<Record<string, never> | void, Record<string, unknown>>(
     () => api.post("/referral/claim"),
     [qk.referral(), qk.wallet()],
+  );
+
+/* ================================== Points ================================= */
+
+export interface ExportPointsHistoryVars {
+  source?: string;
+  gameId?: string;
+  from?: string;
+  to?: string;
+  q?: string;
+}
+
+/**
+ * The full Points statement (FRD W-05), server-side — up to 10,000 rows.
+ *
+ * The on-screen history table fetches a bounded window for display; this hits
+ * the dedicated export endpoint instead, so a statement for an active user is
+ * never silently missing rows the table itself had to leave off-screen.
+ * Nothing to invalidate — this reads, it does not change server state.
+ */
+export const useExportPointsHistory = () =>
+  useAction<ExportPointsHistoryVars, PointsExportResponse>(
+    (v) => api.get<PointsExportResponse>("/points/history/export", { query: { ...v } }),
+    [],
   );
 
 /* ================================= Quests ================================= */
