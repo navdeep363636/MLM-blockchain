@@ -25,7 +25,8 @@ const TIER_STYLE: Record<Achievement["tier"], { ring: string; text: string; labe
 };
 
 export function QuestsView() {
-  const { data: quests, isLoading } = useQuests();
+  const { data: questBoard, isLoading } = useQuests();
+  const { quests, readyToClaim, claimablePoints } = questBoard;
   const claimQuest = useClaimQuest();
   const { data: achievements } = useAchievements();
   const { data: balances } = useBalances();
@@ -41,13 +42,11 @@ export function QuestsView() {
 
   const isClaimed = (q: Quest) => claimed[q.id] ?? q.claimed;
   const byKind = (k: Quest["kind"]) => quests.filter((q) => q.kind === k);
-  const complete = (q: Quest) => q.progress >= q.target;
+  /* Trust the server's verdict, not a recompute against the CURRENT target —
+   * see the doc comment on Quest.completed. */
+  const complete = (q: Quest) => q.completed;
 
-  const readyCount = quests.filter((q) => complete(q) && !isClaimed(q)).length;
   const unlockedCount = achievements.filter((a) => a.unlocked).length;
-  const claimablePoints = quests
-    .filter((q) => complete(q) && !isClaimed(q))
-    .reduce((s, q) => s + q.rewardPoints, 0);
 
   const confirmClaim = async () => {
     if (!claiming) return;
@@ -153,10 +152,10 @@ export function QuestsView() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile
           label="Ready to claim"
-          value={readyCount}
+          value={readyToClaim}
           icon={<Gift />}
-          tone={readyCount > 0 ? "brand" : "default"}
-          deltaLabel={readyCount > 0 ? `${formatNumber(claimablePoints)} Points waiting` : "Nothing pending"}
+          tone={readyToClaim > 0 ? "brand" : "default"}
+          deltaLabel={readyToClaim > 0 ? `${formatNumber(claimablePoints)} Points waiting` : "Nothing pending"}
           compact
         />
         <StatTile

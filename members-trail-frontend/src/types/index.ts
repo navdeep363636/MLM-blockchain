@@ -104,6 +104,14 @@ export interface Quest {
   rewardPoints: number;
   expiresAt?: string;
   claimed: boolean;
+  /**
+   * The server's own verdict — NOT `progress >= target` recomputed client-side.
+   * They usually agree, but an admin raising `target` after a member already
+   * completed it under the old target is a real case where they diverge: the
+   * server keeps `completedAt`, but a client recompute against the new target
+   * would hide a "Claim" button for a reward already earned.
+   */
+  completed: boolean;
 }
 
 export interface Achievement {

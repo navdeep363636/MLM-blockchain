@@ -148,12 +148,12 @@ export const leaderboard: LeaderboardEntry[] = Array.from({ length: 20 }, (_, i)
 }));
 
 export const quests: Quest[] = [
-  { id: "Q-1", kind: "daily", title: "Play three sessions", description: "Any game, free mode counts.", progress: 2, target: 3, rewardPoints: 250, expiresAt: hoursAgo(-9), claimed: false },
-  { id: "Q-2", kind: "daily", title: "Score 5,000 in Neon Rush", description: "Single run.", progress: 5_000, target: 5_000, rewardPoints: 400, expiresAt: hoursAgo(-9), claimed: false },
-  { id: "Q-3", kind: "daily", title: "Watch one rewarded ad", description: "Optional — ad revenue funds the Treasury.", progress: 1, target: 1, rewardPoints: 80, expiresAt: hoursAgo(-9), claimed: true },
-  { id: "Q-4", kind: "weekly", title: "Win 10 ranked rounds", description: "Cipher Break or Hex Tactics.", progress: 6, target: 10, rewardPoints: 1_500, expiresAt: daysAhead(3), claimed: false },
-  { id: "Q-5", kind: "weekly", title: "Reach top 500 on any leaderboard", description: "Weekly window.", progress: 1, target: 1, rewardPoints: 2_000, expiresAt: daysAhead(3), claimed: false },
-  { id: "Q-6", kind: "milestone", title: "Convert 100,000 Points", description: "Lifetime total converted to MTT.", progress: 78_400, target: 100_000, rewardPoints: 5_000, claimed: false },
+  { id: "Q-1", kind: "daily", title: "Play three sessions", description: "Any game, free mode counts.", progress: 2, target: 3, rewardPoints: 250, expiresAt: hoursAgo(-9), claimed: false, completed: false },
+  { id: "Q-2", kind: "daily", title: "Score 5,000 in Neon Rush", description: "Single run.", progress: 5_000, target: 5_000, rewardPoints: 400, expiresAt: hoursAgo(-9), claimed: false, completed: true },
+  { id: "Q-3", kind: "daily", title: "Watch one rewarded ad", description: "Optional — ad revenue funds the Treasury.", progress: 1, target: 1, rewardPoints: 80, expiresAt: hoursAgo(-9), claimed: true, completed: true },
+  { id: "Q-4", kind: "weekly", title: "Win 10 ranked rounds", description: "Cipher Break or Hex Tactics.", progress: 6, target: 10, rewardPoints: 1_500, expiresAt: daysAhead(3), claimed: false, completed: false },
+  { id: "Q-5", kind: "weekly", title: "Reach top 500 on any leaderboard", description: "Weekly window.", progress: 1, target: 1, rewardPoints: 2_000, expiresAt: daysAhead(3), claimed: false, completed: true },
+  { id: "Q-6", kind: "milestone", title: "Convert 100,000 Points", description: "Lifetime total converted to MTT.", progress: 78_400, target: 100_000, rewardPoints: 5_000, claimed: false, completed: false },
 ];
 
 export const achievements: Achievement[] = [

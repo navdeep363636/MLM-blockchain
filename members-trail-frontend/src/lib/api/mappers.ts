@@ -384,6 +384,7 @@ export function toQuest(q: QuestResponse): Quest {
     rewardPoints: q.rewardPoints,
     expiresAt: q.expiresAt ?? undefined,
     claimed: q.claimed,
+    completed: q.completed,
   };
 }
 
